@@ -173,20 +173,23 @@ def test_invalid_setting_value(shipped_config: Path) -> None:
 
 def test_hardware_settings_have_no_defaults_in_code(shipped_config: Path) -> None:
     table = load_config("desktop", shipped_config)
-    del table["ports"]["display"]["sim"]
-    with pytest.raises(ConfigError, match=r"ports\.display \(sim\): missing .*'width'"):
+    del table["ports"]["camera"]["width"]
+    with pytest.raises(ConfigError, match=r"ports\.camera \(sim\): missing .*'width'"):
         App(table).build()
 
 
 def test_desktop_profile(shipped_config: Path) -> None:
-    app = App(load_config("desktop", shipped_config))
+    table = load_config("desktop", shipped_config)
+    table["ports"]["screen"]["web"]["port"] = 0  # any free port
+    app = App(table)
     app.build()
     levels = app.bus.subscribe(SoundLevel)
     batteries = app.bus.subscribe(BatteryReport)
     run(app, 0.3)
-    display: Any = app.adapters["display"]
+    screen: Any = app.adapters["screen"]
     lights: Any = app.adapters["lights"]
-    assert display.frames_shown >= 1
+    assert screen.state.expression == "neutral"
+    assert screen.state.battery is not None  # the battery reached the status row
     assert lights.color == (0, 0, 0)  # switched off when stopping
     assert levels.pending > 0
     assert batteries.pending > 0

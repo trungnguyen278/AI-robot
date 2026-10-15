@@ -6,7 +6,7 @@
 #
 # [ports.<port>] selects the adapter that implements a port with `adapter`. The other
 # keys of the table go to every adapter of that port; a sub-table named after an
-# adapter, such as [ports.display.sim], goes only to that adapter.
+# adapter, such as [ports.screen.web], goes only to that adapter.
 # [modules.<name>] holds the settings of a module.
 
 [robot]
@@ -20,10 +20,16 @@ level = "INFO"
 [modules]
 # Started in this order and stopped in reverse. motion comes last, so it is the first
 # to stop: the body is made safe before anything else shuts down.
-enabled = ["system", "voice", "vision", "face", "behavior", "motion"]
+enabled = ["system", "voice", "vision", "screen", "behavior", "motion"]
 
 [modules.system]
 battery_interval = 5.0  # seconds between battery reports
+
+[modules.screen]
+# Microphone loudness (dBFS) that the face's voice reaction maps to 0 and to 1.
+# Placeholders until the microphones are measured.
+quiet_db = -50.0
+loud_db = -10.0
 
 # ---- Raspberry Pi peripherals ----
 
@@ -47,13 +53,17 @@ width = 640
 height = 480
 fps = 15.0
 
-# Face: Waveshare 7inch DSI LCD (C).
-[ports.display]
-adapter = "sim"
+# Screen: the face on the Waveshare 7inch DSI LCD (C), drawn by the renderer in ui/ in a
+# full-screen browser (docs/decisions/0006-screen-renderer.md). The browser takes the
+# panel's resolution, so it is not set here.
+[ports.screen]
+adapter = "web"
 
-[ports.display.sim]
-width = 1024  # panel resolution, see hardware/components/waveshare-7inch-dsi-lcd-c.md
-height = 600
+[ports.screen.web]
+# The screen is served at http://<host>:<port>/. 127.0.0.1 keeps it on this computer;
+# to watch it from another device, set host = "0.0.0.0" in local.toml.
+host = "127.0.0.1"
+port = 8770
 
 # Speech recognition, conversation and speech synthesis.
 [ports.ai_backend]

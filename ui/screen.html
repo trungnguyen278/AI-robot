@@ -1,0 +1,52 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- The robot's screen: a full-screen browser shows this page, served by the robot
+     software, which drives it over the screen protocol (protocol/screen/README.md).
+     Add #round to the address on a round display. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Screen</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #06090d; }
+  canvas { display: block; width: 100vw; height: 100vh; cursor: none; touch-action: none; }
+  /* A dim dot in a corner while the software is unreachable. */
+  #offline {
+    position: fixed; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%;
+    background: #ff5b6e; opacity: 0.5;
+  }
+</style>
+</head>
+<body>
+<canvas id="screen" aria-label="The robot's face"></canvas>
+<div id="offline" hidden></div>
+<script type="module">
+  import { Animator } from './src/animator.js';
+  import { Link } from './src/link.js';
+  import { Player } from './src/player.js';
+
+  const canvas = document.getElementById('screen');
+  const offline = document.getElementById('offline');
+  const shape = location.hash === '#round' ? 'round' : 'rect';
+  const player = new Player(canvas, new Animator({ seed: Date.now() }), { shape });
+  player.start();
+
+  // Show the dot only when the software has been unreachable for a while.
+  let timer = setTimeout(() => { offline.hidden = false; }, 2000);
+  const link = new Link(player, {
+    onChange(connected) {
+      clearTimeout(timer);
+      if (connected) offline.hidden = true;
+      else timer = setTimeout(() => { offline.hidden = false; }, 2000);
+    },
+  });
+  link.connect();
+
+  canvas.addEventListener('pointerdown', (event) => {
+    const box = canvas.getBoundingClientRect();
+    link.touch((event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height);
+  });
+</script>
+</body>
+</html>

@@ -2,15 +2,15 @@
 
 > **Status:** skeleton. Every port has a simulated adapter, so the whole robot already runs on any computer; real adapters are added as the hardware arrives. Platform: [ADR-0005](../docs/decisions/0005-pi-software-platform.md) (proposed).
 
-Python 3.11 or later (asyncio), with an optional C++ extension. No runtime dependencies yet.
+Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependency: [aiohttp](https://docs.aiohttp.org/), for the screen's `web` adapter.
 
 ## How it fits together
 
 ```
-modules    system · motion · voice · vision · face · behavior
+modules    system · motion · voice · vision · screen · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · display · ai_backend
+ports      audio_in · audio_out · camera · screen · ai_backend
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -22,7 +22,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `motion` | `drive`, `joints`, `range`, `safety` | Tracks, neck and arms; obstacle and emergency-stop checks |
 | `voice` | `audio_in`, `audio_out`, `ai_backend` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |
-| `face` | `display` | Expressive eyes |
+| `screen` | `screen` | What the screen shows: the expression asked with the highest priority, the gaze, the voice, the battery; taps |
 | `behavior` | — | Decides what the robot does; publishes the interaction state |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.
@@ -49,7 +49,7 @@ software/
 │   ├── native.py           C++ functions, with pure-Python fallbacks
 │   ├── core/               Configuration, bus, module base class, factory
 │   ├── ports/              Port interfaces
-│   ├── adapters/           Adapter registry; sim/ holds the simulated adapters
+│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (the screen, served to a browser)
 │   └── modules/            Module registry and the modules
 ├── native/                 Optional C++ extension (pybind11 + scikit-build-core)
 └── tests/
@@ -72,7 +72,11 @@ ruff check . && ruff format --check .
 
 On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`; until real adapters exist it behaves like `desktop`. `ai-robot --help` lists the options; `--duration SECONDS` stops the robot after a while, which is handy for quick checks. The environment variables are listed in [`.env.example`](.env.example).
 
-Install with `-e` from this checkout: the configuration is then read from `software/config`. With any other kind of install, point `--config-dir` or `AI_ROBOT_CONFIG_DIR` at a configuration directory.
+Install with `-e` from this checkout: the configuration is then read from `software/config`. With any other kind of install, point `--config-dir` or `AI_ROBOT_CONFIG_DIR` at a configuration directory, and the screen's `ui_dir` setting at the `ui` folder.
+
+### The screen
+
+While the robot runs, its screen is at <http://127.0.0.1:8770/>: open it in a browser to watch the face follow the robot. On the robot, Chromium shows that page full screen (kiosk mode). The page is the renderer in [`ui/`](../ui/README.md); the `screen` module decides what it shows, over the [screen protocol](../protocol/screen/README.md).
 
 ### C++ extension
 
@@ -91,8 +95,8 @@ Files are merged in order: `config/base.toml`, then `config/profiles/<profile>.t
 adapter = "sim"          # the adapter that implements this port
 fps = 15.0               # passed to every adapter of this port
 
-[ports.display.sim]      # passed only to the "sim" adapter
-width = 1024
+[ports.screen.web]       # passed only to the "web" adapter
+port = 8770
 
 [modules.system]
 battery_interval = 5.0   # passed to the module

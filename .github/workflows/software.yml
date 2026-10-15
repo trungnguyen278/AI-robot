@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "software/**"
+      - "protocol/screen/**"
       - ".github/workflows/software.yml"
   pull_request:
     paths:
       - "software/**"
+      - "protocol/screen/**"
       - ".github/workflows/software.yml"
 
 permissions:

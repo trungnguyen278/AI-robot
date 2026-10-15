@@ -1,409 +1,219 @@
 <!doctype html>
 <!-- SPDX-License-Identifier: MIT -->
+<!-- The studio: the robot's face on any screen, driven by hand. Serve this folder
+     (or the repository) over HTTP and open this page; see ui/README.md. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emotion Library</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Face Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-  /* Layout: a stage (device + controls) beside the library, a sheet of every
-     category below. Paper and ink around a dark device; the robot's screen
-     itself is the same in both themes. */
   :root {
-    --page: #f3efe7;
-    --page-2: #e8e2d4;
-    --page-3: #ded7c6;
-    --ink: #1a1a1a;
-    --ink-2: #6b6760;
-    --ink-hover: #2a2a2a;
-    --rule: rgba(26, 26, 26, 0.12);
-    --chip: rgba(0, 0, 0, 0.08);
-    --chip-on-ink: rgba(255, 255, 255, 0.16);
-    --accent: #d97757;
-    --accent-2: #2a7a5b;
-    --scene-tint: rgba(42, 122, 91, 0.10);
-    --scene-tint-2: rgba(42, 122, 91, 0.18);
-    --device: #1a1d22;
-    --device-2: #0c0e12;
-    --device-hi: #2a2e36;
-    --device-dot: #2a2d33;
-    --device-dot-2: #3a3d43;
-    --device-label: #6b7078;
-    /* The robot's screen. */
-    --bg: #06090d;
-    --eye: #5be9ff;
-    --eye-glow: rgba(91, 233, 255, 0.55);
+    --page: #f3f1ec;
+    --panel: #fbfaf7;
+    --ink: #1b1e22;
+    --muted: #5f656c;
+    --line: #dcd7cc;
+    --accent: #0b7f93;
+    --accent-ink: #ffffff;
+    --chip: #ffffff;
+    --bezel: #14171b;
+    --bezel-edge: #2b3138;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --page: #15171a;
-      --page-2: #1f2226;
-      --page-3: #2a2e33;
-      --ink: #ece7de;
-      --ink-2: #a39e94;
-      --ink-hover: #d6d0c5;
-      --rule: rgba(236, 231, 222, 0.14);
-      --chip: rgba(255, 255, 255, 0.10);
-      --chip-on-ink: rgba(0, 0, 0, 0.14);
-      --accent: #e3876a;
-      --accent-2: #5cbf94;
-      --scene-tint: rgba(92, 191, 148, 0.14);
-      --scene-tint-2: rgba(92, 191, 148, 0.24);
-      --device: #2b2f36;
-      --device-2: #121418;
-      --device-hi: #3a3f48;
-      --device-dot: #3a3e46;
-      --device-dot-2: #4a4f58;
-      --device-label: #8a9099;
+      --page: #0d1013;
+      --panel: #14181d;
+      --ink: #e6e9ec;
+      --muted: #98a0a8;
+      --line: #252b32;
+      --accent: #5be9ff;
+      --accent-ink: #06090d;
+      --chip: #1a1f25;
+      --bezel: #050608;
+      --bezel-edge: #20262d;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --page: #15171a;
-    --page-2: #1f2226;
-    --page-3: #2a2e33;
-    --ink: #ece7de;
-    --ink-2: #a39e94;
-    --ink-hover: #d6d0c5;
-    --rule: rgba(236, 231, 222, 0.14);
-    --chip: rgba(255, 255, 255, 0.10);
-    --chip-on-ink: rgba(0, 0, 0, 0.14);
-    --accent: #e3876a;
-    --accent-2: #5cbf94;
-    --scene-tint: rgba(92, 191, 148, 0.14);
-    --scene-tint-2: rgba(92, 191, 148, 0.24);
-    --device: #2b2f36;
-    --device-2: #121418;
-    --device-hi: #3a3f48;
-    --device-dot: #3a3e46;
-    --device-dot-2: #4a4f58;
-    --device-label: #8a9099;
+    --page: #0d1013;
+    --panel: #14181d;
+    --ink: #e6e9ec;
+    --muted: #98a0a8;
+    --line: #252b32;
+    --accent: #5be9ff;
+    --accent-ink: #06090d;
+    --chip: #1a1f25;
+    --bezel: #050608;
+    --bezel-edge: #20262d;
     color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--page);
     color: var(--ink);
-    font-family: ui-sans-serif, -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    -webkit-font-smoothing: antialiased;
-    padding-block: 28px 48px;
-    padding-left: max(clamp(16px, 3vw, 36px), env(safe-area-inset-left, 0px));
-    padding-right: max(clamp(16px, 3vw, 36px), env(safe-area-inset-right, 0px));
+    font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding-block: 24px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
   }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .loading { margin: 0; color: var(--ink-2); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px; }
+  header h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+  header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
 
-  /* ---------- Header ---------- */
-  .hdr {
-    display: flex; align-items: baseline; justify-content: space-between;
-    gap: 12px 24px; flex-wrap: wrap;
-    padding-bottom: 18px; margin-bottom: 28px;
-    border-bottom: 1px solid var(--rule);
-  }
-  .hdr-name { display: flex; align-items: center; gap: 10px; }
-  .hdr-name h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.4px; }
-  .hdr-name .logo { color: var(--eye); font-size: 20px; text-shadow: 0 0 12px var(--eye-glow); }
-  .hdr-meta {
-    display: flex; gap: 10px; flex-wrap: wrap;
-    color: var(--ink-2); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+  .studio { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 920px) {
+    .studio { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); }
+    .stage { position: sticky; top: max(16px, env(safe-area-inset-top, 0px)); }
   }
 
-  /* ---------- Main grid ---------- */
-  .main { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 40px; align-items: start; }
-  @media (max-width: 1180px) { .main { grid-template-columns: minmax(0, 1fr); } }
-
-  /* ---------- Stage ---------- */
-  .stage { display: flex; flex-direction: column; align-items: center; gap: 20px; min-width: 0; }
-
-  /* Rectangular device */
-  .device-rect {
+  .stage { display: grid; gap: 10px; justify-items: center; min-width: 0; }
+  .device {
     width: 100%;
-    padding: 22px 22px 16px;
-    border-radius: 22px;
-    border: 1px solid #000;
-    background: linear-gradient(180deg, var(--device) 0%, var(--device-2) 100%);
-    box-shadow:
-      0 30px 60px -30px rgba(0, 0, 0, 0.4),
-      0 2px 0 rgba(255, 255, 255, 0.04) inset,
-      0 -2px 0 rgba(0, 0, 0, 0.4) inset;
-  }
-  .device-top { display: flex; gap: 6px; justify-content: center; align-items: center; padding-bottom: 12px; }
-  .device-top .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--device-dot); }
-  .device-top .dot:nth-child(2) { width: 32px; height: 4px; border-radius: 2px; background: var(--device-dot-2); }
-  .device-screen {
-    padding: 10px;
-    border-radius: 8px;
-    background: #000;
-    box-shadow: 0 0 0 1px #000, inset 0 0 24px rgba(91, 233, 255, 0.08);
-  }
-  .device-foot {
-    display: flex; align-items: center; justify-content: center; gap: 10px;
-    padding-top: 12px;
-    color: var(--device-label);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; letter-spacing: 1.5px;
-  }
-
-  /* Round device */
-  .device-round {
-    display: flex; flex-direction: column; align-items: center; gap: 14px;
-    max-width: 100%;
-    padding: 26px;
-    border-radius: 36px;
-    border: 1px solid #000;
-    background: radial-gradient(120% 120% at 50% 0%, var(--device-hi) 0%, var(--device) 36%, var(--device-2) 100%);
-    box-shadow:
-      0 40px 80px -40px rgba(0, 0, 0, 0.55),
-      0 2px 0 rgba(255, 255, 255, 0.05) inset,
-      0 -3px 0 rgba(0, 0, 0, 0.5) inset;
-  }
-  .device-round .ring {
-    position: relative;
-    max-width: 100%;
+    max-width: min(100%, calc(62vh * var(--ratio, 1.7)));
     padding: 14px;
-    border-radius: 50%;
-    background: conic-gradient(from 210deg, #34383f, #15171c, #2b2f37, #101216, #34383f);
-    box-shadow: 0 0 0 1px #000, 0 10px 30px -10px rgba(0, 0, 0, 0.6) inset;
+    border-radius: 22px;
+    background: var(--bezel);
+    box-shadow: inset 0 0 0 1px var(--bezel-edge), 0 18px 40px -24px rgba(0, 0, 0, 0.6);
   }
-  .device-round .ring::after,
-  .device-round .ring::before {
-    content: ""; position: absolute; top: 50%; transform: translateY(-50%); border-radius: 3px;
-  }
-  .device-round .ring::after {
-    right: -7px; width: 7px; height: 46px;
-    background: linear-gradient(90deg, #2c3038, #14161a);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, -1px 0 2px rgba(0, 0, 0, 0.5);
-  }
-  .device-round .ring::before {
-    left: -6px; width: 6px; height: 30px;
-    background: linear-gradient(90deg, #14161a, #2c3038);
-  }
-  .device-round .device-foot { padding-top: 0; }
-  .led { width: 6px; height: 6px; border-radius: 50%; background: var(--eye); box-shadow: 0 0 8px var(--eye-glow); }
+  .device canvas { display: block; width: 100%; aspect-ratio: var(--ratio, 1.7); border-radius: 6px; max-width: 100%; }
+  .device.round { max-width: min(100%, 460px); border-radius: 50%; padding: 12px; }
+  .device.round canvas { border-radius: 50%; }
+  .readout { margin: 0; font: 13px/1.4 "IBM Plex Mono", ui-monospace, monospace; color: var(--muted); text-align: center; }
 
-  /* Screens: glow, scanlines and inner light on top of the SVG */
-  .screen-host { position: relative; width: 100%; max-width: 100%; overflow: hidden; background: var(--bg); }
-  .screen-host svg { filter: drop-shadow(0 0 6px var(--eye-glow)); }
-  .screen-host::after,
-  .screen-host::before { content: ""; position: absolute; inset: 0; pointer-events: none; }
-  .screen-host.rect { border-radius: 2px; }
-  .screen-host.rect::after {
-    background: repeating-linear-gradient(to bottom,
-      rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 2px, rgba(0, 0, 0, 0.22) 3px);
-    mix-blend-mode: multiply;
+  .controls { display: grid; gap: 14px; min-width: 0; }
+  fieldset {
+    margin: 0; padding: 12px 14px 14px; min-width: 0;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+    display: grid; gap: 10px;
   }
-  .screen-host.rect::before { box-shadow: inset 0 0 40px rgba(91, 233, 255, 0.06); }
-  .screen-host.round {
-    aspect-ratio: 1 / 1;
-    border-radius: 50%;
-    background: #000;
-    box-shadow: 0 0 0 2px #000, inset 0 0 30px rgba(91, 233, 255, 0.10);
+  legend { padding: 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--chip); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
   }
-  .screen-host.round::after {
-    border-radius: 50%;
-    background: repeating-radial-gradient(circle at 50% 50%,
-      rgba(255, 255, 255, 0) 0px, rgba(255, 255, 255, 0) 2px, rgba(0, 0, 0, 0.20) 3px);
-    mix-blend-mode: multiply;
+  .chip:hover { border-color: var(--accent); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+  label { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+  select, input[type="number"] {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--chip);
+    border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; min-width: 0;
   }
-  .screen-host.round::before { border-radius: 50%; box-shadow: inset 0 0 36px rgba(91, 233, 255, 0.10); z-index: 2; }
-
-  /* ---------- Stage meta ---------- */
-  .stage-meta { text-align: center; }
-  .stage-cat {
-    margin-bottom: 4px;
-    color: var(--ink-2);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; letter-spacing: 4px;
+  input[type="number"] { width: 6.5em; }
+  input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  input[type="checkbox"] { accent-color: var(--accent); }
+  button.plain {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--chip);
+    border: 1px solid var(--line); border-radius: 8px; padding: 5px 11px; cursor: pointer;
   }
-  .big-label { display: flex; gap: 16px; align-items: baseline; justify-content: center; flex-wrap: wrap; }
-  .big-label-key { color: var(--accent); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
-  .big-label-name { font-size: 28px; font-weight: 700; letter-spacing: 0.5px; text-wrap: balance; }
-  .big-sub {
-    margin-top: 6px;
-    color: var(--ink-2);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
-    font-variant-numeric: tabular-nums;
+  button.plain:hover { border-color: var(--accent); }
+  .pad {
+    position: relative; width: 100%; aspect-ratio: 16 / 7; border-radius: 10px; cursor: crosshair;
+    background:
+      linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat,
+      linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat,
+      var(--chip);
+    border: 1px solid var(--line); touch-action: none;
   }
-  .big-sub .sep { padding: 0 8px; opacity: 0.5; }
-  .big-sub .id { color: var(--ink); }
-
-  /* ---------- Controls ---------- */
-  .controls { display: flex; gap: 12px 16px; align-items: center; flex-wrap: wrap; justify-content: center; padding: 6px 0; }
-  .ctrl-group { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--page-2); }
-  .ctrl-ico {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 34px; height: 34px;
-    border: none; border-radius: 999px;
-    background: transparent; color: var(--ink);
-    font-family: inherit; font-size: 16px;
-    cursor: pointer; transition: background 0.12s;
+  .spot {
+    position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+    border-radius: 50%; background: var(--accent); opacity: 0.35; pointer-events: none;
   }
-  .ctrl-ico:hover { background: var(--page-3); }
-  .ctrl-ico:active { transform: translateY(1px); }
-  .ctrl {
-    padding: 9px 18px;
-    border: none; border-radius: 999px;
-    background: var(--ink); color: var(--page);
-    font-family: inherit; font-size: 13px; font-weight: 500;
-    cursor: pointer; transition: background 0.15s, transform 0.05s;
-  }
-  .ctrl:hover { background: var(--ink-hover); }
-  .ctrl:active { transform: translateY(1px); }
-  .ctrl.on { background: var(--accent); }
-  .ctrl.on-idle { background: var(--accent-2); }
-  .ctrl.on-color {
-    background: linear-gradient(90deg, #5be9ff 0%, #ffd166 25%, #ff6b9d 50%, #b48cff 75%, #7be88e 100%);
-    color: #1a1a1a;
-  }
-  .ctrl-slider { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 12px; }
-  .ctrl-slider input[type=range] { width: 100px; accent-color: var(--ink); }
-  .ctrl-slider .value {
-    min-width: 36px; color: var(--ink);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums;
-  }
-
-  /* Screen picker */
-  .screen-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; }
-  .screen-pick select,
-  .screen-pick input {
-    padding: 7px 10px;
-    border: 1px solid var(--rule); border-radius: 999px;
-    background: var(--page-2); color: var(--ink);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
-  }
-  .screen-pick input { width: 6.5em; border-radius: 8px; font-variant-numeric: tabular-nums; }
-  .custom-size { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-
-  /* ---------- Library panel ---------- */
-  .lib-panel { min-width: 0; }
-  .panel-title { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
-  .panel-sub { margin: 4px 0 16px; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
-  .cat-rail {
-    display: flex; flex-wrap: wrap; gap: 6px;
-    padding-bottom: 16px; margin-bottom: 16px;
-    border-bottom: 1px solid var(--rule);
-  }
-  .cat-section-label {
-    display: flex; align-items: baseline; gap: 8px;
-    margin: 4px 0 10px;
-    color: var(--ink-2);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
-  }
-  .cat-section-label.scene { color: var(--accent-2); }
-  .cat-section-label .sec-count {
-    padding: 2px 7px; border-radius: 999px;
-    background: var(--page-2); color: var(--ink-2);
-    font-size: 10px; letter-spacing: 0;
-  }
-  .pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 10px;
-    border: 1px solid transparent; border-radius: 999px;
-    background: var(--page-2); color: var(--ink);
-    font-family: inherit; font-size: 12px; font-weight: 500;
-    cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s;
-  }
-  .pill:hover { background: var(--page-3); }
-  .pill.active { background: var(--ink); color: var(--page); border-color: var(--accent); }
-  .pill.scene { background: var(--scene-tint); color: var(--accent-2); }
-  .pill.scene:hover { background: var(--scene-tint-2); }
-  .pill.scene.active { background: var(--accent-2); color: var(--page); border-color: var(--accent); }
-  .pill-dot { display: inline-block; flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; }
-  .pill-name { letter-spacing: 0.2px; }
-  .pill-count {
-    padding: 2px 6px; border-radius: 999px;
-    background: var(--chip); color: var(--ink-2);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px;
-  }
-  .pill.scene .pill-count { background: var(--scene-tint-2); color: var(--accent-2); }
-  .pill.active .pill-count,
-  .pill.scene.active .pill-count { background: var(--chip-on-ink); color: var(--page); }
-
-  .cat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-  .cat-header-name { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
-  .cat-header-desc { margin-top: 2px; color: var(--ink-2); font-size: 12px; }
-  .cat-header-count {
-    flex: none; padding: 4px 10px; border-radius: 999px;
-    background: var(--page-2); color: var(--ink-2);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
-  }
-
-  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-  .thumb {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    min-width: 0;
-    padding: 8px 8px 6px;
-    border: 1px solid transparent; border-radius: 10px;
-    background: var(--page-2);
-    font-family: inherit;
-    cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.08s;
-  }
-  .thumb:hover { background: var(--page-3); }
-  .thumb.active { background: var(--ink); border-color: var(--accent); }
-  .thumb.active .thumb-label { color: var(--page); }
-  .thumb-inner { width: 100%; max-width: 100%; overflow: hidden; background: var(--bg); }
-  .thumb-inner.rect { border-radius: 4px; box-shadow: inset 0 0 10px rgba(91, 233, 255, 0.08); }
-  .thumb-inner.round { border-radius: 50%; }
-  .thumb-inner svg { filter: drop-shadow(0 0 3px var(--eye-glow)); }
-  .thumb-label {
-    color: var(--ink-2);
-    font-size: 10.5px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; text-align: center;
-  }
-
-  /* ---------- Bottom sheet ---------- */
-  .strip-section { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--rule); }
-  .strip-title { display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; margin-bottom: 14px; }
-  .strip-title h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
-  .strip-title .strip-sub { color: var(--ink-2); font-size: 12px; }
-  .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; margin-bottom: 20px; }
-  .strip-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .strip-cell-cat {
-    color: var(--ink-2);
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
-  }
-  .tiny-wrap {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 8px; border-radius: 10px;
-    background: var(--page-2);
-  }
-  .tiny-screen { width: 100%; max-width: 100%; overflow: hidden; background: var(--bg); }
-  .tiny-screen.rect { border-radius: 2px; }
-  .tiny-screen.round { border-radius: 50%; }
-  .tiny-screen svg { filter: drop-shadow(0 0 2px var(--eye-glow)); }
-  .tiny-label {
-    color: var(--ink-2);
-    font-size: 9.5px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; text-align: center;
-  }
+  .pad.held .spot { opacity: 1; }
+  .hint { margin: 0; font-size: 13px; color: var(--muted); }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; min-width: 3ch; }
 </style>
-<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 </head>
 <body>
-<div id="root"><p class="loading">Loading the emotion library…</p></div>
-<!-- Load order matters: each file registers or extends categories that later files rely on. -->
-<script type="text/babel" src="src/emotion-core.jsx"></script>
-<script type="text/babel" src="src/screen.jsx"></script>
-<script type="text/babel" src="src/scene-arc.jsx"></script>
-<script type="text/babel" src="src/emotion-list.jsx"></script>
-<script type="text/babel" src="src/emotion-extras.jsx"></script>
-<script type="text/babel" src="src/scenes.jsx"></script>
-<script type="text/babel" src="src/scenes-boot.jsx"></script>
-<script type="text/babel" src="src/scenes-network.jsx"></script>
-<script type="text/babel" src="src/emotion-balance.jsx"></script>
-<script type="text/babel" src="src/emotion-more.jsx"></script>
-<script type="text/babel" src="src/emotion-color.jsx"></script>
-<script type="text/babel" src="src/emotion-pack-1.jsx"></script>
-<script type="text/babel" src="src/emotion-pack-2.jsx"></script>
-<script type="text/babel" src="src/emotion-pack-3.jsx"></script>
-<script type="text/babel" src="src/scenes-arc-pack-1.jsx"></script>
-<script type="text/babel" src="src/scenes-arc-pack-2.jsx"></script>
-<script type="text/babel" src="src/scenes-arc-pack-3.jsx"></script>
-<script type="text/babel" src="src/scenes-arc-pack-3b.jsx"></script>
-<script type="text/babel" src="src/scenes-weather.jsx"></script>
-<script type="text/babel" src="src/scenes-comms.jsx"></script>
-<script type="text/babel" src="src/scenes-moon.jsx"></script>
-<script type="text/babel" src="src/sheet.jsx"></script>
+<div class="wrap">
+  <header>
+    <h1>Face Studio</h1>
+    <p>The robot's face on any screen. Pick an expression to watch it blend from the last one; drag in <em>Look</em> to steer the eyes. The robot shows the same face, driven by its software.</p>
+  </header>
+
+  <main class="studio">
+    <section class="stage" aria-label="Preview">
+      <div class="device" id="device"><canvas id="face" aria-label="The face"></canvas></div>
+      <p class="readout" id="readout"></p>
+    </section>
+
+    <div class="controls">
+      <fieldset>
+        <legend>Expression</legend>
+        <div class="chips" id="expressions"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Screen</legend>
+        <div class="row">
+          <label>Display <select id="screen"></select></label>
+          <label>Colour <select id="tone"></select></label>
+        </div>
+        <div class="row" id="custom" hidden>
+          <label>Width <input type="number" id="width" min="64" max="4096" value="800"></label>
+          <label>Height <input type="number" id="height" min="64" max="4096" value="480"></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Look</legend>
+        <div class="pad" id="pad" aria-label="Drag to steer the eyes"><span class="spot" id="spot"></span></div>
+        <div class="row">
+          <button type="button" class="plain" id="roam">Let the eyes roam</button>
+          <span class="hint">Release, and they glance around on their own.</span>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Voice</legend>
+        <div class="row">
+          <input type="range" id="voice" min="0" max="1" step="0.01" value="0" aria-label="Voice level">
+          <span class="mono" id="voice-value">0.00</span>
+        </div>
+        <p class="hint">Listening swells the eyes with the voice; speaking moves the mouth, on made-up syllables while the level is 0.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Life</legend>
+        <div class="row">
+          <label><input type="checkbox" id="life-blink" checked> Blink</label>
+          <label><input type="checkbox" id="life-glance" checked> Glances</label>
+          <label><input type="checkbox" id="life-breathe" checked> Breathing</label>
+          <button type="button" class="plain" id="blink">Blink now</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Playback and status</legend>
+        <div class="row">
+          <label>Speed
+            <select id="speed">
+              <option value="1">1×</option>
+              <option value="0.5">½×</option>
+              <option value="0.25">¼×</option>
+            </select>
+          </label>
+          <label><input type="checkbox" id="status" checked> Status row</label>
+        </div>
+        <div class="row">
+          <label>Battery <input type="number" id="battery" min="0" max="100" value="82"> %</label>
+          <label><input type="checkbox" id="charging"> Charging</label>
+        </div>
+      </fieldset>
+    </div>
+  </main>
+</div>
+<script type="module" src="src/studio.js"></script>
 </body>
 </html>

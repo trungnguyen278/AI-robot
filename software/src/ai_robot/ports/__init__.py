@@ -24,15 +24,15 @@ from ai_robot.ports.body import (
     Safety,
 )
 from ai_robot.ports.camera import Camera, Frame
-from ai_robot.ports.display import Display
 from ai_robot.ports.image import Color, Image
+from ai_robot.ports.screen import Screen, ScreenState, Touch
 
 # The port names used in the configuration ([ports.<name>]) and in Module.owns.
 PORT_TYPES: dict[str, type[Port]] = {
     "audio_in": AudioIn,
     "audio_out": AudioOut,
     "camera": Camera,
-    "display": Display,
+    "screen": Screen,
     "ai_backend": AIBackend,
     "drive": DriveBase,
     "joints": Joints,
@@ -52,7 +52,6 @@ __all__ = [
     "BatteryStatus",
     "Camera",
     "Color",
-    "Display",
     "DriveBase",
     "Frame",
     "Image",
@@ -64,4 +63,7 @@ __all__ = [
     "Power",
     "RangeSensor",
     "Safety",
+    "Screen",
+    "ScreenState",
+    "Touch",
 ]

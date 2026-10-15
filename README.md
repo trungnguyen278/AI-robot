@@ -1,6 +1,6 @@
 # ai-robot
 
-> **Status:** early development — the Raspberry Pi software skeleton runs against simulated hardware, and the screen's emotion library can be browsed in a web browser; no hardware has been built yet.
+> **Status:** early development — the Raspberry Pi software skeleton runs against simulated hardware and already drives the robot's face, drawn in a web browser; no hardware has been built yet.
 
 A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carrying a 7" display as an expressive face, voice interaction, and an AI camera.
 
@@ -28,9 +28,9 @@ A first outline of the product, not a specification: details and priorities are 
 ```
 ai-robot/
 ├── software/    Robot software on the Raspberry Pi 5 (Python + C++)
-├── ui/          What the robot shows on its screen: emotions, scenes, status screens
+├── ui/          The screen renderer: the robot's face, in a browser, on any screen
 ├── firmware/    Microcontroller modules (body-controller: microcontroller not chosen yet)
-├── protocol/    Pi ⇄ module protocol — single source of truth for both sides
+├── protocol/    Protocols between components (Pi ⇄ body, software ⇄ screen)
 ├── hardware/    Bill of materials, power tree, pin map, component notes, CAD
 ├── docs/        Vision, architecture, decision records (ADRs), dev log
 ├── tools/       Utility scripts
@@ -43,7 +43,8 @@ Each folder is an independent component with its own README; see [Contributing](
 
 - [docs/](docs/README.md) — vision, architecture, decision records (ADRs), dev log
 - [hardware/](hardware/README.md) — parts, power tree, pin map, open issues
-- [ui/](ui/README.md) — the screen's emotions, scenes and status screens, and how to browse them
+- [ui/](ui/README.md) — the screen renderer, the studio to try every expression, and the previous emotion library
+- [protocol/](protocol/README.md) — the protocols between components
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branches, commits, documentation, secrets, licensing
 
 ## Related repositories

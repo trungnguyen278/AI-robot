@@ -16,4 +16,4 @@
 
 ## Link to the Pi
 
-UART (planned), using the protocol defined in [`protocol/`](../../protocol/README.md). Pins: [`hardware/pinmap.md`](../../hardware/pinmap.md).
+UART (planned), using the protocol defined in [`protocol/`](../../protocol/body/README.md). Pins: [`hardware/pinmap.md`](../../hardware/pinmap.md).

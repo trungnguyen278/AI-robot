@@ -10,8 +10,8 @@ the same.
 # Module name, as used in [modules] of the configuration -> "package.module:Class"
 MODULES: dict[str, str] = {
     "behavior": "ai_robot.modules.behavior:BehaviorModule",
-    "face": "ai_robot.modules.face:FaceModule",
     "motion": "ai_robot.modules.motion:MotionModule",
+    "screen": "ai_robot.modules.screen:ScreenModule",
     "system": "ai_robot.modules.system:SystemModule",
     "vision": "ai_robot.modules.vision:VisionModule",
     "voice": "ai_robot.modules.voice:VoiceModule",
