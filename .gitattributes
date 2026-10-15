@@ -1,8 +1,8 @@
-# Store text with LF line endings: scripts run on the Pi (Linux),
-# even when edited on Windows.
+# Normalize text files to LF so scripts run unchanged on Linux targets,
+# whatever operating system they were edited on.
 * text=auto eol=lf
 
-# Windows-only scripts keep CRLF
+# Batch and PowerShell scripts keep CRLF
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf

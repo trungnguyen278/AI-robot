@@ -1,16 +1,16 @@
 ---
 name: devlog
-description: Keep continuity in this long-running, spare-time project. At the start of a work session, read the latest dev log entry to recall where things stand; at the end, append a dated entry (what was done, decisions, problems, next steps). Use when starting or resuming work ("where were we", "continue", "what did we do last time") or when wrapping up ("summarize the session", "log today's work").
+description: Keep continuity in this long-running project. At the start of a work session, read the latest dev log entry to recall where things stand; at the end, append a dated entry (what was done, decisions, problems, next steps). Use when starting or resuming work ("where were we", "continue", "what did we do last time") or when wrapping up ("summarize the session", "log today's work").
 ---
 
 # Development log
 
-Work happens in spare time, sometimes with gaps of months. The log is the shared memory of the user and Claude.
+Work on this project can pause for weeks or months. The log is its shared memory.
 
 ## At the start
 
 1. Read the newest file in `docs/devlog/` (named `YYYY-MM.md`).
-2. Summarize for the user in 3–5 lines: what happened last time, what is unfinished, and the recorded next steps.
+2. Summarize in 3–5 lines: what happened last time, what is unfinished, and the recorded next steps.
 
 ## At the end
 

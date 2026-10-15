@@ -9,7 +9,7 @@ A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carr
 
 ![Concept v0](hardware/images/concept-v0.webp)
 
-*Concept v0 — a quick sketch; the arm design may still change.*
+*Concept v0 — a quick sketch (labels in Vietnamese); the arm design may still change.*
 
 ## Repository layout
 
@@ -21,7 +21,7 @@ ai-robot/
 ├── hardware/    Bill of materials, power tree, pin map, component notes, CAD
 ├── docs/        Vision, architecture, decision records (ADRs), dev log
 ├── tools/       Utility scripts
-└── .claude/     Claude Code skills (see CLAUDE.md)
+└── .claude/     Task checklists for AI assistants (see AGENTS.md)
 ```
 
 Each folder is an independent component with its own README; see [Contributing](CONTRIBUTING.md#adding-or-removing-a-component) for how to add or remove one.
@@ -38,7 +38,7 @@ Each folder is an independent component with its own README; see [Contributing](
 |---|---|---|
 | `ai-robot-server` | AI backend and device management | Not created yet |
 | `ai-robot-app` | Mobile companion app | Not created yet |
-| [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Archived — see [docs/legacy.md](docs/legacy.md) |
+| [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Superseded — see [docs/legacy.md](docs/legacy.md) |
 
 ## License
 

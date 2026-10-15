@@ -1,6 +1,6 @@
 # Previous generation: Luni_Robot
 
-Repository: <https://github.com/trungnguyen278/Luni_Robot> (archived). A desktop robot with a 2" 320×240 display and two MCUs — an **ESP32-S3** (display, audio, camera, rendering) and an **ESP32-C5** (Wi-Fi, WebSocket, BLE, OTA, servos and IMU) — linked by SPI (audio) and UART (control). Companion repositories: `Luni_Cloud` (FastAPI) and `Luni_App` (Flutter).
+Repository: <https://github.com/trungnguyen278/Luni_Robot> (superseded by this repository). A desktop robot with a 2" 320×240 display and two MCUs — an **ESP32-S3** (display, audio, camera, rendering) and an **ESP32-C5** (Wi-Fi, WebSocket, BLE, OTA, servos and IMU) — linked by SPI (audio) and UART (control). Companion repositories: `Luni_Cloud` (FastAPI) and `Luni_App` (Flutter).
 
 ## What can be reused
 

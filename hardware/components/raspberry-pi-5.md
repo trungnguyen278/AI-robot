@@ -1,6 +1,6 @@
 # Raspberry Pi 5 (8 GB)
 
-> Last updated: 2026-10-15. raspberrypi.com could not be reached while this note was written, so several entries rely on a copy of the product brief and on secondary sources (marked as such). Re-check against the official documentation when possible.
+> Last updated: 2026-10-15. Several entries rely on a copy of the product brief and on secondary sources (marked as such); re-check them against the official documentation.
 
 - **Role in the robot:** the brain — audio, vision, face, networking, AI.
 - **Exact model / variant:** Raspberry Pi 5, 8 GB RAM.

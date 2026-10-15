@@ -1,6 +1,6 @@
 # Pin map
 
-> Single source of truth for "which pin does what". Every wiring change updates this file (skill `hardware-change`).
+> Single source of truth for "which pin does what". Every wiring change updates this file (`hardware-change` checklist).
 > Current state: **planned** — nothing is wired yet.
 
 ## Raspberry Pi 5 — 40-pin header

@@ -24,7 +24,7 @@ Goal: after every change, `hardware/` still describes the **real** robot, so it 
 
 - [ ] No pin conflicts in `hardware/pinmap.md` (Pi 5 and ESP32-S3).
 - [ ] No I2C address clashes; a free UART is available; remember the Pi has only one I2S pin group.
-- [ ] Anything wired to the Pi → also use skill `pi5-platform`.
+- [ ] Anything wired to the Pi → also follow the `pi5-platform` checklist (`.claude/skills/pi5-platform/SKILL.md`).
 
 ## 4. Update in the same commit
 
@@ -36,4 +36,4 @@ Goal: after every change, `hardware/` still describes the **real** robot, so it 
 
 ## 5. Major changes
 
-Replacing a core part (compute board, chassis, power system, servo or motor type) → write an ADR (skill `adr`).
+Replacing a core part (compute board, chassis, power system, servo or motor type) → write an ADR (`adr` checklist, `.claude/skills/adr/SKILL.md`).

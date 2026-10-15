@@ -1,6 +1,6 @@
 # <Part name>
 
-> Component note, created with skill `hardware-change`. Last updated: YYYY-MM-DD.
+> Component note, created with the `hardware-change` checklist. Last updated: YYYY-MM-DD.
 
 - **Role in the robot:**
 - **Exact model / variant:**

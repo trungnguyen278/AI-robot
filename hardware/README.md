@@ -4,6 +4,8 @@
 
 ![Concept v0](images/concept-v0.webp)
 
+*Concept v0 — a quick sketch with labels in Vietnamese.*
+
 ## Main blocks
 
 | Block | Parts | Notes |
