@@ -1,11 +1,11 @@
 # ai-robot
 
-> **Status:** early setup — project skeleton and documentation only; no code yet.
+> **Status:** early development — the Raspberry Pi software skeleton runs against simulated hardware; nothing is built yet.
 
 A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carrying a 7" display as an expressive face, voice interaction, and an AI camera.
 
 - **Brain:** Raspberry Pi 5 (8 GB) — audio, vision, face, AI and networking (built-in Wi-Fi and Bluetooth LE).
-- **Body:** ESP32-S3 — real-time control of servos, motors and encoders, sensors and LEDs.
+- **Body:** a microcontroller for real-time control of servos, motors and encoders, sensors and LEDs — not chosen yet (concept v0 shows an ESP32-S3; [ADR-0004](docs/decisions/0004-pi-software-first.md)). Until then the body is simulated.
 
 ![Concept v0](hardware/images/concept-v0.webp)
 
@@ -15,8 +15,8 @@ A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carr
 
 ```
 ai-robot/
-├── software/    Main application running on the Raspberry Pi 5
-├── firmware/    Microcontroller modules (body-controller = ESP32-S3)
+├── software/    Robot software on the Raspberry Pi 5 (Python + C++)
+├── firmware/    Microcontroller modules (body-controller: microcontroller not chosen yet)
 ├── protocol/    Pi ⇄ module protocol — single source of truth for both sides
 ├── hardware/    Bill of materials, power tree, pin map, component notes, CAD
 ├── docs/        Vision, architecture, decision records (ADRs), dev log
