@@ -1,6 +1,6 @@
 # ai-robot
 
-> **Status:** early development — the Raspberry Pi software skeleton runs against simulated hardware; nothing is built yet.
+> **Status:** early development — the Raspberry Pi software skeleton runs against simulated hardware; no hardware has been built yet.
 
 A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carrying a 7" display as an expressive face, voice interaction, and an AI camera.
 

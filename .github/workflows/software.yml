@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.11: the oldest supported version; 3.13: Raspberry Pi OS (Debian 13 "Trixie")
+        # 3.11: the oldest supported version; 3.13: Raspberry Pi OS "Trixie" (as of 2026-10)
         python-version: ["3.11", "3.13"]
     defaults:
       run:
