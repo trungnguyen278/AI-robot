@@ -39,13 +39,13 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<sc
 | `test` | Adding or changing tests |
 | `chore` | Tooling, configuration, CI, housekeeping |
 
-The scope is the affected area: `software`, `firmware`, `protocol`, `hardware`, `docs`, `tools`, `ai`, `ci`.
+The scope is the affected area: `software`, `ui`, `firmware`, `protocol`, `hardware`, `docs`, `tools`, `ai`, `ci`.
 
 Example: `feat(firmware): read MG540 encoders with PCNT`
 
 ## Adding or removing a component
 
-The repository is a set of independent components: `software/`, each module under `firmware/`, `protocol/` and `tools/`.
+The repository is a set of independent components: `software/`, `ui/`, each module under `firmware/`, `protocol/` and `tools/`.
 
 - **Add:** create a folder containing a `README.md` (purpose, status, how to build, run and test), its own build configuration and its tests. List it in the parent README (the layout in `README.md`, or the module table in `firmware/README.md`).
 - **Remove:** delete the folder and its entry in the parent README. If the removal reflects a design decision, record it in an ADR.
@@ -75,5 +75,5 @@ Checklists for these steps live in `.claude/skills/<name>/SKILL.md`.
 
 By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
 
-- New source files start with an SPDX header: `// SPDX-License-Identifier: MIT` (C/C++) or `# SPDX-License-Identifier: MIT` (Python, shell).
+- New source files start with an SPDX header: `// SPDX-License-Identifier: MIT` (C/C++, JavaScript), `# SPDX-License-Identifier: MIT` (Python, shell) or `<!-- SPDX-License-Identifier: MIT -->` (HTML).
 - Third-party code, models and assets keep their original licenses. List them in `THIRD_PARTY_NOTICES.md` when the first one is added.
