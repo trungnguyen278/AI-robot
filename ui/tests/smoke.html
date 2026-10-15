@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emotion library smoke test</title>
+<style>
+  body { margin: 0; padding: 24px; background: #f3efe7; color: #1a1a1a; font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; }
+  #result[data-status="pass"] { color: #2a7a5b; }
+  #result[data-status="fail"] { color: #b3261e; }
+</style>
+<script>
+  // Errors thrown while the library loads, reported by smoke.jsx.
+  window.LOAD_ERRORS = [];
+  window.addEventListener('error', (e) => window.LOAD_ERRORS.push(e.message || String(e.error)));
+</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom-server-legacy.browser.production.min.js" integrity="sha384-Pzfm9BbDLjweUoIr6U4qiGaj/ttrk1ACmrcFAHZYH61Sd4/uTvzyhYmc9aRPLIov" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<pre id="result" data-status="running">Running…</pre>
+<!-- The library, in the same order as ../index.html without sheet.jsx (smoke.jsx checks this). -->
+<script type="text/babel" src="../src/emotion-core.jsx"></script>
+<script type="text/babel" src="../src/screen.jsx"></script>
+<script type="text/babel" src="../src/scene-arc.jsx"></script>
+<script type="text/babel" src="../src/emotion-list.jsx"></script>
+<script type="text/babel" src="../src/emotion-extras.jsx"></script>
+<script type="text/babel" src="../src/scenes.jsx"></script>
+<script type="text/babel" src="../src/scenes-boot.jsx"></script>
+<script type="text/babel" src="../src/scenes-network.jsx"></script>
+<script type="text/babel" src="../src/emotion-balance.jsx"></script>
+<script type="text/babel" src="../src/emotion-more.jsx"></script>
+<script type="text/babel" src="../src/emotion-color.jsx"></script>
+<script type="text/babel" src="../src/emotion-pack-1.jsx"></script>
+<script type="text/babel" src="../src/emotion-pack-2.jsx"></script>
+<script type="text/babel" src="../src/emotion-pack-3.jsx"></script>
+<script type="text/babel" src="../src/scenes-arc-pack-1.jsx"></script>
+<script type="text/babel" src="../src/scenes-arc-pack-2.jsx"></script>
+<script type="text/babel" src="../src/scenes-arc-pack-3.jsx"></script>
+<script type="text/babel" src="../src/scenes-arc-pack-3b.jsx"></script>
+<script type="text/babel" src="../src/scenes-weather.jsx"></script>
+<script type="text/babel" src="../src/scenes-comms.jsx"></script>
+<script type="text/babel" src="../src/scenes-moon.jsx"></script>
+<script type="text/babel" src="smoke.jsx"></script>
+</body>
+</html>

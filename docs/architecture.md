@@ -58,3 +58,4 @@ Until the body controller exists, the body ports (`drive`, `joints`, `range`, `p
 - [ ] Does the body controller or the Pi drive the motor driver?
 - [ ] How AI work is split between the camera, the Pi and the server.
 - [ ] Audio: ReSpeaker HAT or MAX98357A — they cannot share the I2S pins; see [hardware/README.md](../hardware/README.md).
+- [ ] How the robot shows the screen library in [ui/](../ui/README.md): its JSX in a full-screen browser, or a port to Python.
