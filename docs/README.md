@@ -2,10 +2,7 @@
 
 | Document | Contents |
 |---|---|
-| [vision.md](vision.md) | What the robot should be able to do |
-| [architecture.md](architecture.md) | Building blocks, responsibilities, open questions |
-| [decisions/](decisions/README.md) | Architecture decision records (ADRs) |
-| [devlog/](devlog/README.md) | Development log |
-| [legacy.md](legacy.md) | Previous generation (Luni_Robot): what can be reused, lessons learned |
+| [devlog/](devlog/README.md) | Development log — where things stand |
 
-Hardware documentation lives in [`hardware/`](../hardware/README.md).
+- System design (overview, robot architecture, decisions, contracts, vision, previous generation): [ai-robot-design](https://github.com/trungnguyen278/ai-robot-design).
+- Hardware documentation: [`hardware/`](../hardware/README.md).

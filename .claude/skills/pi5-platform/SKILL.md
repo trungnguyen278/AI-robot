@@ -1,6 +1,6 @@
 ---
 name: pi5-platform
-description: Raspberry Pi 5 (8 GB) platform knowledge and checklists for this robot — 40-pin header functions (I2C, SPI, UART, I2S, PWM), 3.3 V logic, power (5 V/5 A, USB current limit, powering through the header, halt power), thermal throttling, Wi-Fi/BLE, CSI/DSI/PCIe, Raspberry Pi OS, config.txt/EEPROM settings and GPIO libraries. Use whenever a task touches the Pi side of the hardware or OS — wiring something to the Pi, assigning GPIO pins, enabling interfaces or overlays, powering or cooling the Pi, choosing GPIO, camera or audio libraries, or deciding what runs on the Pi versus the ESP32.
+description: Raspberry Pi 5 (8 GB) platform knowledge and checklists for this robot — 40-pin header functions (I2C, SPI, UART, I2S, PWM), 3.3 V logic, power (5 V/5 A, USB current limit, powering through the header, halt power), thermal throttling, Wi-Fi/BLE, CSI/DSI/PCIe, Raspberry Pi OS, config.txt/EEPROM settings and GPIO libraries. Use whenever a task touches the Pi side of the hardware or OS — wiring something to the Pi, assigning GPIO pins, enabling interfaces or overlays, powering or cooling the Pi, choosing GPIO, camera or audio libraries, or deciding what runs on the Pi versus a body microcontroller.
 ---
 
 # Raspberry Pi 5 platform
@@ -20,6 +20,7 @@ description: Raspberry Pi 5 (8 GB) platform knowledge and checklists for this ro
   - I2C1 (GPIO2/3) is a shared bus — record every I2C address in `pinmap.md`.
 - [ ] Devices powered from the header's 5 V or 3.3 V pins go into the power budget in `hardware/README.md`.
 - [ ] Update `pinmap.md` (and any `config.txt` sample) in the same commit.
+- [ ] Device names and pins go into profiles or configuration, never into code (see CONTRIBUTING.md, Portability).
 
 ## Checklist: power and thermals
 
@@ -32,7 +33,7 @@ description: Raspberry Pi 5 (8 GB) platform knowledge and checklists for this ro
 
 - `RPi.GPIO` **does not work on the Pi 5** (GPIO lives on the RP1 chip). Use `gpiozero`, `lgpio` or `libgpiod`; `rpi-lgpio` runs legacy RPi.GPIO code.
 - Do not hard-code `gpiochip4` or `gpiochip0`: the number changed between kernels. Find the chip with `gpiodetect`/`gpioinfo` or by label.
-- There is no 3.5 mm audio jack and no ADC. Audio goes through I2S, USB or HDMI; analog measurements such as battery voltage go through the ESP32-S3 or an ADC/INA chip.
+- There is no 3.5 mm audio jack and no ADC. Audio goes through I2S, USB or HDMI; analog measurements such as battery voltage go through the body controller or an ADC/INA chip.
 
 ## When the reference is missing something
 

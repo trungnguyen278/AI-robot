@@ -5,7 +5,7 @@
 - **Role in the robot:** measures the distance ahead for obstacle avoidance.
 - **Exact model / variant:** VL53L1X on a breakout board (board not chosen yet).
 - **Quantity:** 1
-- **Connected to:** the ESP32-S3 over I2C.
+- **Connected to:** the body controller over I2C.
 
 ## Key specifications
 

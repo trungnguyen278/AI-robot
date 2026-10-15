@@ -5,7 +5,7 @@
 - **Role in the robot:** 2-DOF neck and 3-DOF per arm.
 - **Exact model / variant:** the **12 V** version (ST-3215-C018, "30 kg·cm"). The STS3215 name is also used for a 6–8.4 V version (19.5 kg·cm) — **never feed that one 12 V**.
 - **Quantity:** 8
-- **Connected to:** the ESP32-S3 through a half-duplex servo bus adapter; 12 V servo branch.
+- **Connected to:** the body controller or the Pi (over USB) through a half-duplex servo bus adapter; 12 V servo branch.
 
 ## Key specifications
 
@@ -23,7 +23,7 @@
 
 ## Notes for this robot
 
-- Single-wire half-duplex → **do not wire the ESP32 TX/RX directly**; use a bus servo adapter or a tri-state buffer (e.g. 74HC126) with a direction pin.
+- Single-wire half-duplex → **do not wire a UART's TX/RX directly**; use a bus servo adapter or a tri-state buffer (e.g. 74HC126) with a direction pin.
 - 8 servos × 2.7 A stall = **~21.6 A** if they all stall at once → the servo branch needs its own fuse, adequately sized wiring and a supply that can handle the peaks. Real-world current is usually far lower, but protection must be designed for the worst case.
 - The STS3215 is also the servo used by the SO-100/SO-101 arms of the LeRobot project — a useful reference if the arms are redesigned.
 

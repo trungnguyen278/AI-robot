@@ -1,16 +1,11 @@
-# software/ — main application on the Raspberry Pi 5
+# software/ — robot software on the Raspberry Pi 5
 
-> Empty — waiting for the platform decisions (OS, ROS 2 or not, language); see the open questions in [`docs/architecture.md`](../docs/architecture.md).
+> Empty — built first. Waiting for the software platform decision ([ADR-0005](https://github.com/trungnguyen278/ai-robot-design/blob/main/decisions/0005-pi-software-platform.md), Proposed).
 
-Planned modules, each behind a defined interface so it can be added, replaced or removed independently:
+Implements the [robot architecture](https://github.com/trungnguyen278/ai-robot-design/blob/main/robot/architecture.md):
 
-| Module | Responsibility |
-|---|---|
-| audio | Microphone, speaker, wake word, VAD, AEC, conversation with the server |
-| vision | AI camera (IMX500): people and object detection, face tracking |
-| face | Expressive face on the 7" display |
-| body link | Talks to the ESP32-S3 using [`protocol/`](../protocol/README.md) |
-| behavior | Orchestration: robot state, reactions to events |
-| net | Connection to `ai-robot-server`, BLE with `ai-robot-app`, software updates |
+- **Modules** — behavior, voice, vision, face, motion, system — talk to each other through messages only.
+- **Ports** give modules access to hardware and external services; each port has a `sim` adapter plus real adapters.
+- **Profiles** pick one adapter per port: `desktop` (any PC, everything simulated), `pi` (Pi devices real, body simulated) and `robot` (everything real).
 
-The folder layout will follow the platform decision (ADR). The robot's display name lives in a single configuration file and is never hard-coded ([ADR-0003](../docs/decisions/0003-neutral-repo-naming.md)).
+Because the body is reached only through ports, this software runs on a PC or on the Pi alone before the body controller is chosen. The robot's display name lives in a single configuration file and is never hard-coded.

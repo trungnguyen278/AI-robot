@@ -5,7 +5,7 @@
 - **Role in the robot:**
 - **Exact model / variant:**
 - **Quantity:**
-- **Connected to:** (Pi 5 / ESP32-S3 / which power rail)
+- **Connected to:** (Pi 5 / body controller / which power rail)
 
 ## Key specifications
 

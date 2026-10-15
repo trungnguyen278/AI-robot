@@ -20,7 +20,7 @@
 ## Notes for this robot
 
 - A 3S pack (9.0–12.6 V depending on charge) sits comfortably inside the input range.
-- Do not design around 9 A: the Pi 5 (up to 5 A under heavy load with USB) plus display, HAT, amplifier, ESP32-S3 and LEDs → keep a power budget in [`hardware/README.md`](../README.md) with headroom.
+- Do not design around 9 A: the Pi 5 (up to 5 A under heavy load with USB) plus display, HAT, amplifier, body controller and LEDs → keep a power budget in [`hardware/README.md`](../README.md) with headroom.
 
 ## References (retrieved 2026-10-15)
 

@@ -1,17 +1,16 @@
-# protocol/ — Pi 5 ⇄ module protocol
+# protocol/ — Pi 5 ⇄ body protocol
 
-> Empty — the format is not decided yet (to be recorded in an ADR).
+> Empty — the wire format and transport are not decided yet.
 
-The **single source of truth** for everything exchanged between the Pi 5 and the microcontroller modules: message types, fields, error codes and states. Both sides generate their code from, or share, the definitions here — never hand-copy them (the previous generation had to keep two copies of `StateTypes` in sync by hand).
+The machine-readable implementation of the [robot-body contract](https://github.com/trungnguyen278/ai-robot-design/blob/main/interfaces/robot-body.md) (capabilities, behavior and versioning are specified there). This folder will hold the message definitions and framing that both the Pi software and the body firmware generate from or share — never hand-copied into two places.
 
 ## Requirements
 
-- A protocol version, checked by both sides on connect.
+- States which contract version it implements.
 - Framed packets with a CRC, robust to lost or corrupted bytes.
-- Heartbeats in both directions; the ESP32-S3 goes to a safe state when the heartbeat is lost.
-- Acknowledgements for critical commands.
+- Works over the transport chosen later (UART, USB, …) without changes to the message definitions.
 
 ## Candidate formats
 
-- A schema with code generation, e.g. Protocol Buffers (nanopb on the ESP32).
-- A custom binary format with framing (e.g. COBS) and a CRC, described in one spec file that generates the C++ and Python definitions.
+- A schema with code generation, e.g. Protocol Buffers (nanopb on microcontrollers).
+- A custom binary format with framing (e.g. COBS) and a CRC, described in one spec file that generates the C/C++ and Python definitions.

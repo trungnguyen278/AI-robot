@@ -5,7 +5,7 @@
 - **Role in the robot:** the brain — audio, vision, face, networking, AI.
 - **Exact model / variant:** Raspberry Pi 5, 8 GB RAM.
 - **Quantity:** 1
-- **Connected to:** 5 V DC-DC through the header; display (DSI), camera (CSI), ReSpeaker HAT (header), ESP32-S3 (UART).
+- **Connected to:** 5 V DC-DC through the header; display (DSI), camera (CSI), ReSpeaker HAT (header), body controller (UART or USB, not chosen yet).
 
 ## Key specifications
 
@@ -56,7 +56,7 @@
 - **gpiochip numbering:** the header used to be `gpiochip4`; newer kernels add a `gpiochip0` alias → never hard-code it, use `gpiodetect`/`gpioinfo`.
 - **Camera:** libcamera, Picamera2, rpicam-apps.
 
-## AI performance (estimates, see ADR-0001)
+## AI performance (estimates, see ADR-0001 in ai-robot-design)
 
 - Theoretical memory bandwidth is ~17 GB/s (LPDDR4X-4267 on a 32-bit bus), so local LLMs run at roughly 1.5–2 tokens/s for 7–8B models, 4–6 tokens/s for 3B and 8–12 tokens/s for 1.5B. Community figures, not measured here.
 

@@ -2,10 +2,12 @@
 
 > **Status:** early setup — project skeleton and documentation only; no code yet.
 
-A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carrying a 7" display as an expressive face, voice interaction, and an AI camera.
+A mobile AI robot with **two arms**, a **neck** carrying a display as an expressive face, voice interaction and an AI camera. Concept v0 uses a tracked chassis.
 
-- **Brain:** Raspberry Pi 5 (8 GB) — audio, vision, face, AI and networking (built-in Wi-Fi and Bluetooth LE).
-- **Body:** ESP32-S3 — real-time control of servos, motors and encoders, sensors and LEDs.
+- **Brain:** Raspberry Pi 5 (8 GB) — the only part that is fixed. Audio, vision, face, AI and networking (built-in Wi-Fi and Bluetooth LE).
+- **Body controller:** a microcontroller for real-time I/O — motors and encoders, joints, sensors, lights. Not chosen yet (concept v0 shows an ESP32-S3); until then the body is simulated.
+
+The system design — architecture, decisions and contracts — lives in [ai-robot-design](https://github.com/trungnguyen278/ai-robot-design). This repository holds the implementation.
 
 ![Concept v0](hardware/images/concept-v0.webp)
 
@@ -15,11 +17,11 @@ A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carr
 
 ```
 ai-robot/
-├── software/    Main application running on the Raspberry Pi 5
-├── firmware/    Microcontroller modules (body-controller = ESP32-S3)
-├── protocol/    Pi ⇄ module protocol — single source of truth for both sides
+├── software/    Robot software on the Raspberry Pi 5 — built first
+├── firmware/    Microcontroller modules (body-controller: MCU not chosen yet)
+├── protocol/    Machine-readable Pi ⇄ body protocol, implementing the robot-body contract
 ├── hardware/    Bill of materials, power tree, pin map, component notes, CAD
-├── docs/        Vision, architecture, decision records (ADRs), dev log
+├── docs/        Development log
 ├── tools/       Utility scripts
 └── .claude/     Task checklists for AI assistants (see AGENTS.md)
 ```
@@ -28,17 +30,19 @@ Each folder is an independent component with its own README; see [Contributing](
 
 ## Documentation
 
-- [docs/](docs/README.md) — vision, architecture, decision records (ADRs), dev log
+- [ai-robot-design](https://github.com/trungnguyen278/ai-robot-design) — system overview, robot architecture, decisions (ADRs), interface contracts
 - [hardware/](hardware/README.md) — parts, power tree, pin map, open issues
-- [CONTRIBUTING.md](CONTRIBUTING.md) — branches, commits, documentation, secrets, licensing
+- [docs/](docs/README.md) — development log
+- [CONTRIBUTING.md](CONTRIBUTING.md) — design rules, portability, branches, commits, licensing
 
 ## Related repositories
 
 | Repository | Role | Status |
 |---|---|---|
-| `ai-robot-server` | AI backend and device management | Not created yet |
-| `ai-robot-app` | Mobile companion app | Not created yet |
-| [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Superseded — see [docs/legacy.md](docs/legacy.md) |
+| [ai-robot-design](https://github.com/trungnguyen278/ai-robot-design) | System design: architecture, ADRs, contracts | Active |
+| `ai-robot-server` | AI backend and device management | Deferred |
+| `ai-robot-app` | Mobile companion app | Deferred |
+| [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Superseded |
 
 ## License
 

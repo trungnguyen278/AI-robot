@@ -1,19 +1,20 @@
-# body-controller (ESP32-S3)
+# body-controller
 
-> Empty — the role is defined in [ADR-0002](../../docs/decisions/0002-esp32-s3-body-controller.md).
+> Deferred — the microcontroller is not chosen yet (concept v0 shows an ESP32-S3). Until it exists, the robot software uses simulated adapters ([ADR-0004](https://github.com/trungnguyen278/ai-robot-design/blob/main/decisions/0004-pi-first-hardware-abstraction.md)).
 
 ## Responsibilities
 
-- STS3215 servo bus × 8 (neck 2 + arms 3 + 3) — half-duplex, needs an adapter.
-- MG540 motors × 2: drive the motor driver and read the encoders (PCNT planned).
-- VL53L1X (I2C) and NeoPixel LEDs (RMT planned).
-- Battery voltage (ADC + voltage divider).
-- **Safety:** if the Pi's heartbeat is lost beyond a threshold, stop the motors and bring the servos to a safe state.
+Implements the [robot-body contract](https://github.com/trungnguyen278/ai-robot-design/blob/main/interfaces/robot-body.md):
+
+- Drive: motor driver and wheel encoders.
+- Joints: neck and arm servos (unless the Pi drives the servo bus directly — an open question in the robot architecture).
+- Range sensors, status lights, battery measurement.
+- **Safety:** when the Pi's heartbeat is lost, stop the drive and bring the joints to their safe state.
 
 ## Out of scope
 
-- The ESP32-S3's Wi-Fi and BLE stay unused — networking belongs to the Pi 5.
+- Networking — it belongs to the Raspberry Pi 5.
 
 ## Link to the Pi
 
-UART (planned), using the protocol defined in [`protocol/`](../../protocol/README.md). Pins: [`hardware/pinmap.md`](../../hardware/pinmap.md).
+Transport not chosen yet; the machine-readable protocol lives in [`protocol/`](../../protocol/README.md). Pins: [`hardware/pinmap.md`](../../hardware/pinmap.md).
