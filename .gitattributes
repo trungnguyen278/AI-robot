@@ -1,0 +1,24 @@
+# Store text with LF line endings: scripts run on the Pi (Linux),
+# even when edited on Windows.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files: never touch line endings, no text diff
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.pdf  binary
+*.stl  binary
+*.3mf  binary
+*.step binary
+*.stp  binary
+*.wav  binary
+*.mp3  binary
+*.zip  binary
+*.bin  binary

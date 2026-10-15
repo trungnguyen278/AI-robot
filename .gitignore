@@ -1,0 +1,60 @@
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ---- Secrets (commit .env.example instead) ----
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# ---- Claude Code: personal, not shared ----
+.claude/settings.local.json
+CLAUDE.local.md
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+
+# ---- C/C++ / CMake ----
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+
+# ---- ESP-IDF / PlatformIO ----
+.pio/
+managed_components/
+sdkconfig
+sdkconfig.old
+
+# ---- Node (web tools, if any) ----
+node_modules/
+
+# ---- Large AI weights: use Git LFS / Releases ----
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# ---- Runtime output ----
+recordings/
+*.log
