@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 
+from ai_robot.core.checks import positive
 from ai_robot.core.module import Module, ModuleContext
 from ai_robot.messages import BatteryReport
 from ai_robot.ports import Color, Lights, Power
@@ -22,11 +23,9 @@ class SystemModule(Module):
 
     owns = ("power", "lights")
 
-    def __init__(self, ctx: ModuleContext, *, battery_interval: float = 5.0) -> None:
+    def __init__(self, ctx: ModuleContext, *, battery_interval: float) -> None:
         super().__init__(ctx)
-        if battery_interval <= 0:
-            raise ValueError("battery_interval must be positive")
-        self.battery_interval = battery_interval
+        self.battery_interval = positive("battery_interval", battery_interval)
         self.power = self.port("power", Power)
         self.lights = self.port("lights", Lights)
 

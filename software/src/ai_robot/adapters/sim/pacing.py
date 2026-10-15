@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 
+from ai_robot.core.checks import positive
+
 
 class Pacer:
     """Makes successive ``wait()`` calls return once every ``period`` seconds.
@@ -15,10 +17,8 @@ class Pacer:
     """
 
     def __init__(self, period: float, max_lag: float = 1.0) -> None:
-        if period <= 0:
-            raise ValueError("period must be positive")
-        self.period = period
-        self.max_lag = max_lag
+        self.period = positive("period", period)
+        self.max_lag = positive("max_lag", max_lag)
         self._due: float | None = None
 
     async def wait(self) -> None:

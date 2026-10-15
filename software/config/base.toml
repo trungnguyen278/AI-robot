@@ -18,9 +18,9 @@ display_name = "Robot"
 level = "INFO"
 
 [modules]
-# Started in this order and stopped in reverse: the body is made safe first and
-# released last.
-enabled = ["system", "motion", "voice", "vision", "face", "behavior"]
+# Started in this order and stopped in reverse. motion comes last, so it is the first
+# to stop: the body is made safe before anything else shuts down.
+enabled = ["system", "voice", "vision", "face", "behavior", "motion"]
 
 [modules.system]
 battery_interval = 5.0  # seconds between battery reports
@@ -66,6 +66,7 @@ adapter = "stub"
 adapter = "sim"
 max_linear = 0.5  # m/s, placeholder: the motor specifications are unverified
 max_angular = 2.0  # rad/s, placeholder
+max_ttl = 1.0  # s: the longest a drive command lasts unless it is renewed
 
 # Neck (2 DOF) and arms (3 DOF each). Angles in radians; `home` defaults to 0.
 # Placeholder names and limits until the arm design is fixed

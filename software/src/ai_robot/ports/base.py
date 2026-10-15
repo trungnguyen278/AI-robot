@@ -15,7 +15,11 @@ class Port(ABC):  # noqa: B024
     """
 
     async def open(self) -> None:  # noqa: B027
-        """Acquire the device or the connection. By default: nothing to do."""
+        """Acquire the device or the connection. By default: nothing to do.
+
+        Stopping the robot during startup cancels ``open``; it must then release what it
+        had acquired, because ``close`` is called only if ``open`` succeeded.
+        """
 
     async def close(self) -> None:  # noqa: B027
         """Release it. Called only if ``open`` succeeded. By default: nothing to do."""

@@ -51,7 +51,7 @@ def create_adapter(port: str, table: Mapping[str, Any]) -> Port:
     }
     specific = table.get(name, {})
     if not isinstance(specific, Mapping):
-        raise ConfigError(f"ports.{port}.{name} must be a table")
+        raise ConfigError(f"[ports.{port}.{name}] must be a table")
     settings.update(specific)
     adapter = create(import_object(adapters[name]), f"ports.{port} ({name})", **settings)
     if not isinstance(adapter, PORT_TYPES[port]):

@@ -51,6 +51,17 @@ def load_config(profile: str, config_dir: Path | None = None) -> dict[str, Any]:
     return config
 
 
+def get_table(parent: Mapping[str, Any], key: str, where: str | None = None) -> Mapping[str, Any]:
+    """The table ``parent[key]``, or an empty one if it is missing.
+
+    ``where`` names the table in error messages; it defaults to ``key``.
+    """
+    value = parent.get(key, {})
+    if not isinstance(value, Mapping):
+        raise ConfigError(f"[{where or key}] must be a table")
+    return value
+
+
 def deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
     """Return ``base`` updated with ``override``.
 
@@ -71,5 +82,5 @@ def _read(path: Path) -> dict[str, Any]:
     try:
         with path.open("rb") as file:
             return tomllib.load(file)
-    except tomllib.TOMLDecodeError as error:
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as error:
         raise ConfigError(f"{path}: {error}") from None

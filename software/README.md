@@ -31,7 +31,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 - **Adapter:** an implementation of a port, simulated or real (`adapters/`).
 - **Profile:** which adapter each port uses, and its settings (`config/profiles/`).
 
-Lifecycle: open every adapter → `start()` each module in the configured order → run all the modules' `run()` together → on Ctrl+C, SIGTERM or a failing module, `stop()` the modules in reverse order → close the adapters.
+Lifecycle: open every adapter → `start()` each module in the configured order → run all the modules' `run()` together → on Ctrl+C, SIGTERM or a failing module (also during startup), `stop()` the modules in reverse order → close the adapters. Each shutdown step gets at most 5 seconds; a second Ctrl+C forces the exit.
 
 ## Layout
 
@@ -57,7 +57,7 @@ software/
 
 ## Run and test
 
-On any computer with Python 3.11 or later (Raspberry Pi OS "Trixie" ships 3.13):
+On any computer with Python 3.11 or later (Raspberry Pi OS "Trixie" ships Python 3.13, as of October 2026):
 
 ```sh
 cd software
@@ -70,7 +70,9 @@ pytest
 ruff check . && ruff format --check .
 ```
 
-On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`; until real adapters exist it behaves like `desktop`. `ai-robot --help` lists the options; `--duration SECONDS` stops the robot after a while, which is handy for quick checks.
+On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`; until real adapters exist it behaves like `desktop`. `ai-robot --help` lists the options; `--duration SECONDS` stops the robot after a while, which is handy for quick checks. The environment variables are listed in [`.env.example`](.env.example).
+
+Install with `-e` from this checkout: the configuration is then read from `software/config`. With any other kind of install, point `--config-dir` or `AI_ROBOT_CONFIG_DIR` at a configuration directory.
 
 ### C++ extension
 
@@ -96,7 +98,7 @@ width = 1024
 battery_interval = 5.0   # passed to the module
 ```
 
-Settings become keyword arguments of the adapter's or module's constructor, so a misspelt or missing key stops the robot at startup with a message that names the table. Secrets such as API keys never go into these files: read them from environment variables.
+Settings become keyword arguments of the adapter's or module's constructor, so a misspelt or missing key, or a value of the wrong type, stops the robot at startup with a message that names the table. Secrets such as API keys never go into these files: read them from environment variables.
 
 ## Extending
 
@@ -109,6 +111,7 @@ Settings become keyword arguments of the adapter's or module's constructor, so a
 
 - Each port has exactly one owner; modules talk only through the bus; hardware and services are reached only through ports.
 - Never block the event loop: run blocking library calls with `asyncio.to_thread`, and heavy computation in C++ or in another process.
-- Motion commands expire (`ttl`), so a hung caller can never leave the robot moving.
+- Hardware values (sizes, rates, limits) live only in the configuration: adapters take them as required settings, with no defaults in code.
+- Motion commands expire (`ttl`, at most `max_ttl`), so a hung caller can never leave the robot moving; `motion` is the first module to stop.
 - Every C++ function has a pure-Python fallback with the same behavior, and a test that compares them.
 - The robot's display name lives only in `config/base.toml` ([ADR-0003](../docs/decisions/0003-neutral-repo-naming.md)).

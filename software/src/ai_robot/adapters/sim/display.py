@@ -10,7 +10,7 @@ from ai_robot.ports.image import Image
 class SimDisplay(Display):
     """A display without a screen: it keeps the last image shown."""
 
-    def __init__(self, *, width: int = 1024, height: int = 600) -> None:
+    def __init__(self, *, width: int, height: int) -> None:
         if width <= 0 or height <= 0:
             raise ValueError(f"invalid display size {width}x{height}")
         self._size = (width, height)

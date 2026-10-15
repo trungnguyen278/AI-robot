@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from ai_robot.core.checks import finite, positive
 from ai_robot.ports.body import (
     BatteryStatus,
     DriveBase,
@@ -31,14 +32,14 @@ class SimDriveBase(DriveBase):
     def __init__(
         self,
         *,
-        max_linear: float = 0.5,
-        max_angular: float = 2.0,
+        max_linear: float,
+        max_angular: float,
+        max_ttl: float,
         clock: Clock = time.monotonic,
     ) -> None:
-        if max_linear <= 0 or max_angular <= 0:
-            raise ValueError("speed limits must be positive")
-        self.max_linear = max_linear
-        self.max_angular = max_angular
+        self.max_linear = positive("max_linear", max_linear)
+        self.max_angular = positive("max_angular", max_angular)
+        self.max_ttl = positive("max_ttl", max_ttl)
         self._clock = clock
         self._pose = Pose()
         self._linear = 0.0
@@ -47,11 +48,11 @@ class SimDriveBase(DriveBase):
         self._updated = clock()
 
     async def drive(self, linear: float, angular: float, *, ttl: float) -> None:
-        if ttl <= 0:
-            raise ValueError("ttl must be positive")
+        linear = _clamp(finite("linear", linear), self.max_linear)
+        angular = _clamp(finite("angular", angular), self.max_angular)
+        ttl = min(positive("ttl", ttl), self.max_ttl)
         self._advance()
-        self._linear = _clamp(linear, self.max_linear)
-        self._angular = _clamp(angular, self.max_angular)
+        self._linear, self._angular = linear, angular
         self._expires = self._updated + ttl
 
     async def stop(self) -> None:
@@ -119,13 +120,21 @@ class SimJoints(Joints):
         unknown = sorted(set(targets) - self._by_name.keys())
         if unknown:
             raise KeyError(f"unknown joints: {', '.join(unknown)}")
-        if duration < 0:
-            raise ValueError("duration must not be negative")
+        if finite("duration", duration) < 0:
+            raise ValueError(f"duration must not be negative, got {duration!r}")
+        for name, target in targets.items():
+            finite(name, target)
         now = self._clock()
         for name, target in targets.items():
             joint = self._by_name[name]
             clamped = max(joint.lower, min(joint.upper, target))
             self._motion[name] = (self._angle(name, now), clamped, now, duration)
+
+    async def hold(self) -> None:
+        now = self._clock()
+        for name in self._motion:
+            angle = self._angle(name, now)
+            self._motion[name] = (angle, angle, now, 0.0)
 
     async def positions(self) -> dict[str, float]:
         now = self._clock()

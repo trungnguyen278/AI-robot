@@ -35,7 +35,9 @@ class DriveBase(Port):
 
         The command expires: the chassis stops after ``ttl`` unless a new command
         arrives, so a caller that hangs can never leave the robot driving. Speeds beyond
-        the chassis's limits are clamped.
+        the chassis's limits are clamped, and so is a ``ttl`` beyond the longest command
+        allowed (the ``max_ttl`` setting). A value that is not a finite number, or a
+        ``ttl`` that is not positive, raises ``ValueError``.
         """
 
     @abstractmethod
@@ -93,8 +95,13 @@ class Joints(Port):
         ``duration`` seconds; returns without waiting for them.
 
         Angles beyond a joint's limits are clamped. An unknown joint name raises
-        ``KeyError`` and moves nothing.
+        ``KeyError``, and a value that is not a finite number (or a negative duration)
+        raises ``ValueError``; either way nothing moves.
         """
+
+    @abstractmethod
+    async def hold(self) -> None:
+        """Stop every joint where it is."""
 
     @abstractmethod
     async def positions(self) -> dict[str, float]:

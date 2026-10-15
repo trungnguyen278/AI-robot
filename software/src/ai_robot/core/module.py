@@ -43,7 +43,9 @@ class Module:
 
     Once every adapter is open, the application calls ``start`` on each module in
     configuration order, then runs every module's ``run`` concurrently. When the robot
-    stops, it cancels ``run`` and calls ``stop`` in reverse order.
+    stops, it cancels ``run`` and calls ``stop`` in reverse order, only for modules whose
+    ``start`` succeeded. Subscribe to messages in ``__init__``, so that none published
+    while the other modules start is missed.
     """
 
     owns: ClassVar[tuple[str, ...]] = ()
@@ -67,7 +69,9 @@ class Module:
     async def start(self) -> None:
         """Get ready: put the hardware in a known state, announce the initial state.
 
-        Keep it short; long-running work belongs in ``run``.
+        Keep it short; long-running work belongs in ``run``. If the robot is stopped
+        during startup, ``start`` is cancelled and ``stop`` is not called, so undo here
+        what was already done.
         """
 
     async def run(self) -> None:

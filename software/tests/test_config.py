@@ -11,6 +11,7 @@ from ai_robot.core.config import (
     available_profiles,
     deep_merge,
     default_config_dir,
+    get_table,
     load_config,
 )
 
@@ -52,6 +53,20 @@ def test_syntax_errors_name_the_file(tmp_path: Path) -> None:
     write(tmp_path / "profiles" / "test.toml", "[broken\n")
     with pytest.raises(ConfigError, match=r"test\.toml"):
         load_config("test", tmp_path)
+
+
+def test_files_must_be_utf8(tmp_path: Path) -> None:
+    (tmp_path / "base.toml").write_bytes("x = 1\n".encode("utf-16"))
+    write(tmp_path / "profiles" / "test.toml", "")
+    with pytest.raises(ConfigError, match=r"base\.toml"):
+        load_config("test", tmp_path)
+
+
+def test_get_table() -> None:
+    assert get_table({"a": {"b": 1}}, "a") == {"b": 1}
+    assert get_table({}, "a") == {}
+    with pytest.raises(ConfigError, match=r"\[log\] must be a table"):
+        get_table({"log": "DEBUG"}, "log")
 
 
 def test_deep_merge_leaves_its_arguments_unchanged() -> None:

@@ -35,7 +35,8 @@ class FaceModule(Module):
     async def run(self) -> None:
         async for message in self.states:
             width, height = self.display.size
-            await self.display.show(Image.filled(width, height, STATE_COLORS[message.state]))
+            color = STATE_COLORS.get(message.state, (0, 0, 0))
+            await self.display.show(Image.filled(width, height, color))
 
     async def stop(self) -> None:
         self.states.close()

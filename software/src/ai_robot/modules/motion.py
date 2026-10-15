@@ -29,4 +29,7 @@ class MotionModule(Module):
         await self.drive.stop()
 
     async def stop(self) -> None:
-        await self.drive.stop()
+        try:
+            await self.drive.stop()
+        finally:
+            await self.joints.hold()
