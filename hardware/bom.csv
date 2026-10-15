@@ -1,0 +1,20 @@
+id,item,qty,block,interface,supply,status,notes
+1,"TZTMOTOR R3 High-End chassis (2x MG540 motors with encoders, tracks, suspension)",1,chassis,motor driver + encoders,3S battery (via driver),planned,Motor and encoder specs unverified
+2,Dual-channel motor driver (R3 kit),1,chassis,PWM/DIR from ESP32-S3 (TBD),3S battery,planned,Driver model unverified
+3,Li-ion battery 3S 11.1V 6-10Ah (R3 kit),1,power,-,-,planned,
+4,3S charger (R3 kit),1,power,-,mains,planned,
+5,Main fuse 25-30A + holder,1,power,-,-,planned,
+6,Emergency stop switch HY57B,1,power,-,-,planned,Scope: hardware/README.md open issue 5
+7,Pololu D24V90F5 5V step-down regulator,1,power,-,3S battery,planned,5V rail for the Pi 5 and peripherals
+8,Raspberry Pi 5 8GB,1,compute,-,5V rail (GPIO header),planned,
+9,Raspberry Pi Active Cooler,1,compute,Pi 5 fan connector,Pi 5,planned,
+10,Waveshare 7inch DSI LCD (C),1,face,DSI + I2C (touch),5V rail,planned,"1024x600, capacitive touch"
+11,Raspberry Pi AI Camera (IMX500),1,vision,CSI,Pi 5,planned,
+12,ReSpeaker 2-Mics Pi HAT V2.0,1,audio,I2S + I2C (GPIO header),Pi 5,planned,I2S conflict with MAX98357A: open issue 1
+13,MAX98357A I2S amplifier + 4 Ohm 3W speaker,1,audio,I2S,5V rail,planned,May be dropped if the ReSpeaker speaker output is used
+14,ESP32-S3-DevKitC-1,1,body,UART to Pi 5,5V rail,planned,body-controller
+15,FEETECH STS3215 servo (12V version),8,neck + arms,TTL half-duplex servo bus,12V branch,planned,"2-DOF neck + 3-DOF per arm; 2.7A stall each at 12V"
+16,Half-duplex bus servo adapter for STS3215,1,neck + arms,ESP32-S3 UART <-> servo bus,-,proposed,Required: open issue 2
+17,VL53L1X ToF distance sensor (breakout),1,sensors,I2C (0x29),breakout-dependent,planned,
+18,NeoPixel LED strip,1,sensors,1-wire data from ESP32-S3,5V rail,planned,
+19,"Accessories (standoffs, screws, cables)",1,misc,-,-,planned,
