@@ -1,0 +1,51 @@
+name: software
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "software/**"
+      - ".github/workflows/software.yml"
+  pull_request:
+    paths:
+      - "software/**"
+      - ".github/workflows/software.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11: the oldest supported version; 3.13: Raspberry Pi OS (Debian 13 "Trixie")
+        python-version: ["3.11", "3.13"]
+    defaults:
+      run:
+        working-directory: software
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Test (pure Python)
+        run: pytest
+      - name: Build the C++ extension
+        run: python -m pip install ./native
+      - name: Test (with the C++ extension)
+        run: pytest
+      - name: Smoke run
+        run: python -m ai_robot --profile desktop --duration 1
