@@ -1,17 +1,10 @@
-# protocol/ — Pi 5 ⇄ module protocol
+# protocol/ — what crosses a component boundary
 
-> Empty — the format is not decided yet (to be recorded in an ADR).
+The **single source of truth** for each protocol between the robot's components. Both sides generate their code from these definitions, or test against them; never hand-copy them (the previous generation had to keep two copies of `StateTypes` in sync by hand).
 
-The **single source of truth** for everything exchanged between the Pi 5 and the microcontroller modules: message types, fields, error codes and states. Both sides generate their code from, or share, the definitions here — never hand-copy them (the previous generation had to keep two copies of `StateTypes` in sync by hand).
+| Protocol | Between | Status |
+|---|---|---|
+| [Body link](body/README.md) | The Pi 5 and the body controller | Not decided yet |
+| [Screen](screen/README.md) | The Pi software (`software/`) and the screen renderer (`ui/`) | Version 1, proposed in [ADR-0006](../docs/decisions/0006-screen-renderer.md) |
 
-## Requirements
-
-- A protocol version, checked by both sides on connect.
-- Framed packets with a CRC, robust to lost or corrupted bytes.
-- Heartbeats in both directions; the ESP32-S3 goes to a safe state when the heartbeat is lost.
-- Acknowledgements for critical commands.
-
-## Candidate formats
-
-- A schema with code generation, e.g. Protocol Buffers (nanopb on the ESP32).
-- A custom binary format with framing (e.g. COBS) and a CRC, described in one spec file that generates the C++ and Python definitions.
+A protocol change goes here first, then to both sides, in the same pull request ([CONTRIBUTING.md](../CONTRIBUTING.md#documentation-travels-with-the-change)).

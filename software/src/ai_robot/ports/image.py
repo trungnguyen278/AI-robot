@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Images and colours, shared by the camera, display and lights ports."""
+"""Images and colours, shared by the camera and lights ports."""
 
 from __future__ import annotations
 

@@ -28,7 +28,7 @@ it. Supporting another display means adding a profile; no variant changes.
 | `round-466`    | Round display                                                        | round | 466 × 466  |
 
 The 7" panel's specifications and sources:
-[hardware/components/waveshare-7inch-dsi-lcd-c.md](../../hardware/components/waveshare-7inch-dsi-lcd-c.md).
+[hardware/components/waveshare-7inch-dsi-lcd-c.md](../../../hardware/components/waveshare-7inch-dsi-lcd-c.md).
 The sheet's **Screen** menu lists them, plus a custom size; `#<id>` in the
 sheet's address opens it on a given profile (e.g. `index.html#round-360`).
 

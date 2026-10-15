@@ -1,12 +1,12 @@
 # Emotion library — requirements
 
 Canonical spec for the robot's screen library: its emotions, scenes and
-status screens. Keep this in sync with the code in `ui/src/`. When porting
+status screens. Keep this in sync with the code in `ui/legacy/src/`. When porting
 it to another renderer, **read this file first**, then
 [screens.md](screens.md) for how the stage maps onto real displays.
 
 > Lineage: the library was designed for the previous generation's 2-inch
-> 320 × 240 screen ([docs/legacy.md](../../docs/legacy.md)) and grew from
+> 320 × 240 screen ([docs/legacy.md](../../../docs/legacy.md)) and grew from
 > a mono set of emotions into 9 tones, cinematic scenes and status flows.
 > Its geometry is still authored on that 320 × 240 stage; screen profiles
 > place the stage on any display.
@@ -23,7 +23,7 @@ distinctive marks from other products.
 
 **No brand text appears inside the eye/scene SVG.** The robot's display
 name never appears in the library's code or identifiers
-([ADR-0003](../../docs/decisions/0003-neutral-repo-naming.md)). Text that
+([ADR-0003](../../../docs/decisions/0003-neutral-repo-naming.md)). Text that
 differs from one robot to the next (the boot credits, the Wi-Fi network,
 the paired phone) comes from `window.ScreenData`, which the host fills in
 (see §6.8).
@@ -500,7 +500,7 @@ Variants in the same category must be **visually distinct**.
 
 ## 8. File layout
 
-All paths are relative to `ui/`.
+All paths are relative to `ui/legacy/`.
 
 ```text
 index.html                   ← the sheet: entry point (CSS, React + Babel loader)

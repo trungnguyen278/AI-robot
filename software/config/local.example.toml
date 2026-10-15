@@ -6,3 +6,7 @@
 
 # [ports.camera]
 # fps = 5.0
+
+# Watch the screen from another device on the network (anyone on it can then see it):
+# [ports.screen.web]
+# host = "0.0.0.0"

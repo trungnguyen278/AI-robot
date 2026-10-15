@@ -1,56 +1,68 @@
-# ui/ — what the robot shows on its screen
+# ui/ — the robot's screen
 
-> **Status:** design library. Every emotion, scene and status screen can be browsed in the sheet; nothing on the robot uses it yet.
+> **Status:** the face works on any screen and the robot software drives it (14 expressions); scenes and status screens are still to be ported from the previous library. Architecture: [ADR-0006](../docs/decisions/0006-screen-renderer.md) (proposed).
 
-The robot's face and everything else on its display: emotions (the eyes), scenes that take over the screen for everyday information (weather, clock, music, timers…) and status screens (start-up, network). Each variant is a React component that draws SVG as a pure function of the time in its loop, so it stays sharp at any resolution.
+The renderer that draws the robot's face. On the robot, a full-screen browser shows `screen.html`, served and driven by the robot software over the [screen protocol](../protocol/screen/README.md). The software says **what** to show: an expression, the gaze, the voice level, the battery. The renderer decides **how**: it blends from one expression to the next and keeps the face alive on its own, with blinking, glances and breathing.
 
-The library continues the previous generation's design ([docs/legacy.md](../docs/legacy.md)). Its specification is [docs/requirements.md](docs/requirements.md).
+Plain JavaScript modules drawing on a 2D canvas: no build step, no framework, nothing to install. The same files run on the robot, in any browser, in the tests and in a claude.ai Artifact.
 
-## View it
+## See it
 
-The sheet loads its `.jsx` files with Babel in the browser, which needs a local web server: pages opened as `file://` cannot load them.
+The pages load JavaScript modules, which browsers refuse from `file://`, so serve the repository over HTTP:
 
 ```sh
-python3 -m http.server 8000 --directory ui
+python3 -m http.server 8000
 ```
 
-Then open <http://localhost:8000> and pick a display in **Screen**. Adding `#round-360` (or another profile id) to the address opens the sheet on that display. React and Babel load from unpkg.com, so the page needs internet access.
+- <http://localhost:8000/ui/> — the **studio**: every expression on any screen, driven by hand (expression, colour, gaze, voice, life layers, slow motion). `#happy` or `#round-360` at the end of the address opens it on that expression or screen.
+- <http://localhost:8000/ui/tests/runtime.html> — the tests, and every expression side by side.
 
-## Layout
+With the robot software running (`ai-robot --profile desktop`, see [software/](../software/README.md)), its screen is at <http://127.0.0.1:8770/>. On the robot, Chromium shows that address in kiosk mode, started from labwc's autostart ([Raspberry Pi's kiosk tutorial](https://www.raspberrypi.com/tutorials/how-to-use-a-raspberry-pi-in-kiosk-mode/)). Add `#round` to the address on a round display.
+
+## How it fits together
 
 ```text
-ui/
-├── index.html    The sheet: every variant, on any screen
-├── src/          The library (loaded in the order index.html gives), screen.jsx, and the sheet's UI (sheet.jsx)
-├── tests/        Smoke test
-└── docs/         requirements.md (the specification), screens.md (displays)
+software ──state, look, voice──▶ link.js ──▶ animator.js ──▶ draw.js ──▶ canvas
+         ◀──ready, touch────────                 │
+                                  expressions.js · motions.js · effects.js · pose.js
 ```
+
+| File | Role |
+|---|---|
+| `src/pose.js` | The face model: two eyes (size, corners, lids, pupils, brows) and a mouth, all numbers |
+| `src/expressions.js` | Expressions as data: the numbers that differ from rest, a colour, a motion, an effect, how much life |
+| `src/motions.js` | What gives an expression its movement: bounce, sway, shake, droop… |
+| `src/effects.js` | What an expression draws around the eyes: hearts, a tear, Zzz… |
+| `src/animator.js` | Blends expressions over time and adds the life layers: breathing, glances, gaze, voice, blinking |
+| `src/draw.js` | Draws a frame: face, glow, effects, status row |
+| `src/layout.js` | Fits the face to any screen size and shape; the studio's screen profiles |
+| `src/player.js` | Runs an animator on a canvas, at the display's refresh rate |
+| `src/link.js` | The screen protocol: applies the software's messages, reports the page and its taps |
+| `src/tones.js` | The colour palette |
+| `screen.html` | The robot's screen |
+| `index.html`, `src/studio.js` | The studio |
+| `tests/` | The tests |
+| `legacy/` | The previous library: 256 designs to port from, then delete ([legacy/README.md](legacy/README.md)) |
 
 ## Screens
 
-Variants draw on a 320 × 240 stage. A screen profile places that stage on a display of any size and shape: this robot's 7" 1024 × 600 LCD, the previous generation's 2" TFT, round panels. Supporting another display means adding a profile to `src/screen.jsx`, without touching a variant: see [docs/screens.md](docs/screens.md).
-
-## Host data
-
-Text that differs from one robot to the next (the boot credits, the Wi-Fi network, the paired phone) comes from `window.ScreenData`, never from the library's code ([requirements §6.8](docs/requirements.md#68-host-data-windowscreendata)). The robot's display name lives only in `software/config/base.toml` ([ADR-0003](../docs/decisions/0003-neutral-repo-naming.md)).
-
-## Test
-
-The smoke test checks the library's structure, renders every variant at nine moments of its loop and on every screen profile, and checks that it loads the same files as the sheet. With the server above running, open <http://localhost:8000/tests/smoke.html>, or run it headless:
-
-```sh
-google-chrome --headless=new --virtual-time-budget=60000 \
-  --dump-dom http://localhost:8000/tests/smoke.html | grep -o 'data-status="[a-z]*"'
-```
-
-`data-status="pass"` means every check passed; otherwise the page lists each failure. CI runs it on every change under `ui/` ([workflow](../.github/workflows/ui.yml)).
+A rectangular screen keeps a status row along its top, a twelfth of its height (time and battery). The face fills the rest at the largest scale that keeps its proportions: on the previous generation's 320 × 240 screen it is exactly its design size, and on the 7" 1024 × 600 LCD it is 2.5 times larger. A round screen centres the face on the disc, at design size on a 360 px disc, and draws inside the disc only. The face is designed in face units on a 320 × 220 area (`src/pose.js`).
 
 ## Editing
 
-- Change a variant in the file that owns its category ([requirements §8](docs/requirements.md#8-file-layout)); keep every variant a pure function of `t`.
-- A new file goes into both `index.html` and `tests/smoke.html`, in the same place in the load order; the smoke test fails otherwise.
-- The design was first made in Claude Design and is also published as a claude.ai Artifact, to edit it in the browser. This folder is the source of truth: copy changes made there back here.
+- **An expression:** add or change an entry in `src/expressions.js`; the studio shows it at once. Use the numbers of `src/pose.js`, a tone of `src/tones.js`, a motion of `src/motions.js`, an effect of `src/effects.js`. An expression the software relies on must also be listed in [`protocol/screen/vocabulary.json`](../protocol/screen/vocabulary.json).
+- **A motion or an effect:** a function in `src/motions.js` or `src/effects.js`; both take the seconds since the expression started.
+- **The protocol:** change [`protocol/screen/`](../protocol/screen/README.md) first, then `src/link.js` and the software, in the same pull request.
+- Keep the animator deterministic: time is passed in, and randomness comes from its seeded generator, never from `Math.random`.
 
-## Not decided yet
+## Test
 
-How the robot will show this library (the JSX in a full-screen browser, or a port to Python) is still open. The choice will be recorded as an ADR.
+Open <http://localhost:8000/ui/tests/runtime.html> with the server above running, or run it headless:
+
+```sh
+google-chrome --headless=new --virtual-time-budget=20000 \
+  --dump-dom http://localhost:8000/ui/tests/runtime.html > result.html
+python3 ui/tests/result.py result.html
+```
+
+The tests check the expressions against the protocol's vocabulary, draw every expression on every screen profile, and check the animator: the same calls give the same frames, transitions never jump, protocol messages land where they should. `data-status="pass"` means every check passed; otherwise the page lists each failure. CI runs them, with the previous library's smoke test, on every change under `ui/` or `protocol/screen/` ([workflow](../.github/workflows/ui.yml)).

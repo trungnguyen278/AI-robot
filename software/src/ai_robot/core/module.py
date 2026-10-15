@@ -34,7 +34,7 @@ class ModuleContext:
 
 
 class Module:
-    """One function of the robot: voice, vision, face, motion, ...
+    """One function of the robot: voice, vision, screen, motion, ...
 
     - A module owns the ports named in ``owns``; no other module uses them.
     - It talks to the other modules only through messages on the bus.

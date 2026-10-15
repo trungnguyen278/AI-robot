@@ -1,0 +1,20 @@
+{
+  "protocol": 1,
+  "expressions": {
+    "neutral": "At rest; shown when nothing else is asked for",
+    "listening": "Hearing someone; swells with their voice",
+    "thinking": "Working out an answer",
+    "speaking": "Talking; the mouth follows the voice",
+    "happy": "Pleased, smiling eyes",
+    "sad": "Down, with a tear",
+    "angry": "Cross, with brows",
+    "surprised": "Wide open eyes and an \"O\"",
+    "sleepy": "Heavy lids, Zzz",
+    "confused": "Uneven eyes and a question mark",
+    "curious": "Tilted, looking around",
+    "love": "Smiling eyes and hearts",
+    "excited": "Bouncing, with sparkles",
+    "scared": "Small trembling eyes, a drop of sweat"
+  },
+  "tones": ["cyan", "warm", "rose", "red", "blue", "green", "purple", "orange", "white"]
+}

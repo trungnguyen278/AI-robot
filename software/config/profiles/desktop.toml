@@ -1,2 +1,3 @@
 # Desktop: every port simulated. Runs on any computer with Python, and in CI.
 # base.toml already selects the simulated adapters, so there is nothing to override.
+# The screen is the real renderer: open http://127.0.0.1:8770/ in a browser to see it.

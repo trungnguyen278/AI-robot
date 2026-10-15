@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Tests of the renderer; serve the repository's root over HTTP (ui/README.md). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renderer tests</title>
+<style>
+  body { margin: 0; padding: 24px 16px; background: #0d1013; color: #e6e9ec; font: 14px/1.5 system-ui, sans-serif; }
+  pre { white-space: pre-wrap; font-size: 13px; }
+  pre[data-status="pass"] { color: #7be88e; }
+  pre[data-status="fail"] { color: #ff5b6e; }
+  #sheet { display: flex; flex-wrap: wrap; gap: 12px; }
+  figure { margin: 0; }
+  figcaption { text-align: center; color: #98a0a8; }
+  canvas { display: block; border-radius: 6px; }
+</style>
+</head>
+<body>
+<pre id="result">running…</pre>
+<div id="sheet"></div>
+<script type="module" src="runtime.js"></script>
+</body>
+</html>

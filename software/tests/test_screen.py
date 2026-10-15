@@ -1,0 +1,219 @@
+# SPDX-License-Identifier: MIT
+"""The screen module: requests, the conversation, the status row, voice, gaze and taps."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import logging
+from collections.abc import AsyncIterator
+from pathlib import Path
+
+import pytest
+
+from ai_robot.adapters.sim.screen import SimScreen
+from ai_robot.core.bus import Bus
+from ai_robot.core.config import ConfigError
+from ai_robot.core.factory import create
+from ai_robot.core.module import ModuleContext, RobotInfo
+from ai_robot.messages import (
+    BatteryReport,
+    ExpressionRequest,
+    InteractionChanged,
+    InteractionState,
+    LookAt,
+    ScreenPriority,
+    ScreenTouched,
+    SoundLevel,
+)
+from ai_robot.modules.screen import (
+    DEFAULT_EXPRESSION,
+    INTERACTION_EXPRESSIONS,
+    Arbiter,
+    ScreenModule,
+)
+from ai_robot.ports import BatteryStatus
+
+VOCABULARY = Path(__file__).resolve().parents[2] / "protocol" / "screen" / "vocabulary.json"
+
+
+def make() -> tuple[Bus, SimScreen, ScreenModule]:
+    bus = Bus()
+    screen = SimScreen()
+    ctx = ModuleContext(
+        name="screen",
+        bus=bus,
+        ports={"screen": screen},
+        robot=RobotInfo(display_name="Robot"),
+        log=logging.getLogger("test"),
+    )
+    return bus, screen, ScreenModule(ctx, quiet_db=-50.0, loud_db=-10.0)
+
+
+@contextlib.asynccontextmanager
+async def running(module: ScreenModule) -> AsyncIterator[None]:
+    await module.start()
+    task = asyncio.create_task(module.run())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        await module.stop()
+
+
+async def settle() -> None:
+    """Let the module handle what was published."""
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+
+def test_arbiter_picks_the_highest_priority_then_the_newest() -> None:
+    arbiter = Arbiter()
+    assert arbiter.winner(0) is None
+    arbiter.put("a", "happy", priority=10)
+    arbiter.put("b", "sad", priority=50)
+    arbiter.put("c", "angry", priority=10)
+    assert arbiter.winner(0).expression == "sad"  # type: ignore[union-attr]
+    arbiter.withdraw("b")
+    assert arbiter.winner(0).expression == "angry"  # type: ignore[union-attr]
+    arbiter.put("a", "love", priority=10)  # a source replaces its own request
+    assert arbiter.winner(0).expression == "love"  # type: ignore[union-attr]
+
+
+def test_arbiter_drops_expired_requests() -> None:
+    arbiter = Arbiter()
+    arbiter.put("a", "happy", priority=50, expires=1.0)
+    arbiter.put("b", "sad", priority=10, expires=3.0)
+    assert arbiter.next_expiry() == 1.0
+    assert arbiter.winner(0.5).expression == "happy"  # type: ignore[union-attr]
+    assert arbiter.winner(1.0).expression == "sad"  # type: ignore[union-attr]
+    assert arbiter.next_expiry() == 3.0
+    assert arbiter.winner(3.0) is None
+    assert arbiter.next_expiry() is None
+
+
+def test_the_conversation_drives_the_face() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            assert screen.state.expression == DEFAULT_EXPRESSION
+            for state, expression in [
+                (InteractionState.TRIGGERED, "listening"),
+                (InteractionState.LISTENING, "listening"),
+                (InteractionState.PROCESSING, "thinking"),
+                (InteractionState.SPEAKING, "speaking"),
+                (InteractionState.CANCELLING, DEFAULT_EXPRESSION),
+                (InteractionState.IDLE, DEFAULT_EXPRESSION),
+            ]:
+                bus.publish(InteractionChanged(state))
+                await settle()
+                assert screen.state.expression == expression, state
+
+    asyncio.run(main())
+
+
+def test_requests_outrank_the_conversation_and_expire() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            bus.publish(InteractionChanged(InteractionState.LISTENING))
+            bus.publish(ExpressionRequest("behavior", "sad", priority=ScreenPriority.AMBIENT))
+            await settle()
+            assert screen.state.expression == "listening"  # the ambient mood waits
+
+            bus.publish(ExpressionRequest("vision", "surprised", duration=0.05, tone="white"))
+            await settle()
+            assert (screen.state.expression, screen.state.tone) == ("surprised", "white")
+            await asyncio.sleep(0.1)
+            await settle()
+            assert (screen.state.expression, screen.state.tone) == ("listening", None)
+
+            bus.publish(InteractionChanged(InteractionState.IDLE))
+            await settle()
+            assert screen.state.expression == "sad"
+            bus.publish(ExpressionRequest("behavior", None))
+            await settle()
+            assert screen.state.expression == DEFAULT_EXPRESSION
+
+    asyncio.run(main())
+
+
+def test_only_changes_reach_the_screen() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            shown = screen.updates
+            for _ in range(3):
+                bus.publish(BatteryReport(BatteryStatus(voltage=7.4, percent=63.0, charging=True)))
+            await settle()
+            assert (screen.state.battery, screen.state.charging) == (63.0, True)
+            assert screen.updates == shown + 1
+
+    asyncio.run(main())
+
+
+def test_the_voice_follows_the_microphone_only_while_listening() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            bus.publish(SoundLevel(rms=3277.0))  # -20 dBFS
+            await settle()
+            assert screen.level == 0.0  # not listening
+            bus.publish(InteractionChanged(InteractionState.LISTENING))
+            await settle()
+            bus.publish(SoundLevel(rms=3277.0))
+            await settle()
+            assert screen.level == pytest.approx(0.75, abs=0.01)
+            bus.publish(InteractionChanged(InteractionState.PROCESSING))
+            await settle()
+            assert screen.level == 0.0
+
+    asyncio.run(main())
+
+
+def test_loudness_scale() -> None:
+    _, _, module = make()
+    assert module.loudness(0) == 0.0
+    assert module.loudness(32768 * 10 ** (-50 / 20)) == pytest.approx(0.0)
+    assert module.loudness(32768 * 10 ** (-30 / 20)) == pytest.approx(0.5)
+    assert module.loudness(32768.0) == 1.0
+
+
+def test_gaze_and_taps() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        taps = bus.subscribe(ScreenTouched)
+        async with running(module):
+            bus.publish(LookAt((0.5, -0.2)))
+            await settle()
+            assert screen.gaze == (0.5, -0.2)
+            bus.publish(LookAt(None))
+            await settle()
+            assert screen.gaze is None
+            screen.tap(0.25, 0.75)
+            await settle()
+            assert taps.pending == 1
+            assert await taps.get() == ScreenTouched(0.25, 0.75)
+
+    asyncio.run(main())
+
+
+def test_settings_are_checked() -> None:
+    bus = Bus()
+    ctx = ModuleContext(
+        "screen", bus, {"screen": SimScreen()}, RobotInfo("Robot"), logging.getLogger()
+    )
+    with pytest.raises(ConfigError, match="loud_db must be above quiet_db"):
+        create(ScreenModule, "modules.screen", ctx, quiet_db=-10.0, loud_db=-50.0)
+    with pytest.raises(ValueError, match="duration must be positive"):
+        ExpressionRequest("behavior", "happy", duration=0)
+
+
+def test_the_expressions_used_are_in_the_protocol() -> None:
+    vocabulary = json.loads(VOCABULARY.read_text(encoding="utf-8"))
+    names = set(vocabulary["expressions"])
+    used = {DEFAULT_EXPRESSION} | {e for e in INTERACTION_EXPRESSIONS.values() if e}
+    assert used <= names

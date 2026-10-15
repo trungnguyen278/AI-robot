@@ -6,7 +6,7 @@
               ┌──────────────── Raspberry Pi 5 — brain ────────────────┐
  Mic ──I2S──▶ │ voice: wake word, VAD, AEC, conversation               │
  Speaker ◀─── │ vision: AI camera (IMX500)                             │ ◀─ Wi-Fi ─▶ ai-robot-server
- Camera ─CSI▶ │ face: expressive eyes on the 7" display                │ ◀─ BLE ───▶ ai-robot-app
+ Camera ─CSI▶ │ screen: the face on the 7" display (ui/)               │ ◀─ BLE ───▶ ai-robot-app
  Display ◀DSI │ motion · system · behavior                             │
               └───────────────────────────┬────────────────────────────┘
                                           │ link and protocol: not decided yet (protocol/)
@@ -30,7 +30,7 @@
 
 - Pi first ([ADR-0004](decisions/0004-pi-software-first.md)): the Pi software is built before the rest, against simulated hardware.
 - The Pi may hang or reboot at any time, so the body controller brings the robot to a safe state when the Pi's heartbeat is lost.
-- The Pi ⇄ body protocol is defined once, in [`protocol/`](../protocol/README.md).
+- The Pi ⇄ body protocol is defined once, in [`protocol/`](../protocol/body/README.md); so is the protocol between the Pi software and the screen ([`protocol/screen/`](../protocol/screen/README.md)).
 - Software on the Pi is split into modules that talk only through messages, so each one can be added, replaced or removed without touching the others.
 - Where heavy AI runs (camera, Pi or server) is decided in an ADR, not implicitly in code.
 
@@ -39,16 +39,18 @@
 Proposed in [ADR-0005](decisions/0005-pi-software-platform.md): one Python process (asyncio) with an optional C++ extension. Modules own the ports of the hardware they use; adapters implement the ports, simulated until the real parts exist. Details, and how to run and extend it: [`software/README.md`](../software/README.md).
 
 ```
-modules    system · motion · voice · vision · face · behavior
+modules    system · motion · voice · vision · screen · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · display · ai_backend
+ports      audio_in · audio_out · camera · screen · ai_backend
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 ```
 
 Until the body controller exists, the body ports (`drive`, `joints`, `range`, `power`, `lights`, `safety`) stay simulated; then one adapter implements them over the link to the body controller.
+
+The screen is the exception that is real already: the `screen` module decides what it shows (expression, gaze, battery), and a renderer page in [`ui/`](../ui/README.md), shown full screen by a browser, draws it and keeps the face alive on its own. They talk over the [screen protocol](../protocol/screen/README.md) (proposed in [ADR-0006](decisions/0006-screen-renderer.md)).
 
 ## Open questions (each should become an ADR)
 
@@ -58,4 +60,4 @@ Until the body controller exists, the body ports (`drive`, `joints`, `range`, `p
 - [ ] Does the body controller or the Pi drive the motor driver?
 - [ ] How AI work is split between the camera, the Pi and the server.
 - [ ] Audio: ReSpeaker HAT or MAX98357A — they cannot share the I2S pins; see [hardware/README.md](../hardware/README.md).
-- [ ] How the robot shows the screen library in [ui/](../ui/README.md): its JSX in a full-screen browser, or a port to Python.
+- [ ] How the robot draws its screen — proposed in [ADR-0006](decisions/0006-screen-renderer.md): a renderer in a full-screen browser ([ui/](../ui/README.md)), driven by the Pi software over the [screen protocol](../protocol/screen/README.md).

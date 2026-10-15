@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "ui/**"
+      - "protocol/screen/**"
       - ".github/workflows/ui.yml"
   pull_request:
     paths:
       - "ui/**"
+      - "protocol/screen/**"
       - ".github/workflows/ui.yml"
 
 permissions:
@@ -19,23 +21,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  smoke:
-    name: Smoke test
+  test:
+    name: Tests in headless Chrome
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Render every variant in headless Chrome
+      - name: Serve the repository
         run: |
-          python3 -m http.server 8000 --bind 127.0.0.1 --directory ui &
+          python3 -m http.server 8000 --bind 127.0.0.1 &
           for _ in $(seq 30); do curl -fs http://127.0.0.1:8000/ > /dev/null && break; sleep 0.5; done
+      - name: Renderer
+        run: |
+          google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=20000 \
+            --dump-dom http://127.0.0.1:8000/ui/tests/runtime.html > result.html
+          python3 ui/tests/result.py result.html
+      - name: Previous library (smoke test)
+        run: |
           google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=60000 \
-            --dump-dom http://127.0.0.1:8000/tests/smoke.html > smoke-result.html
-          python3 - <<'EOF'
-          import html, re, sys
-          page = open("smoke-result.html", encoding="utf-8").read()
-          match = re.search(r'<pre id="result" data-status="(\w+)"[^>]*>(.*?)</pre>', page, re.S)
-          if not match:
-              sys.exit("The smoke test did not report a result.")
-          print(html.unescape(match.group(2)))
-          sys.exit(0 if match.group(1) == "pass" else 1)
-          EOF
+            --dump-dom http://127.0.0.1:8000/ui/legacy/tests/smoke.html > result.html
+          python3 ui/tests/result.py result.html
