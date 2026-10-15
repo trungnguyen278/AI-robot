@@ -1,0 +1,8 @@
+# Settings for one machine only. Copy this file to local.toml (git-ignored); it is
+# merged on top of the selected profile.
+
+# [log]
+# level = "DEBUG"
+
+# [ports.camera]
+# fps = 5.0

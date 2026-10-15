@@ -1,0 +1,7 @@
+# Raspberry Pi 5. Select the real adapters here as they are written, for example:
+#
+#   [ports.camera]
+#   adapter = "picamera2"
+#
+# Until then this profile runs the same simulated adapters as desktop. The body stays
+# simulated until the body controller is chosen (docs/decisions/0004).

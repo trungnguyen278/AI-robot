@@ -1,0 +1,100 @@
+# Settings shared by every profile.
+#
+# Loading order: this file, then profiles/<profile>.toml, then local.toml (optional,
+# git-ignored, for one machine). Tables are merged key by key; any other value, lists
+# included, is replaced.
+#
+# [ports.<port>] selects the adapter that implements a port with `adapter`. The other
+# keys of the table go to every adapter of that port; a sub-table named after an
+# adapter, such as [ports.display.sim], goes only to that adapter.
+# [modules.<name>] holds the settings of a module.
+
+[robot]
+# The product name shown to people (display, Bluetooth, app). It appears nowhere else:
+# code and identifiers never contain it (docs/decisions/0003-neutral-repo-naming.md).
+display_name = "Robot"
+
+[log]
+level = "INFO"
+
+[modules]
+# Started in this order and stopped in reverse: the body is made safe first and
+# released last.
+enabled = ["system", "motion", "voice", "vision", "face", "behavior"]
+
+[modules.system]
+battery_interval = 5.0  # seconds between battery reports
+
+# ---- Raspberry Pi peripherals ----
+
+# Microphones (ReSpeaker 2-Mics Pi HAT). Signed 16-bit PCM.
+[ports.audio_in]
+adapter = "sim"
+sample_rate = 16000
+channels = 1
+chunk_ms = 20
+
+# Speaker.
+[ports.audio_out]
+adapter = "sim"
+sample_rate = 16000
+channels = 1
+
+# Raspberry Pi AI Camera (IMX500).
+[ports.camera]
+adapter = "sim"
+width = 640
+height = 480
+fps = 15.0
+
+# Face: Waveshare 7inch DSI LCD (C).
+[ports.display]
+adapter = "sim"
+
+[ports.display.sim]
+width = 1024  # panel resolution, see hardware/components/waveshare-7inch-dsi-lcd-c.md
+height = 600
+
+# Speech recognition, conversation and speech synthesis.
+[ports.ai_backend]
+adapter = "stub"
+
+# ---- Body: simulated until the body controller is chosen (docs/decisions/0004) ----
+
+# Tracked chassis, driven like a differential-drive robot.
+[ports.drive]
+adapter = "sim"
+max_linear = 0.5  # m/s, placeholder: the motor specifications are unverified
+max_angular = 2.0  # rad/s, placeholder
+
+# Neck (2 DOF) and arms (3 DOF each). Angles in radians; `home` defaults to 0.
+# Placeholder names and limits until the arm design is fixed
+# (hardware/README.md, open issue 9).
+[ports.joints]
+adapter = "sim"
+joints = [
+  { name = "neck_pan", lower = -1.57, upper = 1.57 },
+  { name = "neck_tilt", lower = -0.5, upper = 0.5 },
+  { name = "left_arm_1", lower = -1.57, upper = 1.57 },
+  { name = "left_arm_2", lower = -1.57, upper = 1.57 },
+  { name = "left_arm_3", lower = -1.57, upper = 1.57 },
+  { name = "right_arm_1", lower = -1.57, upper = 1.57 },
+  { name = "right_arm_2", lower = -1.57, upper = 1.57 },
+  { name = "right_arm_3", lower = -1.57, upper = 1.57 },
+]
+
+# Distance ahead (VL53L1X time-of-flight sensor).
+[ports.range]
+adapter = "sim"
+
+# Battery monitoring.
+[ports.power]
+adapter = "sim"
+
+# Status LEDs (NeoPixel).
+[ports.lights]
+adapter = "sim"
+
+# Emergency stop.
+[ports.safety]
+adapter = "sim"

@@ -1,0 +1,2 @@
+# Desktop: every port simulated. Runs on any computer with Python, and in CI.
+# base.toml already selects the simulated adapters, so there is nothing to override.
