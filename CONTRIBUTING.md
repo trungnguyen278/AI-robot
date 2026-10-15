@@ -1,47 +1,62 @@
-# Quy ước phát triển
+# Contributing
 
-Áp dụng cho cả người và Claude. Dự án dài hơi → nhất quán quan trọng hơn nhanh.
+These conventions apply to everyone working in this repository, human or AI. This is a long-running project: consistency matters more than speed.
 
-## Ngôn ngữ
+## Language
 
-- Tài liệu: tiếng Việt, giữ thuật ngữ kỹ thuật tiếng Anh.
-- Code, comment, tên biến/file code, commit message: tiếng Anh.
+Everything in the repository — code, comments, documentation and commit messages — is written in English.
 
-## Nhánh
+## Branches
 
-- `main` luôn ở trạng thái dùng được và được bảo vệ: không commit thẳng — làm trên nhánh rồi merge qua Pull Request.
-- Tên nhánh `<loại>/<mô-tả-ngắn>`, vd. `feat/wake-word`, `fix/servo-timeout`, `hw/power-tree`, `docs/adr-ros2`, `chore/ci`.
+- `main` is protected and always usable. Never commit to it directly: work on a branch and merge through a pull request.
+- Branch names follow `<type>/<short-description>`, e.g. `feat/wake-word`, `fix/servo-timeout`, `hw/power-tree`, `docs/adr-ros2`, `chore/ci`.
 
-## Commit — Conventional Commits
+## Commits
 
-`<type>(<scope>): <mô tả ngắn bằng tiếng Anh, thì hiện tại>`
+Follow [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <short summary in the imperative mood>`.
 
-| type | Khi nào |
+| Type | Use for |
 |---|---|
-| `feat` | Tính năng mới |
-| `fix` | Sửa lỗi |
-| `docs` | Chỉ tài liệu |
-| `refactor` | Đổi cấu trúc, không đổi hành vi |
-| `test` | Thêm/sửa test |
-| `chore` | Việc lặt vặt: cấu hình, CI, dọn dẹp |
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `docs` | Documentation only |
+| `refactor` | Restructuring without behavior change |
+| `test` | Adding or changing tests |
+| `chore` | Tooling, configuration, CI, housekeeping |
 
-Scope = khối bị ảnh hưởng: `software`, `firmware`, `protocol`, `hardware`, `docs`, `tools`, `claude`, `ci`.
+The scope is the affected area: `software`, `firmware`, `protocol`, `hardware`, `docs`, `tools`, `claude`, `ci`.
 
-Ví dụ: `feat(firmware): read MG540 encoders with PCNT`
+Example: `feat(firmware): read MG540 encoders with PCNT`
 
-## Tài liệu đi cùng thay đổi
+## Adding or removing a component
 
-- Đổi phần cứng → cập nhật `hardware/` trong cùng commit (skill `hardware-change`).
-- Đổi giao thức → sửa `protocol/` trước, rồi cả hai phía, trong cùng một PR.
-- Quyết định kỹ thuật quan trọng → ADR trong `docs/decisions/` (skill `adr`).
-- Kết thúc một buổi làm → ghi `docs/devlog/` (skill `devlog`).
+The repository is a set of independent components: `software/`, each module under `firmware/`, `protocol/` and `tools/`.
 
-## Bí mật & file lớn
+- **Add:** create a folder containing a `README.md` (purpose, status, how to build, run and test), its own build configuration and its tests. List it in the parent README (the layout in `README.md`, or the module table in `firmware/README.md`).
+- **Remove:** delete the folder and its entry in the parent README. If the removal reflects a design decision, record it in an ADR.
+- Build configuration, dependencies and vendored third-party code (in a `third_party/` folder) stay inside the component; the repository root only holds repository-wide files.
+- Components never reach into each other's internals; they talk through `protocol/` or another documented interface.
 
-- Không commit mật khẩu Wi-Fi, API key, token thiết bị. Dùng `.env` (đã gitignore) và commit `.env.example` không chứa giá trị thật.
-- Không commit file lớn (model AI, video, CAD nặng, bản dump). Dùng Git LFS hoặc GitHub Releases, ghi link tải trong README của thư mục tương ứng.
+## Documentation travels with the change
 
-## Thông số & nguồn
+- Hardware changes → update `hardware/` in the same commit (skill `hardware-change`).
+- Protocol changes → update `protocol/` first, then both sides, in the same pull request.
+- Significant technical decisions → an ADR in `docs/decisions/` (skill `adr`).
+- End of a work session → an entry in `docs/devlog/` (skill `devlog`).
 
-- Thông số phần cứng phải có nguồn (datasheet/tài liệu hãng); chưa chắc → ghi "chưa xác minh".
-- Giá, phiên bản phần mềm/firmware: ghi kèm ngày.
+## Secrets and large files
+
+- Never commit Wi-Fi passwords, API keys or device tokens. Use `.env` (git-ignored) and commit a `.env.example` without real values.
+- Do not commit large binaries (AI models, videos, heavy CAD files, dumps). Use Git LFS or GitHub Releases and link them from the relevant README.
+
+## Facts and sources
+
+- Hardware specifications need a source (datasheet or vendor documentation); otherwise mark them **unverified**.
+- Prices and software or firmware versions are always dated.
+
+## License
+
+By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+
+- New source files start with an SPDX header: `// SPDX-License-Identifier: MIT` (C/C++) or `# SPDX-License-Identifier: MIT` (Python, shell).
+- Third-party code, models and assets keep their original licenses. List them in `THIRD_PARTY_NOTICES.md` when the first one is added.

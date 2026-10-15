@@ -1,24 +1,26 @@
-# VL53L1X — cảm biến khoảng cách ToF
+# VL53L1X — time-of-flight distance sensor
 
-> Cập nhật: 2026-10-15.
+> Last updated: 2026-10-15.
 
-- **Vai trò:** đo khoảng cách phía trước để tránh vật cản.
-- **Nối với:** ESP32-S3 qua I2C.
+- **Role in the robot:** measures the distance ahead for obstacle avoidance.
+- **Exact model / variant:** VL53L1X on a breakout board (board not chosen yet).
+- **Quantity:** 1
+- **Connected to:** the ESP32-S3 over I2C.
 
-## Thông số
+## Key specifications
 
-| Thông số | Giá trị | Nguồn |
+| Parameter | Value | Source |
 |---|---|---|
-| Tầm đo | Tới 400 cm, tần số đo tới 50 Hz | Datasheet ST |
-| Góc nhìn | 27° (thu hẹp được bằng ROI) | Datasheet ST |
-| Địa chỉ I2C | 0x29 mặc định, đổi được (dùng chân XSHUT khi gắn nhiều cảm biến) | Trang breakout |
-| Nguồn | Chip 2.8 V; bo breakout thường có ổn áp + chuyển mức (vd. bo Pololu nhận 2.6–5.5 V) — tùy bo cụ thể | Datasheet ST; Pololu |
+| Range | Up to 400 cm, up to 50 Hz ranging | ST datasheet |
+| Field of view | 27° (can be narrowed with a ROI) | ST datasheet |
+| I2C address | 0x29 by default, changeable (use XSHUT when several sensors share a bus) | Breakout listings |
+| Supply | 2.8 V for the bare chip; breakouts usually add a regulator and level shifting (e.g. the Pololu carrier accepts 2.6–5.5 V) — board-dependent | ST datasheet; Pololu |
 
-## Lưu ý cho robot này
+## Notes for this robot
 
-- Kiểm tra bo breakout cụ thể đã mua: dải điện áp, đã có điện trở kéo lên cho I2C chưa.
+- Check the actual breakout: its supply range and whether it already has I2C pull-ups.
 
-## Nguồn tham khảo (tra 2026-10-15)
+## References (retrieved 2026-10-15)
 
 - [VL53L1X datasheet](https://www.makerguides.com/wp-content/uploads/2024/10/VL53L1X-Datasheet.pdf)
 - [Pololu VL53L1X carrier](https://pololu.com/product/3415/specs)

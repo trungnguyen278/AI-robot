@@ -1,16 +1,16 @@
-# software/ — code chính trên Raspberry Pi 5
+# software/ — main application on the Raspberry Pi 5
 
-> Trống — chờ chốt nền tảng (OS, ROS 2 hay không, ngôn ngữ): xem câu hỏi mở trong [`docs/architecture.md`](../docs/architecture.md).
+> Empty — waiting for the platform decisions (OS, ROS 2 or not, language); see the open questions in [`docs/architecture.md`](../docs/architecture.md).
 
-Sẽ chứa các phần chạy trên Pi 5 (Linux):
+Planned modules, each behind a defined interface so it can be added, replaced or removed independently:
 
-| Phần | Việc |
+| Module | Responsibility |
 |---|---|
-| audio | Mic, loa, wake word, VAD, AEC, hội thoại với server |
-| vision | Camera AI (IMX500): phát hiện người/vật, theo dõi khuôn mặt |
-| face | Khuôn mặt biểu cảm trên màn 7" |
-| body link | Nói chuyện với ESP32-S3 theo [`protocol/`](../protocol/README.md) |
-| behavior | Điều phối: trạng thái robot, phản ứng với sự kiện |
-| net | Kết nối `ai-robot-server`, BLE với `ai-robot-app`, cập nhật phần mềm |
+| audio | Microphone, speaker, wake word, VAD, AEC, conversation with the server |
+| vision | AI camera (IMX500): people and object detection, face tracking |
+| face | Expressive face on the 7" display |
+| body link | Talks to the ESP32-S3 using [`protocol/`](../protocol/README.md) |
+| behavior | Orchestration: robot state, reactions to events |
+| net | Connection to `ai-robot-server`, BLE with `ai-robot-app`, software updates |
 
-Cấu trúc thư mục con sẽ quyết định cùng lựa chọn nền tảng (ADR). Tên hiển thị của robot nằm trong một file cấu hình duy nhất, không hard-code ([ADR-0003](../docs/decisions/0003-neutral-repo-naming.md)).
+The folder layout will follow the platform decision (ADR). The robot's display name lives in a single configuration file and is never hard-coded ([ADR-0003](../docs/decisions/0003-neutral-repo-naming.md)).

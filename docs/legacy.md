@@ -1,22 +1,22 @@
-# Thế hệ trước: Luni_Robot
+# Previous generation: Luni_Robot
 
-Repo: <https://github.com/trungnguyen278/Luni_Robot> (lưu trữ). Robot để bàn, màn 2" 320×240, hai MCU: **ESP32-S3** (màn, audio, camera, render) + **ESP32-C5** (Wi-Fi, WebSocket, BLE, OTA, servo/IMU), nối với nhau qua SPI (audio) + UART (điều khiển). Repo đi kèm: `Luni_Cloud` (FastAPI), `Luni_App` (Flutter).
+Repository: <https://github.com/trungnguyen278/Luni_Robot> (archived). A desktop robot with a 2" 320×240 display and two MCUs — an **ESP32-S3** (display, audio, camera, rendering) and an **ESP32-C5** (Wi-Fi, WebSocket, BLE, OTA, servos and IMU) — linked by SPI (audio) and UART (control). Companion repositories: `Luni_Cloud` (FastAPI) and `Luni_App` (Flutter).
 
-## Có thể tái dùng
+## What can be reused
 
-| Thứ | Ở đâu trong Luni_Robot | Ghi chú |
+| What | Where in Luni_Robot | Notes |
 |---|---|---|
-| Quy trình train wake word miễn phí (microWakeWord trên Colab) | `tools/train_wakeword.ipynb`, `docs/WAKEWORD.md` | Tên robot mới → train lại từ khóa mới. Model `.tflite` về lý thuyết chạy được trên Linux (chưa thử) |
-| Thiết kế cảm xúc/scene (đôi mắt, 9 tone màu, ~238 biến thể) | `ui_design/` (JSX/SVG), `ui_design/REQUIREMENTS.md` | Giữ ngôn ngữ thiết kế; renderer cũ viết cho 320×240 qua SPI, màn 7" mới nên làm lại |
-| Engine render thủ tục C++ | `esp32-s3/lib/display/`, `esp32-s3/src/ui/` | Gần như C++17 thuần (chỉ 3 file dính ESP-IDF) |
-| Giao thức WebSocket với cloud (auth, Opus 16 kHz/60 ms, sync_data) | `docs/modules/network.md`, `docs/modules/inter-mcu.md` | Tham khảo khi làm `ai-robot-server` |
-| BLE provisioning (GATT, 3 mức quyền, HMAC) | `esp32-c5/docs/BLE_APP_DEV.md`, `docs/modules/ble-provisioning.md` | Tham khảo cho `ai-robot-app` |
-| State machine kết nối + retry theo loại lỗi | `docs/modules/state-machine.md` | |
+| Free wake-word training (microWakeWord on Colab) | `tools/train_wakeword.ipynb`, `docs/WAKEWORD.md` | A new robot name means training a new keyword. The `.tflite` model should also run on Linux (untested) |
+| Emotion and scene design (eyes, 9-tone palette, ~238 variants) | `ui_design/` (JSX/SVG), `ui_design/REQUIREMENTS.md` | Keep the design language; the old renderer targets a 320×240 SPI display, so the 7" face needs a new one |
+| Procedural C++ renderer | `esp32-s3/lib/display/`, `esp32-s3/src/ui/` | Almost pure C++17 — only 3 files depend on ESP-IDF |
+| Cloud WebSocket protocol (auth, Opus 16 kHz / 60 ms, sync_data) | `docs/modules/network.md`, `docs/modules/inter-mcu.md` | Reference for `ai-robot-server` |
+| BLE provisioning (GATT, 3 access levels, HMAC) | `esp32-c5/docs/BLE_APP_DEV.md`, `docs/modules/ble-provisioning.md` | Reference for `ai-robot-app` |
+| Connection state machine with per-error retry policy | `docs/modules/state-machine.md` | |
 
-## Bài học
+## Lessons learned
 
-- **Tách hai MCU tốn kém:** hai firmware, hai bản `StateTypes` phải đồng bộ tay, S3 không có OTA → giờ dùng một máy Linux + một MCU, giao thức định nghĩa một lần.
-- **Đường ảnh camera nghẽn:** ~11 giây cho một ảnh QVGA (UART 460800 + C5 không có PSRAM + gửi WebSocket từng chunk cách nhau 100 ms).
-- **Không có VAD trên thiết bị:** lượt nói kích bằng wake word chỉ kết thúc khi watchdog 30 giây.
-- **Đổi tên bằng find-replace làm hỏng code** (`sounddevice` → `sounddLunice`) → [ADR-0003](decisions/0003-neutral-repo-naming.md).
-- **Thiếu chân GPIO** khiến chức năng bị dời qua lại giữa hai MCU → lập [`hardware/pinmap.md`](../hardware/pinmap.md) ngay từ đầu.
+- **Two MCUs are expensive:** two firmwares, two hand-synchronized copies of `StateTypes`, no OTA for the S3. Now: one Linux computer plus one MCU, with the protocol defined once.
+- **The camera path was a bottleneck:** ~11 s per QVGA image (UART at 460800 baud, no PSRAM on the C5, WebSocket chunks paced at 100 ms).
+- **No on-device VAD:** wake-word turns only ended at a 30 s watchdog.
+- **A find-and-replace rename broke code** (`sounddevice` → `sounddLunice`) → [ADR-0003](decisions/0003-neutral-repo-naming.md).
+- **Running out of GPIO** pushed functions back and forth between the two MCUs → keep [`hardware/pinmap.md`](../hardware/pinmap.md) from day one.

@@ -1,48 +1,45 @@
 # ai-robot
 
-> **Trạng thái:** đang khởi tạo — mới có khung dự án và tài liệu, chưa có code.
+> **Status:** early setup — project skeleton and documentation only; no code yet.
 
-Robot AI di động chạy bánh xích, có **2 tay gắp**, **cổ 2 bậc tự do** mang màn hình 7" làm khuôn mặt biểu cảm, nghe–nói bằng giọng nói và nhìn bằng camera AI.
+A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carrying a 7" display as an expressive face, voice interaction, and an AI camera.
 
-- **Não:** Raspberry Pi 5 (8GB) — audio, thị giác, giao diện, AI, kết nối mạng (Wi-Fi/BLE có sẵn trên Pi).
-- **Thân:** ESP32-S3 — điều khiển thời gian thực: servo, động cơ + encoder, cảm biến, LED.
+- **Brain:** Raspberry Pi 5 (8 GB) — audio, vision, face, AI and networking (built-in Wi-Fi and Bluetooth LE).
+- **Body:** ESP32-S3 — real-time control of servos, motors and encoders, sensors and LEDs.
 
 ![Concept v0](hardware/images/concept-v0.webp)
 
-*Concept v0 — bản phác nhanh, cánh tay có thể còn thay đổi.*
+*Concept v0 — a quick sketch; the arm design may still change.*
 
-## Cấu trúc repo
+## Repository layout
 
 ```
 ai-robot/
-├── software/    Code chính chạy trên Raspberry Pi 5
-├── firmware/    Code các module vi điều khiển (body-controller = ESP32-S3)
-├── protocol/    Giao thức Pi ⇄ module — nguồn duy nhất cho cả hai phía
-├── hardware/    BOM, cây nguồn, phân bổ chân, ghi chú linh kiện, bản vẽ
-├── docs/        Tầm nhìn, kiến trúc, roadmap, quyết định (ADR), nhật ký
-├── tools/       Script tiện ích
-└── .claude/     Cấu hình và skill cho Claude Code (xem CLAUDE.md)
+├── software/    Main application running on the Raspberry Pi 5
+├── firmware/    Microcontroller modules (body-controller = ESP32-S3)
+├── protocol/    Pi ⇄ module protocol — single source of truth for both sides
+├── hardware/    Bill of materials, power tree, pin map, component notes, CAD
+├── docs/        Vision, architecture, decision records (ADRs), dev log
+├── tools/       Utility scripts
+└── .claude/     Claude Code skills (see CLAUDE.md)
 ```
 
-## Tài liệu
+Each folder is an independent component with its own README; see [Contributing](CONTRIBUTING.md#adding-or-removing-a-component) for how to add or remove one.
 
-| Tài liệu | Nội dung |
-|---|---|
-| [Tầm nhìn](docs/vision.md) | Robot sẽ làm được gì |
-| [Kiến trúc](docs/architecture.md) | Các khối, cách chúng nói chuyện với nhau, câu hỏi còn mở |
-| [Roadmap](docs/roadmap.md) | Các giai đoạn và việc đang làm |
-| [Quyết định (ADR)](docs/decisions/README.md) | Vì sao chọn Pi 5 8GB, ESP32-S3, cách đặt tên… |
-| [Phần cứng](hardware/README.md) | Linh kiện, cây nguồn, chân, vấn đề đang mở |
-| [Quy ước](CONTRIBUTING.md) | Nhánh, commit, tài liệu, bí mật |
+## Documentation
 
-## Repo liên quan
+- [docs/](docs/README.md) — vision, architecture, decision records (ADRs), dev log
+- [hardware/](hardware/README.md) — parts, power tree, pin map, open issues
+- [CONTRIBUTING.md](CONTRIBUTING.md) — branches, commits, documentation, secrets, licensing
 
-| Repo | Vai trò | Trạng thái |
+## Related repositories
+
+| Repository | Role | Status |
 |---|---|---|
-| `ai-robot-server` | Server AI và quản lý thiết bị | Chưa tạo |
-| `ai-robot-app` | App điện thoại | Chưa tạo |
-| [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Thế hệ trước (ESP32-S3 + ESP32-C5) | Lưu trữ — xem [docs/legacy.md](docs/legacy.md) |
+| `ai-robot-server` | AI backend and device management | Not created yet |
+| `ai-robot-app` | Mobile companion app | Not created yet |
+| [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Archived — see [docs/legacy.md](docs/legacy.md) |
 
-## Giấy phép
+## License
 
-[MIT](LICENSE)
+Released under the [MIT License](LICENSE).

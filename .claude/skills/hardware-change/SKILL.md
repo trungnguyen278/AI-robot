@@ -1,39 +1,39 @@
 ---
 name: hardware-change
-description: Checklist for adding, replacing or re-wiring hardware on the robot — research a part from its datasheet, record verified specs in hardware/components/, and keep the BOM, pin map and power tree in sync in the same commit. Use when the user adds or swaps a component (linh kiện, module, cảm biến, servo, động cơ, màn hình, mic, loa), changes wiring or pin assignments (nối dây, đổi chân), or changes power distribution (pin, sạc, DC-DC, cầu chì, công tắc khẩn cấp).
+description: Checklist for adding, replacing or re-wiring hardware on the robot — research a part from its datasheet, record its specifications with sources in hardware/components/, and keep the BOM, pin map and power tree in sync in the same commit. Use when the user adds or swaps a part (module, sensor, servo, motor, display, microphone, speaker), changes wiring or pin assignments, or changes power distribution (battery, charger, DC-DC converter, fuse, emergency stop).
 ---
 
-# Thay đổi phần cứng
+# Hardware changes
 
-Mục tiêu: sau mỗi thay đổi, `hardware/` vẫn mô tả **đúng** robot thật, để vài năm sau mở ra vẫn tin được.
+Goal: after every change, `hardware/` still describes the **real** robot, so it can be trusted years later.
 
-## 1. Tìm hiểu linh kiện
+## 1. Research the part
 
-- Tra datasheet/tài liệu của hãng trước, trang shop sau. Ghi rõ mẫu/phiên bản: nhiều linh kiện có nhiều biến thể (vd. STS3215 có bản 7.4V và bản 12V).
-- Tạo/cập nhật `hardware/components/<ten-linh-kien>.md` theo mẫu [component-template.md](component-template.md).
-- Mỗi thông số kèm nguồn. Chỉ có nguồn thứ cấp hoặc tự suy luận → ghi "chưa xác minh".
+- Datasheets and vendor documentation first, shop pages second. Record the exact model or variant — many parts come in several (e.g. the STS3215 has 7.4 V and 12 V versions).
+- Create or update `hardware/components/<part-name>.md` from [component-template.md](component-template.md).
+- Every value gets a source. Values backed only by secondary sources or by inference are marked **unverified**.
 
-## 2. Kiểm tra điện
+## 2. Electrical check
 
-- [ ] Mức logic: 3.3V hay 5V? Pi 5 và ESP32-S3 đều 3.3V, không chịu 5V.
-- [ ] Dòng: dòng thường **và** dòng đỉnh/stall. Cộng vào bảng công suất trong `hardware/README.md`; nhánh nguồn (DC-DC 5V, nhánh 12V servo, driver động cơ) còn đủ không.
-- [ ] Bảo vệ: có nằm sau cầu chì và công tắc khẩn cấp không (bắt buộc với động cơ/servo).
-- [ ] Các khối giao tiếp với nhau phải chung GND.
+- [ ] Logic level: 3.3 V or 5 V? The Pi 5 and the ESP32-S3 are 3.3 V and not 5 V tolerant.
+- [ ] Current: typical **and** peak/stall. Add it to the power budget in `hardware/README.md` and confirm the rail (5 V DC-DC, 12 V servo branch, motor driver) still has headroom.
+- [ ] Protection: is it behind the fuse and the emergency stop? Mandatory for motors and servos.
+- [ ] Blocks that talk to each other share a common ground.
 
-## 3. Kiểm tra chân & bus
+## 3. Pins and buses
 
-- [ ] Trùng chân trong `hardware/pinmap.md` (cả Pi 5 và ESP32-S3).
-- [ ] Trùng địa chỉ I2C; còn UART trống không; I2S của Pi chỉ có một nhóm chân.
-- [ ] Nối vào Pi → xem thêm skill `pi5-platform`.
+- [ ] No pin conflicts in `hardware/pinmap.md` (Pi 5 and ESP32-S3).
+- [ ] No I2C address clashes; a free UART is available; remember the Pi has only one I2S pin group.
+- [ ] Anything wired to the Pi → also use skill `pi5-platform`.
 
-## 4. Cập nhật trong CÙNG commit
+## 4. Update in the same commit
 
-- [ ] `hardware/bom.csv` (thêm/sửa dòng; cột `status`: proposed → planned → ordered → received → installed)
+- [ ] `hardware/bom.csv` — add or edit the row; `status` is one of proposed → planned → ordered → received → installed.
 - [ ] `hardware/pinmap.md`
-- [ ] `hardware/README.md` (cây nguồn, bảng công suất, vấn đề mở)
-- [ ] `hardware/components/<ten-linh-kien>.md`
-- Commit scope `hardware`, vd. `feat(hardware): add VL53L1X ToF sensor on ESP32 I2C`.
+- [ ] `hardware/README.md` — power tree, power budget, open issues.
+- [ ] `hardware/components/<part-name>.md`
+- Use the commit scope `hardware`, e.g. `feat(hardware): add VL53L1X ToF sensor on ESP32 I2C`.
 
-## 5. Nếu là quyết định lớn
+## 5. Major changes
 
-Đổi linh kiện chính (bo mạch, khung, nguồn, loại servo/động cơ…) → viết ADR (skill `adr`).
+Replacing a core part (compute board, chassis, power system, servo or motor type) → write an ADR (skill `adr`).

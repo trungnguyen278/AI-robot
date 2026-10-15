@@ -1,34 +1,34 @@
-# Phân bổ chân
+# Pin map
 
-> Nguồn sự thật cho câu hỏi "chân nào dùng vào việc gì". Mọi thay đổi nối dây phải cập nhật file này (skill `hardware-change`).
-> Trạng thái hiện tại: **dự kiến** — chưa nối gì.
+> Single source of truth for "which pin does what". Every wiring change updates this file (skill `hardware-change`).
+> Current state: **planned** — nothing is wired yet.
 
-## Raspberry Pi 5 — header 40 chân
+## Raspberry Pi 5 — 40-pin header
 
-Chỉ liệt kê chân đã/định dùng. GPIO là 3.3V, **không chịu 5V**.
+Only pins that are used or planned are listed. GPIO is 3.3 V and **not 5 V tolerant**.
 
-| GPIO (BCM) | Chân vật lý | Chức năng | Dùng cho | Trạng thái |
+| GPIO (BCM) | Physical pin | Function | Used for | Status |
 |---|---|---|---|---|
-| 2 / 3 | 3 / 5 | I2C1 SDA / SCL | Codec của ReSpeaker HAT | dự kiến |
-| 14 / 15 | 8 / 10 | UART0 TX / RX | Liên kết ESP32-S3 | dự kiến |
-| 18 / 19 / 20 / 21 | 12 / 35 / 38 / 40 | I2S BCLK / LRCLK / DIN / DOUT | Audio: ReSpeaker **hoặc** MAX98357A | dự kiến — trùng, xem [vấn đề mở #1](README.md#vấn-đề-đang-mở) |
+| 2 / 3 | 3 / 5 | I2C1 SDA / SCL | ReSpeaker HAT codec | planned |
+| 14 / 15 | 8 / 10 | UART0 TX / RX | Link to the ESP32-S3 | planned |
+| 18 / 19 / 20 / 21 | 12 / 35 / 38 / 40 | I2S BCLK / LRCLK / DIN / DOUT | Audio: ReSpeaker **or** MAX98357A | planned — conflict, see [open issue 1](README.md#open-issues) |
 
-Không qua header: màn 7" → cổng DSI; camera → cổng CSI; quạt → cổng fan; pin RTC → cổng BAT.
+Not on the header: display → DSI port; camera → CSI port; fan → fan connector; RTC battery → BAT connector.
 
-### Địa chỉ I2C trên bus I2C1 của Pi
+### I2C addresses on the Pi's I2C1 bus
 
-| Địa chỉ | Thiết bị |
+| Address | Device |
 |---|---|
-| chưa xác minh | Codec TLV320AIC3104 (ReSpeaker HAT) |
+| unverified | TLV320AIC3104 codec (ReSpeaker HAT) |
 
 ## ESP32-S3 (body-controller)
 
-| Chức năng | Ngoại vi dự kiến | GPIO | Trạng thái |
+| Function | Planned peripheral | GPIO | Status |
 |---|---|---|---|
-| Liên kết Pi 5 | UART | TBD | dự kiến |
-| Servo bus STS3215 | UART + chân hướng (half-duplex) | TBD | dự kiến |
-| Encoder MG540 trái / phải | PCNT (kênh A/B mỗi bánh) | TBD | dự kiến |
-| Driver động cơ | PWM (LEDC/MCPWM) + DIR | TBD | dự kiến |
-| VL53L1X | I2C (0x29) | TBD | dự kiến |
-| NeoPixel | RMT | TBD | dự kiến |
-| Điện áp pin | ADC + cầu chia áp | TBD | dự kiến |
+| Link to the Pi 5 | UART | TBD | planned |
+| STS3215 servo bus | UART + direction pin (half-duplex) | TBD | planned |
+| MG540 encoders, left / right | PCNT (A/B per wheel) | TBD | planned |
+| Motor driver | PWM (LEDC/MCPWM) + DIR | TBD | planned |
+| VL53L1X | I2C (0x29) | TBD | planned |
+| NeoPixel | RMT | TBD | planned |
+| Battery voltage | ADC + voltage divider | TBD | planned |

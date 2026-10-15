@@ -1,16 +1,16 @@
-# cad/ — bản vẽ cơ khí
+# cad/ — mechanical design
 
-Giá đỡ, ngàm gắn, vỏ… Lưu file nguồn (STEP, F3D, FCStd…) cùng file in (STL, 3MF).
+Brackets, mounts, enclosures… Keep source files (STEP, F3D, FCStd, …) next to printable files (STL, 3MF).
 
-- File lớn hơn ~10 MB: dùng Git LFS hoặc GitHub Releases, ghi link ở đây.
-- Tên file: `<bộ-phận>-v<N>.<đuôi>`, vd. `neck-bracket-v1.step`.
+- Files larger than ~10 MB go to Git LFS or GitHub Releases, linked from here.
+- File names follow `<part>-v<N>.<ext>`, e.g. `neck-bracket-v1.step`.
 
-## Kích thước tham khảo (theo concept v0 — đo lại trên khung thật trước khi gia công)
+## Reference dimensions (from concept v0 — measure the real chassis before machining)
 
-| Hạng mục | Giá trị |
+| Item | Value |
 |---|---|
-| Tổng thể | ~320 mm rộng × ~350 mm dài; cao ~300 mm, tới ~380 mm tùy cấu hình đầu |
-| Tấm đế khung R3 | 268.9 × 268 mm |
-| Lỗ bắt vít | M3 Ø3.2 mm (nhiều vị trí), M4 Ø4.2 mm (vị trí chính) |
-| Giá cổ 2 DOF | ~50 × 60 × 40 mm |
-| Tay 3 DOF | các đoạn ~80 / 70 / 60 mm |
+| Overall | ~320 mm wide × ~350 mm long; ~300 mm tall, up to ~380 mm depending on the head |
+| R3 base plate | 268.9 × 268 mm |
+| Mounting holes | M3 Ø3.2 mm (many positions), M4 Ø4.2 mm (main positions) |
+| 2-DOF neck bracket | ~50 × 60 × 40 mm |
+| 3-DOF arm | segments of ~80 / 70 / 60 mm |

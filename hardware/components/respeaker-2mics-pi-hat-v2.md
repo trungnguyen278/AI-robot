@@ -1,27 +1,29 @@
 # ReSpeaker 2-Mics Pi HAT V2.0
 
-> Cập nhật: 2026-10-15.
+> Last updated: 2026-10-15.
 
-- **Vai trò:** thu âm (2 mic), có thể phát loa.
-- **Nối với:** header 40 chân của Pi 5 (I2S + I2C).
+- **Role in the robot:** voice capture (2 microphones), optionally speaker output.
+- **Exact model / variant:** ReSpeaker 2-Mics Pi HAT **V2.0**.
+- **Quantity:** 1
+- **Connected to:** the Pi 5 40-pin header (I2S + I2C).
 
-## Thông số
+## Key specifications
 
-| Thông số | Giá trị | Nguồn |
+| Parameter | Value | Source |
 |---|---|---|
-| Codec | TLV320AIC3104 (V2.0 thay cho WM8960 của V1) | Datasheet sản phẩm (DigiKey) |
-| Hỗ trợ Pi 5 | Có (nhờ đổi codec) | Datasheet sản phẩm (DigiKey) |
-| Tần số lấy mẫu | 8–96 kHz | Datasheet sản phẩm (DigiKey) |
-| Ngõ ra | Cổng loa JST 2.0 + jack 3.5 mm | BeagleY-AI pinout |
-| Nguồn | Có cổng Micro USB; nên cấp thêm khi dùng loa | BeagleY-AI pinout |
+| Codec | TLV320AIC3104 (V2.0 replaces the WM8960 of V1) | Product datasheet (DigiKey) |
+| Pi 5 support | Yes (thanks to the new codec) | Product datasheet (DigiKey) |
+| Sample rate | 8–96 kHz | Product datasheet (DigiKey) |
+| Outputs | JST 2.0 speaker connector + 3.5 mm jack | BeagleY-AI pinout |
+| Power | Micro USB connector; extra power recommended when driving a speaker | BeagleY-AI pinout |
 
-## Lưu ý cho robot này
+## Notes for this robot
 
-- Chiếm nhóm I2S duy nhất của Pi (GPIO18–21) → không dùng song song với MAX98357A theo cách thông thường. Chọn một: dùng cổng loa của HAT (kiểm tra công suất ra có đủ cho loa 4Ω 3W không) hoặc bỏ HAT.
-- Chỉ 2 mic, không có khử tiếng vọng (AEC) phần cứng → khó ngắt lời robot bằng giọng khi loa đang phát, tiếng động cơ/bánh xích lọt vào mic. Phương án: AEC phần mềm (WebRTC APM, speexdsp) hoặc mic array USB có AEC phần cứng.
-- Địa chỉ I2C của codec: chưa xác minh.
+- Takes the Pi's only I2S pin group (GPIO18–21) → it cannot be used alongside the MAX98357A in the usual way. Pick one: use the HAT's speaker output (check it can drive the 4 Ω 3 W speaker) or drop the HAT.
+- Only 2 microphones and no hardware echo cancellation → hard to interrupt the robot by voice while it speaks, and motor and track noise reaches the microphones. Options: software AEC (WebRTC APM, speexdsp) or a USB microphone array with hardware AEC.
+- The codec's I2C address is unverified.
 
-## Nguồn tham khảo (tra 2026-10-15)
+## References (retrieved 2026-10-15)
 
 - [ReSpeaker 2-Mics Pi HAT V2.0 — datasheet (DigiKey)](https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/8891/107100001_1.pdf)
 - [ReSpeaker 2-Mics pHAT — BeagleY-AI pinout](https://pinout.beagleboard.io/pinout/respeaker_2_mics_phat)

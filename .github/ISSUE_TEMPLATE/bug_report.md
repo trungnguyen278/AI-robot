@@ -1,24 +1,24 @@
 ---
-name: Báo lỗi
-about: Robot hoặc code chạy sai
+name: Bug report
+about: Something on the robot or in the code does not work as expected
 title: "[Bug] "
 labels: bug
 ---
 
-## Hiện tượng
+## What happened
 
-<!-- Điều gì đã xảy ra? -->
+<!-- Describe the problem -->
 
-## Mong đợi
+## Expected behavior
 
-## Cách tái hiện
+## Steps to reproduce
 
 1.
 
-## Môi trường
+## Environment
 
-- Khối: software / firmware / hardware / protocol
-- Commit / phiên bản:
-- Phần cứng liên quan:
+- Area: software / firmware / hardware / protocol
+- Commit or version:
+- Hardware involved:
 
-## Log / ảnh
+## Logs or photos

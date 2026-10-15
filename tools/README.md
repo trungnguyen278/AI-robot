@@ -1,5 +1,5 @@
-# tools/ — script tiện ích
+# tools/ — utility scripts
 
-Trống. Dự kiến: cài đặt Pi 5 (OS, overlay, service), flash firmware ESP32-S3, chuyển đổi model AI, công cụ thử từng phần cứng.
+Empty. Planned: Pi 5 setup (OS, overlays, services), ESP32-S3 flashing, AI model conversion, and test tools for individual parts.
 
-Script chạy trên Pi phải giữ xuống dòng LF (đã cấu hình trong `.gitattributes`).
+Scripts that run on the Pi must keep LF line endings (enforced by `.gitattributes`).

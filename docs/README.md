@@ -1,12 +1,11 @@
-# Tài liệu
+# Documentation
 
-| File | Nội dung |
+| Document | Contents |
 |---|---|
-| [vision.md](vision.md) | Tầm nhìn: robot sẽ làm được gì |
-| [architecture.md](architecture.md) | Kiến trúc tổng quan, phân vai, câu hỏi còn mở |
-| [roadmap.md](roadmap.md) | Các giai đoạn, việc đang làm |
-| [decisions/](decisions/README.md) | Quyết định kỹ thuật (ADR) |
-| [devlog/](devlog/README.md) | Nhật ký phát triển |
-| [legacy.md](legacy.md) | Thế hệ trước (Luni_Robot): còn gì tái dùng được, bài học |
+| [vision.md](vision.md) | What the robot should be able to do |
+| [architecture.md](architecture.md) | Building blocks, responsibilities, open questions |
+| [decisions/](decisions/README.md) | Architecture decision records (ADRs) |
+| [devlog/](devlog/README.md) | Development log |
+| [legacy.md](legacy.md) | Previous generation (Luni_Robot): what can be reused, lessons learned |
 
-Tài liệu phần cứng nằm ở [`hardware/`](../hardware/README.md).
+Hardware documentation lives in [`hardware/`](../hardware/README.md).

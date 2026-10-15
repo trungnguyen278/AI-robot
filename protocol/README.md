@@ -1,17 +1,17 @@
-# protocol/ — giao thức Pi 5 ⇄ module
+# protocol/ — Pi 5 ⇄ module protocol
 
-> Trống — định dạng chưa chốt (sẽ có ADR).
+> Empty — the format is not decided yet (to be recorded in an ADR).
 
-**Nguồn duy nhất** cho mọi định nghĩa trao đổi giữa Pi 5 và các module vi điều khiển: loại gói tin, trường dữ liệu, mã lỗi, trạng thái. Code của hai phía phải sinh ra hoặc dùng chung từ đây — không chép tay định nghĩa sang hai nơi (thế hệ trước phải đồng bộ tay hai bản `StateTypes`).
+The **single source of truth** for everything exchanged between the Pi 5 and the microcontroller modules: message types, fields, error codes and states. Both sides generate their code from, or share, the definitions here — never hand-copy them (the previous generation had to keep two copies of `StateTypes` in sync by hand).
 
-## Yêu cầu dự kiến
+## Requirements
 
-- Có số phiên bản giao thức; hai bên kiểm tra khi kết nối.
-- Đóng khung gói tin + CRC; chịu được mất/hỏng byte.
-- Heartbeat hai chiều; ESP32-S3 tự về trạng thái an toàn khi mất heartbeat.
-- Lệnh quan trọng có xác nhận (ack).
+- A protocol version, checked by both sides on connect.
+- Framed packets with a CRC, robust to lost or corrupted bytes.
+- Heartbeats in both directions; the ESP32-S3 goes to a safe state when the heartbeat is lost.
+- Acknowledgements for critical commands.
 
-## Ứng viên định dạng
+## Candidate formats
 
-- Schema + sinh code, vd. Protocol Buffers (nanopb cho ESP32).
-- Gói nhị phân tự định nghĩa + framing (vd. COBS) + CRC, mô tả trong một file spec rồi sinh header C++/Python.
+- A schema with code generation, e.g. Protocol Buffers (nanopb on the ESP32).
+- A custom binary format with framing (e.g. COBS) and a CRC, described in one spec file that generates the C++ and Python definitions.

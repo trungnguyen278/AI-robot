@@ -1,24 +1,27 @@
-# Pololu D24V90F5 — DC-DC hạ áp 5V
+# Pololu D24V90F5 — 5 V step-down regulator
 
-> Cập nhật: 2026-10-15.
+> Last updated: 2026-10-15.
 
-- **Vai trò:** tạo nhánh 5V cho Pi 5 và ngoại vi từ pin 3S.
+- **Role in the robot:** produces the 5 V rail for the Pi 5 and peripherals from the 3S battery.
+- **Exact model / variant:** Pololu D24V90F5 (item #2866).
+- **Quantity:** 1
+- **Connected to:** the 3S battery (after the fuse and emergency stop) → 5 V rail.
 
-## Thông số
+## Key specifications
 
-| Thông số | Giá trị | Nguồn |
+| Parameter | Value | Source |
 |---|---|---|
-| Điện áp vào | 5–38 V; thực tế cần ≥ 5 V + sụt áp 0.5–1.5 V (tăng theo tải); khóa thấp áp ~4.2 V | Pololu |
-| Điện áp ra | 5 V | Pololu |
-| Dòng ra | "~9 A" (tiêu đề); dòng liên tục điển hình 4–8 A tùy điện áp vào và tản nhiệt | Pololu |
-| Hiệu suất | 80–95 % | Pololu |
-| Bảo vệ | Ngược cực, ngắn mạch, quá nhiệt (~160 °C), soft-start | Pololu |
+| Input voltage | 5–38 V; in practice ≥ 5 V plus a 0.5–1.5 V dropout that grows with load; undervoltage lockout ~4.2 V | Pololu |
+| Output voltage | 5 V | Pololu |
+| Output current | "~9 A" (headline); typical continuous 4–8 A depending on input voltage and cooling | Pololu |
+| Efficiency | 80–95 % | Pololu |
+| Protection | Reverse voltage, short circuit, thermal shutdown (~160 °C), soft start | Pololu |
 
-## Lưu ý cho robot này
+## Notes for this robot
 
-- Pin 3S (9.0–12.6 V tùy mức xả) nằm thoải mái trong dải vào.
-- Đừng thiết kế theo con số 9 A: Pi 5 (tới 5 A khi tải nặng + USB) + màn + HAT + ampli + ESP32-S3 + LED → lập bảng công suất trong [`hardware/README.md`](../README.md) và để dư.
+- A 3S pack (9.0–12.6 V depending on charge) sits comfortably inside the input range.
+- Do not design around 9 A: the Pi 5 (up to 5 A under heavy load with USB) plus display, HAT, amplifier, ESP32-S3 and LEDs → keep a power budget in [`hardware/README.md`](../README.md) with headroom.
 
-## Nguồn tham khảo (tra 2026-10-15)
+## References (retrieved 2026-10-15)
 
 - [Pololu — D24V90F5](https://www.pololu.com/product/2866)

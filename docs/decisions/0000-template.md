@@ -1,28 +1,28 @@
-# NNNN — <Tiêu đề quyết định>
+# NNNN — <Decision title>
 
-- **Trạng thái:** Đề xuất | Đã chấp nhận | Bị thay thế bởi NNNN
-- **Ngày:** YYYY-MM-DD
+- **Status:** Proposed | Accepted | Superseded by NNNN
+- **Date:** YYYY-MM-DD
 
-## Bối cảnh
+## Context
 
-<!-- Vấn đề gì, ràng buộc gì, số liệu gì dẫn tới quyết định -->
+<!-- The problem, constraints and data that drive the decision -->
 
-## Quyết định
+## Decision
 
-<!-- Chọn gì — một hai câu rõ ràng -->
+<!-- What we chose, in one or two clear sentences -->
 
-## Phương án đã cân nhắc
+## Alternatives considered
 
-| Phương án | Vì sao không chọn |
+| Alternative | Why not |
 |---|---|
 | | |
 
-## Hệ quả
+## Consequences
 
-- Tốt:
-- Phải chấp nhận:
-- Việc cần làm tiếp:
+- Positive:
+- Negative / accepted trade-offs:
+- Follow-up:
 
-## Nguồn
+## References
 
 -

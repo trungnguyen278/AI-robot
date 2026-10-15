@@ -1,28 +1,30 @@
 # Raspberry Pi AI Camera (Sony IMX500)
 
-> Cập nhật: 2026-10-15. Nguồn là trang shop/đại lý — đối chiếu tài liệu chính hãng khi có.
+> Last updated: 2026-10-15. Sources are shop and distributor pages → re-check against the official documentation when possible.
 
-- **Vai trò:** "mắt" — chạy model thị giác ngay trên cảm biến, giảm tải CPU của Pi.
-- **Nối với:** cổng CSI của Pi 5 (cáp đi kèm).
+- **Role in the robot:** the eyes — runs vision models on the sensor itself, offloading the Pi's CPU.
+- **Exact model / variant:** Raspberry Pi AI Camera (SC1174).
+- **Quantity:** 1
+- **Connected to:** the Pi 5 CSI port (cable included).
 
-## Thông số
+## Key specifications
 
-| Thông số | Giá trị | Nguồn |
+| Parameter | Value | Source |
 |---|---|---|
-| Cảm biến | Sony IMX500, 12.3 MP, có bộ tăng tốc mạng nơ-ron | Pimoroni; Mouser |
-| Chế độ | 2028×1520 @30 fps (binning 2×2); 4056×3040 @10 fps; 10-bit | Pimoroni |
-| Ống kính | F1.79, tiêu cự 4.74 mm, lấy nét tay 20 cm–∞; FoV ~78° chéo (66° ngang / 52.3° dọc) | Pimoroni; Mouser |
-| Bộ điều khiển | RP2040 + flash 16 MB để nạp/cache model | CNX Software |
-| Đầu vào model | Tensor tối đa 640×640, int8/uint8 | Mouser |
-| Phần mềm | libcamera, Picamera2, rpicam-apps; kết quả suy luận đi kèm khung hình dưới dạng metadata | PiShop; Mouser |
-| Model mẫu | MobileNet SSD (phát hiện vật), PoseNet (tư thế); chuyển model từ PyTorch/TensorFlow bằng công cụ của Raspberry Pi | Elektor |
+| Sensor | Sony IMX500, 12.3 MP, with an on-sensor neural network accelerator | Pimoroni; Mouser |
+| Modes | 2028×1520 at 30 fps (2×2 binned); 4056×3040 at 10 fps; 10-bit | Pimoroni |
+| Optics | F1.79, 4.74 mm focal length, manual focus 20 cm–∞; ~78° diagonal FoV (66° horizontal / 52.3° vertical) | Pimoroni; Mouser |
+| Controller | RP2040 + 16 MB flash to load and cache models | CNX Software |
+| Model input | Up to 640×640 int8/uint8 tensors | Mouser |
+| Software | libcamera, Picamera2, rpicam-apps; inference results arrive as metadata alongside each frame | PiShop; Mouser |
+| Example models | MobileNet SSD (object detection), PoseNet (pose estimation); PyTorch/TensorFlow models can be converted with Raspberry Pi's tools | Elektor |
 
-## Lưu ý cho robot này
+## Notes for this robot
 
-- Lấy nét bằng tay → chỉnh theo khoảng cách làm việc chính trước khi lắp cố định.
-- Model vượt giới hạn của IMX500 → chạy trên CPU Pi hoặc server.
+- Focus is manual → set it for the main working distance before final mounting.
+- Models that exceed the IMX500's limits run on the Pi's CPU or on the server.
 
-## Nguồn tham khảo (tra 2026-10-15)
+## References (retrieved 2026-10-15)
 
 - [Pimoroni](https://shop.pimoroni.com/en-eu/products/raspberry-pi-ai-camera)
 - [Mouser](https://www.mouser.com/new/raspberry-pi/raspberry-pi-ai-camera/)

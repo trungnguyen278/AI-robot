@@ -1,28 +1,28 @@
-# <Tên linh kiện>
+# <Part name>
 
-> Ghi chú linh kiện — tạo theo skill `hardware-change`. Cập nhật: YYYY-MM-DD.
+> Component note, created with skill `hardware-change`. Last updated: YYYY-MM-DD.
 
-- **Vai trò trong robot:**
-- **Mẫu / phiên bản chính xác:**
-- **Số lượng:**
-- **Nối với:** (Pi 5 / ESP32-S3 / nhánh nguồn nào)
+- **Role in the robot:**
+- **Exact model / variant:**
+- **Quantity:**
+- **Connected to:** (Pi 5 / ESP32-S3 / which power rail)
 
-## Thông số chính
+## Key specifications
 
-| Thông số | Giá trị | Nguồn |
+| Parameter | Value | Source |
 |---|---|---|
-| Điện áp hoạt động | | |
-| Dòng thường / đỉnh | | |
-| Giao tiếp | | |
+| Operating voltage | | |
+| Typical / peak current | | |
+| Interface | | |
 
-Ghi "chưa xác minh" cạnh giá trị chỉ có nguồn thứ cấp hoặc tự suy luận.
+Mark values backed only by secondary sources or by inference as **unverified**.
 
-## Chân & kết nối
+## Pins and wiring
 
-## Lưu ý cho robot này
+## Notes for this robot
 
-## Câu hỏi còn mở
+## Open questions
 
-## Nguồn tham khảo (tra YYYY-MM-DD)
+## References (retrieved YYYY-MM-DD)
 
-- [Tên tài liệu](https://...)
+- [Document title](https://...)

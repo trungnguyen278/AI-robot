@@ -1,18 +1,14 @@
-# Nhật ký phát triển
+# Development log
 
-Mỗi tháng một file `YYYY-MM.md`, mục mới thêm vào cuối. Cách ghi: skill `devlog`.
+One file per month, named `YYYY-MM.md`, with new entries appended at the end. How to write entries: skill `devlog`.
 
-Mẫu một mục:
+Entry template:
 
 ```markdown
-## YYYY-MM-DD — <tiêu đề ngắn>
+## YYYY-MM-DD — <short title>
 
-**Đã làm:** …
-**Quyết định:** … (link ADR nếu có)
-**Vấn đề / còn dở:** …
-**Bước tiếp theo:** …
+**Done:** …
+**Decisions:** … (link ADRs)
+**Problems / unfinished:** …
+**Next:** …
 ```
-
-| Tháng | |
-|---|---|
-| [2026-10](2026-10.md) | Khởi tạo dự án |

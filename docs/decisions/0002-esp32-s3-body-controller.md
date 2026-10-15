@@ -1,33 +1,33 @@
-# 0002 — ESP32-S3 làm body-controller, chỉ lo I/O thời gian thực
+# 0002 — ESP32-S3 as body controller for real-time I/O only
 
-- **Trạng thái:** Đã chấp nhận
-- **Ngày:** 2026-10-15
+- **Status:** Accepted
+- **Date:** 2026-10-15
 
-## Bối cảnh
+## Context
 
-- Linux trên Pi 5 không đảm bảo thời gian thực, trong khi đếm encoder, điều khiển servo bus và dừng khẩn cấp cần độ trễ ổn định.
-- Thân robot có 8 servo bus STS3215, 2 động cơ MG540 có encoder, cảm biến ToF VL53L1X, LED NeoPixel.
-- **Pi 5 có sẵn Wi-Fi (802.11ac, 2.4/5 GHz) và Bluetooth 5.0/BLE** (chip Infineon CYW43455) → không cần ESP làm card mạng.
+- Linux on the Pi 5 is not real-time, while counting encoder pulses, driving the servo bus and stopping in an emergency all need predictable latency.
+- The body has 8 STS3215 bus servos, 2 MG540 motors with encoders, a VL53L1X ToF sensor and NeoPixel LEDs.
+- **The Pi 5 has built-in Wi-Fi (802.11ac, 2.4/5 GHz) and Bluetooth 5.0/BLE** (Infineon CYW43455), so no ESP is needed as a network card.
 
-## Quyết định
+## Decision
 
-Dùng **ESP32-S3** (ESP32-S3-DevKitC-1) làm **body-controller**: servo, động cơ + encoder, cảm biến, LED, đo pin, watchdog an toàn. Pi 5 lo mạng (Wi-Fi/BLE), AI, audio, thị giác, khuôn mặt. Hai bên nói chuyện bằng giao thức trong [`protocol/`](../../protocol/README.md).
+Use an **ESP32-S3** (ESP32-S3-DevKitC-1) as the **body controller**: servos, motors and encoders, sensors, LEDs, battery voltage and a safety watchdog. The Pi 5 handles networking (Wi-Fi/BLE), AI, audio, vision and the face. They communicate through the protocol in [`protocol/`](../../protocol/README.md).
 
-## Phương án đã cân nhắc
+## Alternatives considered
 
-| Phương án | Vì sao không chọn |
+| Alternative | Why not |
 |---|---|
-| ESP làm card Wi-Fi cho Pi | Pi 5 đã có Wi-Fi/BLE. Nếu khung kim loại làm yếu sóng → dùng USB Wi-Fi có ăng-ten ngoài, đơn giản hơn nhiều so với bắc cầu mạng qua ESP. |
-| Pi điều khiển trực tiếp mọi thứ | Không thời gian thực; servo bus half-duplex và encoder dễ lỗi khi Linux bận; robot mất an toàn khi Pi treo. |
-| MCU khác (RP2040/RP2350, STM32) | Khả thi. Chọn ESP32-S3 vì đã quen ESP-IDF từ thế hệ trước và ngoại vi đủ dùng (PCNT cho encoder, RMT cho NeoPixel, nhiều UART). |
+| ESP as the Pi's Wi-Fi card | The Pi 5 already has Wi-Fi and BLE. If the metal chassis weakens the signal, a USB Wi-Fi adapter with an external antenna is far simpler than bridging the network through an ESP. |
+| Pi drives everything directly | Not real-time; the half-duplex servo bus and the encoders misbehave when Linux is busy, and the robot is unsafe if the Pi hangs. |
+| Another MCU (RP2040/RP2350, STM32) | Viable. The ESP32-S3 was chosen for existing ESP-IDF experience and sufficient peripherals (PCNT for encoders, RMT for NeoPixel, several UARTs). |
 
-## Hệ quả
+## Consequences
 
-- Tốt: điều khiển ổn định; robot tự dừng an toàn khi Pi treo/khởi động lại; tái dùng kinh nghiệm ESP-IDF.
-- Phải chấp nhận: thêm một codebase firmware và một giao thức phải giữ khớp → định nghĩa một lần trong `protocol/` (thế hệ trước phải đồng bộ tay hai bản `StateTypes`).
-- Việc cần làm tiếp: chốt định dạng giao thức và kênh vật lý (UART dự kiến) bằng ADR.
+- Positive: stable control; the robot stops safely if the Pi hangs or reboots; ESP-IDF experience carries over.
+- Negative / accepted trade-offs: one more firmware codebase and a protocol to keep consistent — hence a single definition in `protocol/` (the previous generation hand-synchronized two copies of `StateTypes`).
+- Follow-up: decide the protocol format and the physical link (UART planned) in an ADR.
 
-## Nguồn
+## References
 
-- Wi-Fi/BLE của Pi 5: [product brief](https://cdn.sparkfun.com/assets/9/9/0/d/e/raspberry-pi-5-product-brief.pdf), [CYW43455 trên Pi 5](https://wifidiving.substack.com/p/raspberry-pi-5-in-built-wifi).
+- Pi 5 Wi-Fi/BLE: [product brief](https://cdn.sparkfun.com/assets/9/9/0/d/e/raspberry-pi-5-product-brief.pdf), [CYW43455 on the Pi 5](https://wifidiving.substack.com/p/raspberry-pi-5-in-built-wifi).
 - Concept v0: [`hardware/images/concept-v0.webp`](../../hardware/images/concept-v0.webp).

@@ -1,19 +1,19 @@
 # body-controller (ESP32-S3)
 
-> Trống — vai trò xem [ADR-0002](../../docs/decisions/0002-esp32-s3-body-controller.md).
+> Empty — the role is defined in [ADR-0002](../../docs/decisions/0002-esp32-s3-body-controller.md).
 
-## Nhiệm vụ
+## Responsibilities
 
-- Servo bus STS3215 × 8 (cổ 2 + tay 3 + 3) — half-duplex, cần mạch chuyển.
-- Động cơ MG540 × 2: điều khiển driver + đọc encoder (dự kiến PCNT).
-- VL53L1X (I2C), LED NeoPixel (dự kiến RMT).
-- Đo điện áp pin (ADC + cầu chia áp).
-- **An toàn:** mất heartbeat từ Pi quá ngưỡng → dừng động cơ, đưa servo về trạng thái an toàn.
+- STS3215 servo bus × 8 (neck 2 + arms 3 + 3) — half-duplex, needs an adapter.
+- MG540 motors × 2: drive the motor driver and read the encoders (PCNT planned).
+- VL53L1X (I2C) and NeoPixel LEDs (RMT planned).
+- Battery voltage (ADC + voltage divider).
+- **Safety:** if the Pi's heartbeat is lost beyond a threshold, stop the motors and bring the servos to a safe state.
 
-## Không làm
+## Out of scope
 
-- Không dùng Wi-Fi/BLE của ESP32-S3 — mạng do Pi 5 lo.
+- The ESP32-S3's Wi-Fi and BLE stay unused — networking belongs to the Pi 5.
 
-## Liên kết với Pi
+## Link to the Pi
 
-UART (dự kiến); giao thức định nghĩa trong [`protocol/`](../../protocol/README.md). Chân: [`hardware/pinmap.md`](../../hardware/pinmap.md).
+UART (planned), using the protocol defined in [`protocol/`](../../protocol/README.md). Pins: [`hardware/pinmap.md`](../../hardware/pinmap.md).

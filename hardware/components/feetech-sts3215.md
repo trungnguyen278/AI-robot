@@ -1,35 +1,35 @@
-# FEETECH STS3215 — servo bus
+# FEETECH STS3215 — bus servo
 
-> Cập nhật: 2026-10-15. Nguồn chủ yếu là trang shop → đối chiếu lại datasheet Feetech khi có.
+> Last updated: 2026-10-15. Sources are mostly shop listings → re-check against the Feetech datasheet when available.
 
-- **Vai trò:** cổ 2 DOF + mỗi tay 3 DOF.
-- **Mẫu:** bản **12V** (ST-3215-C018, "30 kg·cm"). Cùng tên STS3215 còn có bản 6–8.4V (19.5 kg·cm) — **không cấp 12V cho bản đó**.
-- **Số lượng:** 8.
-- **Nối với:** ESP32-S3 qua mạch servo bus half-duplex; nguồn nhánh 12V.
+- **Role in the robot:** 2-DOF neck and 3-DOF per arm.
+- **Exact model / variant:** the **12 V** version (ST-3215-C018, "30 kg·cm"). The STS3215 name is also used for a 6–8.4 V version (19.5 kg·cm) — **never feed that one 12 V**.
+- **Quantity:** 8
+- **Connected to:** the ESP32-S3 through a half-duplex servo bus adapter; 12 V servo branch.
 
-## Thông số
+## Key specifications
 
-| Thông số | Bản 12V | Bản 7.4V | Nguồn |
+| Parameter | 12 V version | 7.4 V version | Source |
 |---|---|---|---|
-| Điện áp | 4–14 V (danh định 12 V) | 6–7.4 V (danh định 7.4 V) | RobotShop; Eckstein |
-| Mô-men stall | 30 kg·cm @12V | 19.5 kg·cm @7.4V | RobotShop; Sigmanortec |
-| Dòng stall | 2.7 A @12V | 2.0 A @6V | RobotShop; Eckstein |
-| Dòng không tải | 180 mA | — | RobotShop |
-| Tốc độ không tải | 0.222 s/60° | — | RobotShop |
-| Encoder | Từ, 12-bit: 4096 bước/360° | (chung) | Nhiều nguồn |
-| Giao tiếp | TTL nối tiếp **half-duplex**, 38400 bps – 1 Mbps, ID 0–253 | (chung) | RobotShop |
-| Phản hồi | Vị trí, tốc độ, điện áp, dòng, tải | (chung) | Nhiều nguồn |
-| Kích thước / khối lượng | 45.2 × 24.7 × 35 mm, ~55 g | (chung) | Nhiều nguồn |
+| Voltage | 4–14 V (nominal 12 V) | 6–7.4 V (nominal 7.4 V) | RobotShop; Eckstein |
+| Stall torque | 30 kg·cm at 12 V | 19.5 kg·cm at 7.4 V | RobotShop; Sigmanortec |
+| Stall current | 2.7 A at 12 V | 2.0 A at 6 V | RobotShop; Eckstein |
+| No-load current | 180 mA | — | RobotShop |
+| No-load speed | 0.222 s/60° | — | RobotShop |
+| Encoder | Magnetic, 12-bit: 4096 steps per 360° | (shared) | Several sources |
+| Interface | **Half-duplex** TTL serial, 38400 bps – 1 Mbps, IDs 0–253 | (shared) | RobotShop |
+| Feedback | Position, speed, voltage, current, load | (shared) | Several sources |
+| Size / weight | 45.2 × 24.7 × 35 mm, ~55 g | (shared) | Several sources |
 
-## Lưu ý cho robot này
+## Notes for this robot
 
-- Half-duplex một dây → **không nối thẳng TX/RX của ESP32**; cần bus servo adapter hoặc mạch đệm 3 trạng thái (kiểu 74HC126) + chân điều hướng.
-- 8 con × 2.7 A stall = **~21.6 A** nếu kẹt cùng lúc → nhánh servo cần cầu chì riêng, dây đủ tiết diện, nguồn chịu được dòng đỉnh. Thực tế thường thấp hơn nhiều, nhưng bảo vệ phải thiết kế theo trường hợp xấu.
-- STS3215 cũng là servo của tay robot SO-100/SO-101 (dự án LeRobot) → có thể tham khảo nếu thiết kế lại tay.
+- Single-wire half-duplex → **do not wire the ESP32 TX/RX directly**; use a bus servo adapter or a tri-state buffer (e.g. 74HC126) with a direction pin.
+- 8 servos × 2.7 A stall = **~21.6 A** if they all stall at once → the servo branch needs its own fuse, adequately sized wiring and a supply that can handle the peaks. Real-world current is usually far lower, but protection must be designed for the worst case.
+- The STS3215 is also the servo used by the SO-100/SO-101 arms of the LeRobot project — a useful reference if the arms are redesigned.
 
-## Nguồn tham khảo (tra 2026-10-15)
+## References (retrieved 2026-10-15)
 
 - [RobotShop — FeeTech 12V 30kg.cm STS3215](https://uk.robotshop.com/products/feetech-12v-30kgcm-magnetic-encoding-servo-sts3215)
 - [Eckstein — STS3215 / ST-3215-C018](https://eckstein-shop.de/Motors?mf=1602)
-- [Eckstein — STS3215 bản 7.4V](https://eckstein-shop.de/Motors?mf=1611)
-- [Sigmanortec — STS3215 7.4V](https://sigmanortec.ro/en/servo-smart-serial-sts3215-360-degrees-19kg-12-bit-encoder-74v)
+- [Eckstein — STS3215, 7.4 V version](https://eckstein-shop.de/Motors?mf=1611)
+- [Sigmanortec — STS3215, 7.4 V](https://sigmanortec.ro/en/servo-smart-serial-sts3215-360-degrees-19kg-12-bit-encoder-74v)

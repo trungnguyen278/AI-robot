@@ -1,28 +1,28 @@
-# 0003 — Tên repo mô tả, không chứa tên sản phẩm
+# 0003 — Descriptive repository names without the product name
 
-- **Trạng thái:** Đã chấp nhận
-- **Ngày:** 2026-10-15
+- **Status:** Accepted
+- **Date:** 2026-10-15
 
-## Bối cảnh
+## Context
 
-- Tên sản phẩm đã đổi một lần (PTalk → Luni) và có thể còn đổi.
-- Lần đổi tên trước làm bằng find-replace và làm hỏng code: `sounddevice` → `sounddLunice`, `DEVICE_MODEL` → `DLuniCE_MODEL`.
-- Tên chỉ có "robot" thì quá chung, khó tìm; "robot" + "device" thì thừa.
+- The product has been renamed once (PTalk → Luni) and may be renamed again.
+- The last rename was a find-and-replace that broke code: `sounddevice` became `sounddLunice` and `DEVICE_MODEL` became `DLuniCE_MODEL`.
+- A bare "robot" is too generic to find; "robot" plus "device" is redundant.
 
-## Quyết định
+## Decision
 
-- Repo đặt theo mô tả: `ai-robot` (robot), `ai-robot-server` (server), `ai-robot-app` (app); chữ thường + gạch ngang (tên image Docker/GHCR bắt buộc chữ thường).
-- Tên sản phẩm (hiển thị trên màn, BLE, app) **không** xuất hiện trong tên repo, package hay identifier; chỉ nằm trong **một** file cấu hình (tạo cùng code đầu tiên).
+- Repositories are named by what they are: `ai-robot` (robot), `ai-robot-server` (backend) and `ai-robot-app` (mobile app), lowercase with hyphens (Docker/GHCR image names must be lowercase).
+- The product name (shown on the display, over BLE and in the app) **never** appears in repository, package or identifier names. It lives in **a single configuration file**, created together with the first code.
 
-## Phương án đã cân nhắc
+## Alternatives considered
 
-| Phương án | Vì sao không chọn |
+| Alternative | Why not |
 |---|---|
-| Tên sản phẩm làm tiền tố (`Luni_*`) | Đổi tên sản phẩm kéo theo đổi repo và code. |
-| Tên chỉ theo vai trò (`robot-device`, …) | Không gợi nhớ, khó tìm. |
-| Tên mã (codename) | Thêm một cái tên phải nhớ; người dùng chọn tên mô tả. |
+| Product name as a prefix (`Luni_*`) | A product rename forces repository and code renames. |
+| Role-only names (`robot-device`, …) | Not memorable and hard to find. |
+| A codename | One more name to remember; descriptive names were preferred. |
 
-## Hệ quả
+## Consequences
 
-- Đổi tên sản phẩm sau này = sửa một file cấu hình.
-- Nếu thật sự cần, GitHub vẫn cho đổi tên repo và tự chuyển hướng link cũ.
+- Renaming the product later means editing one configuration file.
+- GitHub still allows renaming a repository (old links redirect) if it is ever really needed.
