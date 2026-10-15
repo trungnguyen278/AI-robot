@@ -8,5 +8,7 @@ Each significant decision is a short file: context, decision, alternatives consi
 | # | Decision | Status | Date |
 |---|---|---|---|
 | [0001](0001-raspberry-pi-5-8gb.md) | Raspberry Pi 5 (8 GB) as the robot's brain | Accepted | 2026-10-15 |
-| [0002](0002-esp32-s3-body-controller.md) | ESP32-S3 as body controller for real-time I/O only | Accepted | 2026-10-15 |
+| [0002](0002-esp32-s3-body-controller.md) | ESP32-S3 as body controller for real-time I/O only | Superseded by [0004](0004-pi-software-first.md) | 2026-10-15 |
 | [0003](0003-neutral-repo-naming.md) | Descriptive repository names without the product name | Accepted | 2026-10-15 |
+| [0004](0004-pi-software-first.md) | Raspberry Pi software first; body controller not chosen yet | Accepted | 2026-10-15 |
+| [0005](0005-pi-software-platform.md) | Pi software platform: Raspberry Pi OS, Python with C++ extensions, no ROS 2 for now | Proposed | 2026-10-15 |

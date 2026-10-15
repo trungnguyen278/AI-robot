@@ -1,6 +1,6 @@
 # 0002 — ESP32-S3 as body controller for real-time I/O only
 
-- **Status:** Accepted
+- **Status:** Superseded by [0004](0004-pi-software-first.md)
 - **Date:** 2026-10-15
 
 ## Context

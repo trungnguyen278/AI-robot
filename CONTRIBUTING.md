@@ -5,7 +5,7 @@ These conventions apply to everyone working in this repository — people and AI
 ## Design rules
 
 1. **The Pi ⇄ module protocol is defined once**, in `protocol/`. Both sides generate from or share it; never hand-copy definitions.
-2. **No ESP as a network card.** The Raspberry Pi 5 has built-in Wi-Fi and Bluetooth LE; the ESP32-S3 handles real-time I/O only ([ADR-0002](docs/decisions/0002-esp32-s3-body-controller.md)).
+2. **Networking belongs to the Pi.** The Raspberry Pi 5 has built-in Wi-Fi and Bluetooth LE; the body microcontroller handles real-time I/O only ([ADR-0004](docs/decisions/0004-pi-software-first.md)).
 3. **Never hard-code the product name.** The display name (screen, BLE, app) lives in a single configuration file; repositories, packages and identifiers use neutral, descriptive names ([ADR-0003](docs/decisions/0003-neutral-repo-naming.md)).
 4. **Electrical safety.** Never power servos or motors from the Pi's 5 V rail. The emergency stop must cut motors and servos. The body controller must bring the robot to a safe state when the Pi's heartbeat is lost.
 
