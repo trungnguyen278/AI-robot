@@ -75,4 +75,4 @@ For each suspicion, write the smallest script that shows it: `python -c` against
 
 ## 5. Report
 
-When handing the pull request over, list what the review found and how each item was fixed, or why it was left; say what was not checked (for example, nothing runs on a Raspberry Pi yet).
+When handing the change over, say in the conversation what the review found and how each item was fixed, or why it was left, and what was not checked (for example, nothing runs on a Raspberry Pi yet). Keep it out of the commit message and the pull request description, which stay short (CONTRIBUTING.md).

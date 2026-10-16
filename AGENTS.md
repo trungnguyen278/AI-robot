@@ -8,6 +8,11 @@ Guidance for AI coding assistants working in this repository. Read [README.md](R
 - Check the newest file in `docs/devlog/` to see where things stand, and add an entry when a work session ends.
 - Never make a decision on someone's behalf: record significant decisions as ADRs in `docs/decisions/`, and leave anything that has not been explicitly agreed as `Proposed`.
 - Never state hardware specifications from memory: look them up and cite the source.
+- Keep commit messages and pull request descriptions short, as [CONTRIBUTING.md](CONTRIBUTING.md#commits) says:
+  - a subject, and at most a few lines on why;
+  - for a pull request, a few sentences and the template's checklist.
+
+  Lists of files, settings and tests, and what a review found, go in the conversation or the dev log, never in git.
 - **No hard-coded values.** Before writing a number, a name or a duration in code, decide where it belongs:
   - a value someone may want to tune (a timing, a rate, a limit, a threshold, a colour, a hardware value) goes in the component's configuration (`software/config/base.toml` for the robot software), with a comment. The code takes it as a required setting, with no default, so that the configuration shows what the robot really uses;
   - a value a protocol fixes (a version, a code, a field's limit) lives in `protocol/` and, once, in the code that speaks the protocol, named and pointing to the spec;

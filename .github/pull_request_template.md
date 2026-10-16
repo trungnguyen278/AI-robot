@@ -1,20 +1,14 @@
 ## Summary
 
-<!-- What changes and why -->
-
-## Changes
-
--
+<!-- A few sentences: what changes and why. The diff shows the details. -->
 
 ## Testing
 
-<!-- How it was verified: on the real Pi, on the ESP32, in simulation, unit tests… -->
-
--
+<!-- One line: how it was verified (unit tests, simulation, on the Pi, on the body controller…). -->
 
 ## Checklist
 
-- [ ] Commits follow Conventional Commits
+- [ ] Commits follow Conventional Commits, with a short message
 - [ ] Hardware changes → `hardware/` updated (BOM, pin map, power tree)
 - [ ] Protocol changes → `protocol/` and both sides updated
 - [ ] Significant decision → ADR added
