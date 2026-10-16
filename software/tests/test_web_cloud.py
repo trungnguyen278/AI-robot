@@ -199,18 +199,29 @@ LAMP = Capability(
 CHANGED = EventKind("lamp.changed", "The lamp changed", SWITCH)
 
 
-@pytest.fixture(autouse=True)
-def _quick(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Reconnect at once, so that the tests do not wait."""
-    monkeypatch.setattr(adapter, "RECONNECT_FIRST", 0.01)
+# The link's settings, as shipped, but reconnecting at once so that the tests do not wait.
+SETTINGS = {
+    "connect_timeout": 10.0,
+    "hello_timeout": 5.0,
+    "ping_after": 10.0,
+    "send_timeout": 5.0,
+    "close_timeout": 2.0,
+    "reconnect_first": 0.01,
+    "reconnect_max": 60.0,
+    "rate": 50.0,
+    "burst": 100,
+    "catalogue_ttl": 60.0,
+}
 
 
 @contextlib.asynccontextmanager
-async def linked(cloud: FakeCloud | None = None) -> AsyncIterator[tuple[WebSocketCloud, Any]]:
+async def linked(
+    cloud: FakeCloud | None = None, **settings: Any
+) -> AsyncIterator[tuple[WebSocketCloud, Any]]:
     """A fake cloud and an open link to it that offered ``LAMP`` and ``CHANGED``."""
     cloud = cloud or FakeCloud()
     await cloud.start()
-    link = WebSocketCloud(url=cloud.url)
+    link = WebSocketCloud(url=cloud.url, **{**SETTINGS, **settings})
     await link.open()
     try:
         await link.offer([LAMP], [CHANGED])
@@ -470,14 +481,9 @@ def test_a_resent_message_acts_only_once() -> None:
     asyncio.run(main())
 
 
-def test_too_many_messages_are_dropped_and_reported_now_and_then(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(adapter, "BURST", 3)
-    monkeypatch.setattr(adapter, "RATE", 20.0)
-
+def test_too_many_messages_are_dropped_and_reported_now_and_then() -> None:
     async def main() -> None:
-        async with linked() as (link, cloud):
+        async with linked(burst=3, rate=20.0) as (link, cloud):
             connection = await online(link, cloud)
             for _ in range(40):  # a flood, while the bucket keeps refilling a little
                 await connection.send({"type": "mood.changed", "mood": "calm"})
@@ -518,13 +524,9 @@ def test_a_call_in_progress_ends_with_its_session() -> None:
     asyncio.run(main())
 
 
-def test_without_a_hello_from_the_cloud_the_robot_hangs_up(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(adapter, "HELLO_TIMEOUT", 0.2)
-
+def test_without_a_hello_from_the_cloud_the_robot_hangs_up() -> None:
     async def main() -> None:
-        async with linked(FakeCloud(answer=False)) as (_, cloud):
+        async with linked(FakeCloud(answer=False), hello_timeout=0.2) as (_, cloud):
             connection = await cloud.next_connection()
             await asyncio.wait_for(connection.closed.wait(), TIMEOUT)
             assert connection.close_code == 4001
@@ -547,7 +549,7 @@ def test_the_robot_says_goodbye_when_it_stops() -> None:
     async def main() -> None:
         cloud = FakeCloud()
         await cloud.start()
-        link = WebSocketCloud(url=cloud.url)
+        link = WebSocketCloud(url=cloud.url, **SETTINGS)
         await link.open()
         try:
             await link.offer([LAMP], [CHANGED])
@@ -624,7 +626,28 @@ def test_audio_frames_are_ignored_and_oversized_ones_end_the_session() -> None:
 )
 def test_addresses_are_checked(url: str, allowed: bool) -> None:
     if allowed:
-        assert WebSocketCloud(url=url).url == url
+        assert WebSocketCloud(url=url, **SETTINGS).url == url
     else:
         with pytest.raises(ValueError, match="url"):
-            WebSocketCloud(url=url)
+            WebSocketCloud(url=url, **SETTINGS)
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"reconnect_max": 0.001}, "reconnect_max must not be below reconnect_first"),
+        ({"burst": 0}, "burst must be at least 1"),
+        ({"catalogue_ttl": -1.0}, "catalogue_ttl must not be negative"),
+        ({"hello_timeout": 0}, "hello_timeout must be a positive number"),
+    ],
+)
+def test_settings_are_checked(change: dict[str, Any], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        WebSocketCloud(url="wss://cloud.example/robot", **{**SETTINGS, **change})
+
+
+@pytest.mark.parametrize("reason", ["é" * 100, "a" + "é" * 100, "stopping"])
+def test_a_close_reason_fits_its_frame_and_stays_utf8(reason: str) -> None:
+    cut = adapter._close_reason(reason)
+    assert len(cut) <= 123  # RFC 6455: the reason and its 2-byte code fit 125 bytes
+    assert reason.startswith(cut.decode("utf-8"))  # valid UTF-8, nothing invented

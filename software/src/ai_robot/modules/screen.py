@@ -14,7 +14,7 @@ from typing import Any, Generic, TypeVar
 
 from ai_robot.core.bus import Message, Subscription
 from ai_robot.core.capabilities import CapabilityHost
-from ai_robot.core.checks import finite
+from ai_robot.core.checks import finite, positive
 from ai_robot.core.config import protocol_dir
 from ai_robot.core.module import Module, ModuleContext
 from ai_robot.messages import (
@@ -46,13 +46,10 @@ INTERACTION_EXPRESSIONS: dict[InteractionState, str | None] = {
 }
 INTERACTION_SOURCE = "interaction"  # the source of the requests made for the conversation
 
-VOICE_INTERVAL = 0.04  # seconds between two voice levels sent to the screen (25 per second)
-
-# The sources of the cloud's requests, and how long a reaction lasts unless it says.
+# The sources of the cloud's requests.
 CLOUD_REACTION = "cloud.reaction"
 CLOUD_MOOD = "cloud.mood"
 CLOUD_SCENE = "cloud.scene"
-REACTION_SECONDS = 3.0
 
 TOUCHED = EventKind(
     "screen.touched",
@@ -103,9 +100,17 @@ def _data_schema(fields: Mapping[str, Any]) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "additionalProperties": False}
 
 
-def capabilities(vocabulary: Mapping[str, Any]) -> list[Capability]:
+def capabilities(
+    vocabulary: Mapping[str, Any],
+    *,
+    reaction_seconds: float,
+    reaction_max_seconds: float,
+    scene_max_seconds: float,
+) -> list[Capability]:
     """What the cloud can ask of the screen, from the screen protocol's vocabulary, so
-    that the cloud sees exactly the expressions, colours and scenes the renderer draws."""
+    that the cloud sees exactly the expressions, colours and scenes the renderer draws.
+    A reaction lasts ``reaction_seconds`` unless the cloud says, up to
+    ``reaction_max_seconds``; a scene, up to ``scene_max_seconds``."""
     expressions = dict(vocabulary["expressions"])
     looks = "; ".join(f"{name}: {look}" for name, look in expressions.items())
     tone = {
@@ -133,9 +138,9 @@ def capabilities(vocabulary: Mapping[str, Any]) -> list[Capability]:
                     },
                     "seconds": {
                         "type": "number",
-                        "minimum": 0.5,
-                        "maximum": 30,
-                        "description": f"How long; {REACTION_SECONDS:g} when missing",
+                        "exclusiveMinimum": 0,
+                        "maximum": reaction_max_seconds,
+                        "description": f"How long; {reaction_seconds:g} when missing",
                     },
                     "tone": tone,
                 },
@@ -186,8 +191,8 @@ def capabilities(vocabulary: Mapping[str, Any]) -> list[Capability]:
                     "data": {"type": "object", "description": "What the scene shows"},
                     "seconds": {
                         "type": "number",
-                        "minimum": 1,
-                        "maximum": 86400,
+                        "exclusiveMinimum": 0,
+                        "maximum": scene_max_seconds,
                         "description": "How long; until replaced or removed when missing",
                     },
                 },
@@ -284,13 +289,30 @@ class ScreenModule(Module):
 
     owns = ("screen",)
 
-    def __init__(self, ctx: ModuleContext, *, quiet_db: float, loud_db: float) -> None:
+    def __init__(
+        self,
+        ctx: ModuleContext,
+        *,
+        quiet_db: float,
+        loud_db: float,
+        voice_rate: float,
+        reaction_seconds: float,
+        reaction_max_seconds: float,
+        scene_max_seconds: float,
+    ) -> None:
         super().__init__(ctx)
         # The microphone's loudness, in dBFS, that maps to a voice level of 0 and of 1.
         self.quiet_db = finite("quiet_db", quiet_db)
         self.loud_db = finite("loud_db", loud_db)
         if self.loud_db <= self.quiet_db:
             raise ValueError("loud_db must be above quiet_db")
+        # Seconds between two voice levels sent to the screen.
+        self.voice_interval = 1 / positive("voice_rate", voice_rate)
+        self.reaction_seconds = positive("reaction_seconds", reaction_seconds)
+        self.reaction_max_seconds = positive("reaction_max_seconds", reaction_max_seconds)
+        if self.reaction_seconds > self.reaction_max_seconds:
+            raise ValueError("reaction_seconds must not exceed reaction_max_seconds")
+        self.scene_max_seconds = positive("scene_max_seconds", scene_max_seconds)
         self.screen = self.port("screen", Screen)
         self.faces: Arbiter[Face] = Arbiter()
         self.scenes: Arbiter[Scene] = Arbiter()
@@ -318,7 +340,12 @@ class ScreenModule(Module):
     async def start(self) -> None:
         await self._refresh()
         vocabulary = await asyncio.to_thread(load_vocabulary)
-        offered = capabilities(vocabulary)
+        offered = capabilities(
+            vocabulary,
+            reaction_seconds=self.reaction_seconds,
+            reaction_max_seconds=self.reaction_max_seconds,
+            scene_max_seconds=self.scene_max_seconds,
+        )
         handlers = (self._show_expression, self._set_mood, self._show_scene)
         for capability, handler in zip(offered, handlers, strict=True):
             self.capabilities.add(capability, handler)
@@ -385,7 +412,7 @@ class ScreenModule(Module):
         await self._refresh()
 
     async def _on_level(self, message: SoundLevel) -> None:
-        if self.listening and self._now() - self._level_sent_at >= VOICE_INTERVAL:
+        if self.listening and self._now() - self._level_sent_at >= self.voice_interval:
             await self._send_level(self.loudness(message.rms))
 
     async def _on_gaze(self, message: LookAt) -> None:
@@ -443,7 +470,7 @@ class ScreenModule(Module):
 
     async def _show_expression(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         face = Face(arguments["expression"], arguments.get("tone"))
-        seconds = arguments.get("seconds", REACTION_SECONDS)
+        seconds = arguments.get("seconds", self.reaction_seconds)
         self.faces.put(
             CLOUD_REACTION, face, priority=ScreenPriority.REACTION, expires=self._expires(seconds)
         )

@@ -21,8 +21,6 @@ from ai_robot.core.module import ModuleContext, RobotInfo
 from ai_robot.messages import ExpressionRequest, SceneRequest, ScreenPriority, ScreenTouched
 from ai_robot.modules.behavior import (
     AMBIENT,
-    HAPPY_SECONDS,
-    LOVE_SECONDS,
     MOOD,
     REACTION,
     BehaviorModule,
@@ -71,6 +69,16 @@ def context(bus: Bus, daylight: Daylight) -> ModuleContext:
     )
 
 
+# The settings of the behavior module, as shipped, but looking at the time of day often.
+SETTINGS = {
+    "happy_seconds": 2.0,
+    "love_seconds": 3.0,
+    "taps_for_love": 3,
+    "tap_window": 2.0,
+    "night_check": 0.01,
+}
+
+
 def make(
     idle_minutes: float = 5.0,
     now: datetime = DAY,
@@ -82,9 +90,9 @@ def make(
         context(bus, daylight or FakeDaylight()),
         idle_minutes=idle_minutes,
         sleepy_after_sunset=sleepy_after_sunset,
+        **SETTINGS,
     )
     module.clock = lambda: now
-    module.night_check = 0.01
     return bus, module
 
 
@@ -114,8 +122,8 @@ def test_a_tap_pleases_and_quick_taps_delight() -> None:
         bus, module = make()
         faces = bus.subscribe(ExpressionRequest)
         async with running(module):
-            happy = ExpressionRequest(REACTION, "happy", duration=HAPPY_SECONDS)
-            love = ExpressionRequest(REACTION, "love", duration=LOVE_SECONDS)
+            happy = ExpressionRequest(REACTION, "happy", duration=SETTINGS["happy_seconds"])
+            love = ExpressionRequest(REACTION, "love", duration=SETTINGS["love_seconds"])
             for expected in (happy, happy, love):
                 bus.publish(tap())
                 assert await next_of(faces) == expected
@@ -224,10 +232,16 @@ def test_nothing_happens_on_a_quiet_day() -> None:
 
 def test_settings_are_checked() -> None:
     ctx = context(Bus(), FakeDaylight())
-    with pytest.raises(ConfigError, match="sleepy_after_sunset must be from 0 to 12"):
-        create(BehaviorModule, "modules.behavior", ctx, idle_minutes=5.0, sleepy_after_sunset=-1)
-    with pytest.raises(ConfigError, match="idle_minutes must be a positive number"):
-        create(BehaviorModule, "modules.behavior", ctx, idle_minutes=0, sleepy_after_sunset=0)
+    good = {"idle_minutes": 5.0, "sleepy_after_sunset": 0.0, **SETTINGS}
+    for change, message in [
+        ({"sleepy_after_sunset": -1}, "sleepy_after_sunset must be from 0 to 12"),
+        ({"idle_minutes": 0}, "idle_minutes must be a positive number"),
+        ({"taps_for_love": 0}, "taps_for_love must be at least 1"),
+        ({"tap_window": 0}, "tap_window must be a positive number"),
+        ({"night_check": -1}, "night_check must be a positive number"),
+    ]:
+        with pytest.raises(ConfigError, match=message):
+            create(BehaviorModule, "modules.behavior", ctx, **{**good, **change})
 
 
 def test_the_names_used_are_in_the_protocol() -> None:

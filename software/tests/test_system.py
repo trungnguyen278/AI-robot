@@ -13,11 +13,17 @@ from ai_robot.adapters.sim.body import SimLights, SimPower
 from ai_robot.core.bus import Bus
 from ai_robot.core.module import ModuleContext, RobotInfo
 from ai_robot.messages import BatteryReport, SceneRequest
-from ai_robot.modules.system import CHARGING_SCENE, CHARGING_SECONDS, SystemModule
+from ai_robot.modules.system import CHARGING_SCENE, SystemModule
 from ai_robot.ports import BatteryStatus
 
 VOCABULARY = Path(__file__).resolve().parents[2] / "protocol" / "screen" / "vocabulary.json"
 INTERVAL = 0.01
+CHARGING_SECONDS = 4.0
+SETTINGS = {
+    "battery_interval": INTERVAL,
+    "charging_scene_seconds": CHARGING_SECONDS,
+    "ready_color": [0, 40, 0],
+}
 
 
 def scenes_for(readings: list[bool | None]) -> list[SceneRequest]:
@@ -26,7 +32,7 @@ def scenes_for(readings: list[bool | None]) -> list[SceneRequest]:
 
     async def main() -> list[SceneRequest]:
         bus = Bus()
-        power = SimPower()
+        power = SimPower(voltage=7.4, percent=50.0, charging=False)
         ctx = ModuleContext(
             name="system",
             bus=bus,
@@ -34,7 +40,7 @@ def scenes_for(readings: list[bool | None]) -> list[SceneRequest]:
             robot=RobotInfo(display_name="Robot"),
             log=logging.getLogger("test"),
         )
-        module = SystemModule(ctx, battery_interval=INTERVAL)
+        module = SystemModule(ctx, **SETTINGS)
         requests = bus.subscribe(SceneRequest)
         reports = bus.subscribe(BatteryReport)
         await module.start()

@@ -34,7 +34,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 - **Adapter:** an implementation of a port, simulated or real (`adapters/`).
 - **Profile:** which adapter each port uses, and its settings (`config/profiles/`).
 
-Lifecycle: open every adapter → `start()` each module in the configured order → run all the modules' `run()` together → on Ctrl+C, SIGTERM or a failing module (also during startup), `stop()` the modules in reverse order → close the adapters. Each shutdown step gets at most 5 seconds; a second Ctrl+C forces the exit.
+Lifecycle: open every adapter → `start()` each module in the configured order → run all the modules' `run()` together → on Ctrl+C, SIGTERM or a failing module (also during startup), `stop()` the modules in reverse order → close the adapters. Each shutdown step gets at most `[app] shutdown_step_timeout` seconds; a second Ctrl+C forces the exit.
 
 ## Layout
 
@@ -120,6 +120,13 @@ battery_interval = 5.0   # passed to the module
 
 Settings become keyword arguments of the adapter's or module's constructor, so a misspelt or missing key, or a value of the wrong type, stops the robot at startup with a message that names the table. Secrets such as API keys never go into these files: read them from environment variables.
 
+**Every value worth tuning is in `config/base.toml`**, with a comment: timings, rates, limits, thresholds, colours, hardware values, and what the simulated hardware reports. The code takes each one as a required setting, with no default, so the file shows the values the robot really uses, and a test builds every module and every adapter from it (`tests/test_registry.py`). To change one value on one machine, copy its key into `local.toml`, which git ignores; `local.example.toml` shows how.
+
+What stays in the code, named once at the top of its file:
+- values a protocol fixes, with a pointer to its spec in `protocol/`;
+- facts, with their source;
+- details nobody needs to tune, such as how many message ids the cloud link remembers.
+
 ## Extending
 
 - **A module:** create `src/ai_robot/modules/<name>.py` with a `Module` subclass that lists its ports in `owns`; register it in `MODULES` (`modules/__init__.py`); add it to `[modules] enabled` in `config/base.toml`; add tests. When the file grows, turn it into a package (`modules/<name>/__init__.py` importing the class); the registry entry stays the same.
@@ -139,7 +146,7 @@ Settings become keyword arguments of the adapter's or module's constructor, so a
 
 - Each port has exactly one owner; modules talk only through the bus; hardware and services are reached only through ports.
 - Never block the event loop: run blocking library calls with `asyncio.to_thread`, and heavy computation in C++ or in another process.
-- Hardware values (sizes, rates, limits) live only in the configuration: adapters take them as required settings, with no defaults in code.
+- No hard-coded values: anything worth tuning lives only in the configuration, and the code takes it as a required setting, with no default (see [Configuration](#configuration)). The full rule is in [AGENTS.md](../AGENTS.md).
 - Motion commands expire (`ttl`, at most `max_ttl`), so a hung caller can never leave the robot moving; `motion` is the first module to stop.
 - Every C++ function has a pure-Python fallback with the same behavior, and a test that compares them.
 - The robot's display name lives only in `config/base.toml` ([ADR-0003](../docs/decisions/0003-neutral-repo-naming.md)).

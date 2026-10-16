@@ -1,5 +1,9 @@
-# Settings for one machine only. Copy this file to local.toml (git-ignored); it is
-# merged on top of the selected profile.
+# Settings for one machine only. Copy this file to local.toml, which git ignores, and
+# uncomment what you need. It is merged on top of base.toml and the selected profile:
+# a key set here changes that one value, and every other value stays as shipped.
+#
+# Any key of base.toml can be set here: copy its table header and the key, then change
+# the value. Every setting below is valid once uncommented (tests/test_registry.py).
 
 # [log]
 # level = "DEBUG"
@@ -26,3 +30,13 @@
 # adapter = "websocket"
 # [ports.cloud.websocket]
 # url = "wss://cloud.example/robot"
+# ping_after = 5.0  # ping sooner on a network that drops idle connections
+
+# Tune how the robot behaves, for example a longer smile after a tap:
+# [modules.behavior]
+# happy_seconds = 3.0
+
+# Try a low battery on its charger, without the hardware:
+# [ports.power.sim]
+# percent = 12.0
+# charging = true

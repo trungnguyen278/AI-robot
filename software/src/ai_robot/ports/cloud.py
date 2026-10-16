@@ -119,6 +119,13 @@ class Cloud(Port):
     """The link to the cloud. The cloud drives the robot through the capabilities the
     robot offers, and receives the events it subscribed to.
 
+    Like every port, it inherits ``open`` and ``close`` from ``Port``, and the
+    application calls them:
+    - ``open``, before the modules start, only prepares the link. The ``websocket``
+      adapter loads the protocol's schema and starts the task that connects; the
+      ``sim`` adapter needs nothing, so it keeps ``Port``'s empty ``open``.
+    - ``close``, after the modules stop, ends the session.
+
     The link opens no session until ``offer`` has been called, so that the first
     session already lists everything the robot can do. It reconnects on its own after
     a loss; ``status`` tells when the session opens and closes.

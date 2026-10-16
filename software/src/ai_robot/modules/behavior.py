@@ -27,19 +27,14 @@ REACTION = "behavior.reaction"
 MOOD = "behavior.mood"
 AMBIENT = "behavior.ambient"
 
-TAP_WINDOW = 2.0  # seconds within which taps count together
-TAPS_FOR_LOVE = 3  # taps within TAP_WINDOW that turn pleasure into delight
-HAPPY_SECONDS = 2.0
-LOVE_SECONDS = 3.0
-NIGHT_CHECK = 30.0  # seconds between two looks at the time of day
-
 
 class BehaviorModule(Module):
     """Decides what the robot does, and announces the interaction state.
 
     Until the robot can talk, it:
 
-    - reacts to taps on its screen: pleased, and delighted after a few quick ones;
+    - reacts to taps on its screen: pleased (``happy_seconds``), and delighted
+      (``love_seconds``) after ``taps_for_love`` taps within ``tap_window`` seconds;
     - shows the clock, the face watching it from a corner, once nobody has interacted
       for ``idle_minutes`` (the ambient screen of a smart display), until the next tap;
     - looks sleepy at night: from ``sleepy_after_sunset`` hours after sunset until
@@ -52,17 +47,32 @@ class BehaviorModule(Module):
     owns = ("daylight",)
 
     def __init__(
-        self, ctx: ModuleContext, *, idle_minutes: float, sleepy_after_sunset: float
+        self,
+        ctx: ModuleContext,
+        *,
+        idle_minutes: float,
+        sleepy_after_sunset: float,
+        happy_seconds: float,
+        love_seconds: float,
+        taps_for_love: int,
+        tap_window: float,
+        night_check: float,
     ) -> None:
         super().__init__(ctx)
         self.idle_seconds = 60 * positive("idle_minutes", idle_minutes)
         self.sleepy_delay = timedelta(
             hours=within("sleepy_after_sunset", sleepy_after_sunset, 0, 12)
         )
+        self.happy_seconds = positive("happy_seconds", happy_seconds)
+        self.love_seconds = positive("love_seconds", love_seconds)
+        if taps_for_love < 1:
+            raise ValueError(f"taps_for_love must be at least 1, got {taps_for_love}")
+        self.taps_for_love = taps_for_love
+        self.tap_window = positive("tap_window", tap_window)
         self.daylight = self.port("daylight", Daylight)
         # The local time, with its zone; tests replace it.
         self.clock: Callable[[], datetime] = lambda: datetime.now().astimezone()
-        self.night_check = NIGHT_CHECK
+        self.night_check = positive("night_check", night_check)
         self._suns: dict[date, SunTimes] = {}
         self._daylight_failing = False
         self.taps = self.bus.subscribe(ScreenTouched)
@@ -88,13 +98,13 @@ class BehaviorModule(Module):
         recent: deque[float] = deque()
         async for _ in self.taps:
             now = self._now()
-            while recent and now - recent[0] > TAP_WINDOW:
+            while recent and now - recent[0] > self.tap_window:
                 recent.popleft()
             recent.append(now)
-            if len(recent) >= TAPS_FOR_LOVE:
-                self.bus.publish(ExpressionRequest(REACTION, "love", duration=LOVE_SECONDS))
+            if len(recent) >= self.taps_for_love:
+                self.bus.publish(ExpressionRequest(REACTION, "love", duration=self.love_seconds))
             else:
-                self.bus.publish(ExpressionRequest(REACTION, "happy", duration=HAPPY_SECONDS))
+                self.bus.publish(ExpressionRequest(REACTION, "happy", duration=self.happy_seconds))
             self._interaction(now)
 
     def _interaction(self, now: float) -> None:

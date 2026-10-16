@@ -40,6 +40,14 @@ from ai_robot.ports import BatteryStatus
 
 VOCABULARY = Path(__file__).resolve().parents[2] / "protocol" / "screen" / "vocabulary.json"
 
+# The screen module's settings, as shipped in config/base.toml.
+SCREEN = {
+    "voice_rate": 25.0,
+    "reaction_seconds": 3.0,
+    "reaction_max_seconds": 30.0,
+    "scene_max_seconds": 86400.0,
+}
+
 
 def context(bus: Bus, screen: SimScreen) -> ModuleContext:
     return ModuleContext(
@@ -54,7 +62,8 @@ def context(bus: Bus, screen: SimScreen) -> ModuleContext:
 def make() -> tuple[Bus, SimScreen, ScreenModule]:
     bus = Bus()
     screen = SimScreen()
-    return bus, screen, ScreenModule(context(bus, screen), quiet_db=-50.0, loud_db=-10.0)
+    module = ScreenModule(context(bus, screen), quiet_db=-50.0, loud_db=-10.0, **SCREEN)
+    return bus, screen, module
 
 
 @contextlib.asynccontextmanager
@@ -276,8 +285,15 @@ def test_scene_data_must_convert_to_json(data: dict[str, object]) -> None:
 
 def test_settings_are_checked() -> None:
     ctx = context(Bus(), SimScreen())
-    with pytest.raises(ConfigError, match="loud_db must be above quiet_db"):
-        create(ScreenModule, "modules.screen", ctx, quiet_db=-10.0, loud_db=-50.0)
+    good = {"quiet_db": -50.0, "loud_db": -10.0, **SCREEN}
+    for change, message in [
+        ({"quiet_db": -10.0, "loud_db": -50.0}, "loud_db must be above quiet_db"),
+        ({"voice_rate": 0}, "voice_rate must be a positive number"),
+        ({"reaction_seconds": 40.0}, "reaction_seconds must not exceed reaction_max_seconds"),
+        ({"scene_max_seconds": -1}, "scene_max_seconds must be a positive number"),
+    ]:
+        with pytest.raises(ConfigError, match=message):
+            create(ScreenModule, "modules.screen", ctx, **{**good, **change})
     for duration in (0, -1, math.inf):
         with pytest.raises(ValueError, match="duration must be a positive number"):
             ExpressionRequest("behavior", "happy", duration=duration)

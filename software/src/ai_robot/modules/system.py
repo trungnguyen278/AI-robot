@@ -9,18 +9,18 @@ from ai_robot.core.checks import positive
 from ai_robot.core.module import Module, ModuleContext
 from ai_robot.messages import BatteryReport, SceneRequest
 from ai_robot.ports import Color, Lights, Power
+from ai_robot.ports.image import check_color
 
-READY: Color = (0, 40, 0)  # dim green
 OFF: Color = (0, 0, 0)
 
 CHARGING_SCENE = "charging"
-CHARGING_SECONDS = 4.0  # how long the charging scene stays after the robot is plugged in
 
 
 class SystemModule(Module):
     """Looks after the robot itself: battery reports and the status light.
 
-    It also shows the charging scene for a few seconds when the robot is plugged in:
+    It also shows the charging scene for ``charging_scene_seconds`` when the robot is
+    plugged in:
     on a change from not charging to charging, not merely on a report that says
     charging (the robot may start on its charger), and an unknown reading changes
     nothing.
@@ -31,15 +31,24 @@ class SystemModule(Module):
 
     owns = ("power", "lights")
 
-    def __init__(self, ctx: ModuleContext, *, battery_interval: float) -> None:
+    def __init__(
+        self,
+        ctx: ModuleContext,
+        *,
+        battery_interval: float,
+        charging_scene_seconds: float,
+        ready_color: list[int],
+    ) -> None:
         super().__init__(ctx)
         self.battery_interval = positive("battery_interval", battery_interval)
+        self.charging_scene_seconds = positive("charging_scene_seconds", charging_scene_seconds)
+        self.ready_color = check_color(ready_color)  # the status light while the robot runs
         self.power = self.port("power", Power)
         self.lights = self.port("lights", Lights)
         self._charging: bool | None = None  # the last known charging state
 
     async def start(self) -> None:
-        await self.lights.fill(READY)
+        await self.lights.fill(self.ready_color)
 
     async def run(self) -> None:
         while True:
@@ -55,7 +64,9 @@ class SystemModule(Module):
         if charging is None:
             return
         if charging and self._charging is False:
-            self.bus.publish(SceneRequest(self.name, CHARGING_SCENE, duration=CHARGING_SECONDS))
+            self.bus.publish(
+                SceneRequest(self.name, CHARGING_SCENE, duration=self.charging_scene_seconds)
+            )
         elif not charging and self._charging:
             self.bus.publish(SceneRequest(self.name, None))
         self._charging = charging

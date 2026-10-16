@@ -150,7 +150,7 @@ class SimJoints(Joints):
 class SimRangeSensor(RangeSensor):
     """Always sees the same distance; tests may change ``value``."""
 
-    def __init__(self, *, distance: float = 2.0) -> None:
+    def __init__(self, *, distance: float) -> None:
         self.value: float | None = distance
 
     async def distance(self) -> float | None:
@@ -160,9 +160,7 @@ class SimRangeSensor(RangeSensor):
 class SimPower(Power):
     """A battery that never drains; tests may change ``status``."""
 
-    def __init__(
-        self, *, voltage: float = 11.1, percent: float = 50.0, charging: bool = False
-    ) -> None:
+    def __init__(self, *, voltage: float, percent: float, charging: bool) -> None:
         self.status = BatteryStatus(voltage, percent, charging)
 
     async def battery(self) -> BatteryStatus:
@@ -182,7 +180,7 @@ class SimLights(Lights):
 class SimSafety(Safety):
     """An emergency stop that stays released unless a test presses it."""
 
-    def __init__(self, *, engaged: bool = False) -> None:
+    def __init__(self, *, engaged: bool) -> None:
         self.engaged = engaged
 
     async def estop_engaged(self) -> bool:
