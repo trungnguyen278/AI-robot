@@ -10,7 +10,6 @@ from typing import Any
 import aiohttp
 import pytest
 
-import ai_robot.app
 from ai_robot.adapters import ADAPTERS
 from ai_robot.app import App, ModuleError
 from ai_robot.core.config import ConfigError, load_config
@@ -111,9 +110,13 @@ def events(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return []
 
 
-def config(events: list[str], enabled: list[str], **settings: dict[str, Any]) -> dict[str, Any]:
+def config(
+    events: list[str], enabled: list[str], timeout: float = 5.0, **settings: dict[str, Any]
+) -> dict[str, Any]:
     tables = {name: {"events": events, **settings.get(name, {})} for name in enabled}
     return {
+        "robot": {"display_name": "Robot"},
+        "app": {"shutdown_step_timeout": timeout},
         "modules": {"enabled": enabled, **tables},
         "ports": {"lights": {"adapter": "recording", "events": events}},
     }
@@ -229,27 +232,31 @@ def test_stopping_during_startup(events: list[str]) -> None:
     assert events == ["open lights", "start first", "start second", "stop first", "close lights"]
 
 
-@pytest.fixture
-def short_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_robot.app, "CLEANUP_TIMEOUT", 0.1)
-
-
-@pytest.mark.usefixtures("short_timeout")
 def test_a_module_ignoring_cancellation_does_not_block_the_shutdown(
     events: list[str], caplog: pytest.LogCaptureFixture
 ) -> None:
-    run(App(config(events, ["first", "second"], second={"fail_in": "ignore cancel"})), 0.05)
+    settings = config(events, ["first", "second"], 0.1, second={"fail_in": "ignore cancel"})
+    run(App(settings), 0.05)
     assert events[-3:] == ["stop second", "stop first", "close lights"]
     assert "module second did not stop" in caplog.text
 
 
-@pytest.mark.usefixtures("short_timeout")
 def test_a_slow_stop_does_not_block_the_shutdown(
     events: list[str], caplog: pytest.LogCaptureFixture
 ) -> None:
-    run(App(config(events, ["first", "second"], second={"fail_in": "slow stop"})), 0.05)
+    run(App(config(events, ["first", "second"], 0.1, second={"fail_in": "slow stop"})), 0.05)
     assert events[-2:] == ["stop first", "close lights"]
     assert "stopping module 'second' took more than" in caplog.text
+
+
+def test_the_robots_name_and_the_shutdown_timeout_are_required(events: list[str]) -> None:
+    settings = config(events, ["first"])
+    with pytest.raises(ConfigError, match=r"robot\.display_name must be the name shown"):
+        App({**settings, "robot": {}}).build()
+    for timeout in (0, -1, "5", True):
+        broken = {**settings, "app": {"shutdown_step_timeout": timeout}}
+        with pytest.raises(ConfigError, match=r"app\.shutdown_step_timeout must be a positive"):
+            App(broken).build()
 
 
 def test_errors_while_stopping_are_logged(

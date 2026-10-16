@@ -20,7 +20,7 @@ def test_the_microphones_deliver_chunks_in_real_time() -> None:
 
 def test_drop_releases_a_blocked_writer() -> None:
     async def scenario() -> None:
-        speaker = SimAudioOut(sample_rate=16000, channels=1)
+        speaker = SimAudioOut(sample_rate=16000, channels=1, buffer_ms=200.0)
         loop = asyncio.get_running_loop()
         began = loop.time()
         writing = asyncio.create_task(speaker.write(bytes(3 * 32000)))  # 3 s of audio

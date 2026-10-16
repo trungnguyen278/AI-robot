@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import Coroutine, Iterable, Mapping
 from typing import Any
 
@@ -17,8 +18,6 @@ from ai_robot.modules import MODULES
 from ai_robot.ports import Port
 
 log = logging.getLogger(__name__)
-
-CLEANUP_TIMEOUT = 5.0  # seconds allowed for each step of the shutdown
 
 
 class ModuleError(Exception):
@@ -35,6 +34,7 @@ class App:
         self.config = config
         self.bus = Bus()
         self.robot = RobotInfo(display_name="")
+        self.shutdown_timeout = 0.0  # seconds for each step of the shutdown, once built
         self.adapters: dict[str, Port] = {}
         self.modules: list[Module] = []
         self._built = False
@@ -49,9 +49,23 @@ class App:
         if self._built:
             return
         robot_table = get_table(self.config, "robot")
+        app_table = get_table(self.config, "app")
         modules_table = get_table(self.config, "modules")
         ports_table = get_table(self.config, "ports")
-        robot = RobotInfo(display_name=str(robot_table.get("display_name", "Robot")))
+        name = robot_table.get("display_name")
+        if not isinstance(name, str) or not name:
+            raise ConfigError("robot.display_name must be the name shown to people")
+        robot = RobotInfo(display_name=name)
+        timeout = app_table.get("shutdown_step_timeout")
+        if not (
+            isinstance(timeout, int | float)
+            and not isinstance(timeout, bool)
+            and math.isfinite(timeout)
+            and timeout > 0
+        ):
+            raise ConfigError(
+                f"app.shutdown_step_timeout must be a positive number of seconds, got {timeout!r}"
+            )
 
         enabled = modules_table.get("enabled", [])
         if not isinstance(enabled, list) or not all(isinstance(name, str) for name in enabled):
@@ -91,6 +105,7 @@ class App:
             modules.append(create(cls, f"modules.{name}", ctx, **settings))
 
         self.robot, self.adapters, self.modules = robot, adapters, modules
+        self.shutdown_timeout = float(timeout)
         self._built = True
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -100,7 +115,7 @@ class App:
         modules). If an adapter or a module fails, the robot is stopped the same way and
         the error is raised (``ModuleError`` for a module). Whatever happens, every
         started module is stopped and every opened adapter closed, in reverse order, each
-        step within ``CLEANUP_TIMEOUT`` seconds.
+        step within ``shutdown_step_timeout`` seconds (``[app]`` in the configuration).
         """
         if self._ran:
             raise RuntimeError("an App runs only once; create a new one")
@@ -108,22 +123,23 @@ class App:
         self.build()
         opened: list[Port] = []
         started: list[Module] = []
+        timeout = self.shutdown_timeout
         try:
             startup = asyncio.create_task(self._start(opened, started), name="startup")
-            if not await _until_stopped([startup], stop):
+            if not await _until_stopped([startup], stop, timeout):
                 return
             log.info("running: %s", ", ".join(module.name for module in self.modules))
             tasks = [
                 asyncio.create_task(_run_module(module), name=f"module {module.name}")
                 for module in self.modules
             ]
-            if await _until_stopped(tasks, stop):
+            if await _until_stopped(tasks, stop, timeout):
                 await stop.wait()  # every module has returned: wait until stopped
         finally:
             for module in reversed(started):
-                await _cleanup(module.stop(), f"stopping module {module.name!r}")
+                await _cleanup(module.stop(), f"stopping module {module.name!r}", timeout)
             for adapter in reversed(opened):
-                await _cleanup(adapter.close(), f"closing {type(adapter).__name__}")
+                await _cleanup(adapter.close(), f"closing {type(adapter).__name__}", timeout)
             log.info("stopped")
 
     async def _start(self, opened: list[Port], started: list[Module]) -> None:
@@ -147,11 +163,13 @@ async def _run_module(module: Module) -> None:
     log.info("module %r has nothing more to do", module.name)
 
 
-async def _until_stopped(tasks: list[asyncio.Task[None]], stop: asyncio.Event) -> bool:
+async def _until_stopped(
+    tasks: list[asyncio.Task[None]], stop: asyncio.Event, timeout: float
+) -> bool:
     """Wait until every task has finished (return True) or ``stop`` is set (False).
 
     If a task fails, its error is raised. On the way out, the tasks still running are
-    cancelled.
+    cancelled, and given ``timeout`` seconds to finish.
     """
     stopping = asyncio.create_task(stop.wait(), name="stop")
     pending = set(tasks)
@@ -171,11 +189,11 @@ async def _until_stopped(tasks: list[asyncio.Task[None]], stop: asyncio.Event) -
                 raise errors[0][1]
         return not stop.is_set()
     finally:
-        await _cancel([stopping, *pending])
+        await _cancel([stopping, *pending], timeout)
 
 
-async def _cancel(tasks: Iterable[asyncio.Task[Any]]) -> None:
-    """Cancel ``tasks`` and wait up to ``CLEANUP_TIMEOUT`` seconds for them to finish.
+async def _cancel(tasks: Iterable[asyncio.Task[Any]], timeout: float) -> None:
+    """Cancel ``tasks`` and wait up to ``timeout`` seconds for them to finish.
 
     Errors raised while they finish are logged. A task that ignores its cancellation is
     logged and left behind, so that the shutdown can go on.
@@ -185,25 +203,23 @@ async def _cancel(tasks: Iterable[asyncio.Task[Any]]) -> None:
         return
     for task in running:
         task.cancel()
-    done, pending = await asyncio.wait(running, timeout=CLEANUP_TIMEOUT)
+    done, pending = await asyncio.wait(running, timeout=timeout)
     for task in done:
         if not task.cancelled() and task.exception() is not None:
             log.error("%s failed while stopping", task.get_name(), exc_info=task.exception())
     for task in pending:
-        log.error(
-            "%s did not stop within %s s; leaving it behind", task.get_name(), CLEANUP_TIMEOUT
-        )
+        log.error("%s did not stop within %s s; leaving it behind", task.get_name(), timeout)
 
 
-async def _cleanup(step: Coroutine[Any, Any, None], what: str) -> None:
-    """Run one shutdown step for up to ``CLEANUP_TIMEOUT`` seconds, logging its failure
-    instead of raising it, so that the remaining steps still run."""
+async def _cleanup(step: Coroutine[Any, Any, None], what: str, timeout: float) -> None:
+    """Run one shutdown step for up to ``timeout`` seconds, logging its failure instead
+    of raising it, so that the remaining steps still run."""
     task = asyncio.create_task(step, name=what)
-    await asyncio.wait([task], timeout=CLEANUP_TIMEOUT)
+    await asyncio.wait([task], timeout=timeout)
     if not task.done():
         task.cancel()
         task.add_done_callback(_consume)
-        log.error("%s took more than %s s; moving on", what, CLEANUP_TIMEOUT)
+        log.error("%s took more than %s s; moving on", what, timeout)
     elif not task.cancelled() and task.exception() is not None:
         log.error("error while %s", what, exc_info=task.exception())
 

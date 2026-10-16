@@ -20,6 +20,7 @@ from ai_robot.ports import ScreenState, Touch
 
 VOCABULARY = Path(__file__).resolve().parents[2] / "protocol" / "screen" / "vocabulary.json"
 TIMEOUT = 2.0
+TIMINGS = {"send_timeout": 1.0, "heartbeat": 10.0, "close_timeout": 2.0}  # as shipped
 
 
 @pytest.fixture
@@ -33,7 +34,7 @@ def ui_dir(tmp_path: Path) -> Path:
 @contextlib.asynccontextmanager
 async def serving(ui_dir: Path) -> AsyncIterator[tuple[WebScreen, str]]:
     """An open WebScreen on a free port, and its address."""
-    screen = WebScreen(host="127.0.0.1", port=0, ui_dir=str(ui_dir))
+    screen = WebScreen(**TIMINGS, host="127.0.0.1", port=0, ui_dir=str(ui_dir))
     await screen.open()
     try:
         assert screen.address is not None
@@ -69,15 +70,15 @@ def test_protocol_version_matches_the_vocabulary() -> None:
 
 
 def test_serves_this_checkouts_renderer_by_default() -> None:
-    screen = WebScreen(host="127.0.0.1", port=0)
+    screen = WebScreen(**TIMINGS, host="127.0.0.1", port=0)
     assert (screen.ui_dir / "screen.html").is_file()
 
 
 def test_settings_are_checked(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=r"no screen\.html"):
-        WebScreen(host="127.0.0.1", port=0, ui_dir=str(tmp_path))
+        WebScreen(**TIMINGS, host="127.0.0.1", port=0, ui_dir=str(tmp_path))
     with pytest.raises(ValueError, match="port"):
-        WebScreen(host="127.0.0.1", port=70000)
+        WebScreen(**TIMINGS, host="127.0.0.1", port=70000)
 
 
 def test_serves_the_renderer_and_drives_its_pages(ui_dir: Path) -> None:
@@ -194,7 +195,7 @@ def test_ignores_what_it_does_not_understand(ui_dir: Path) -> None:
 
 def test_closing_disconnects_the_pages(ui_dir: Path) -> None:
     async def main() -> None:
-        screen = WebScreen(host="127.0.0.1", port=0, ui_dir=str(ui_dir))
+        screen = WebScreen(**TIMINGS, host="127.0.0.1", port=0, ui_dir=str(ui_dir))
         await screen.open()
         base = "http://{}:{}".format(*screen.address)  # type: ignore[str-format]
         async with aiohttp.ClientSession() as session, session.ws_connect(f"{base}/ws") as page:

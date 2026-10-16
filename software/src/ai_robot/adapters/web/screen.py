@@ -18,6 +18,7 @@ from typing import Any
 
 from aiohttp import WSCloseCode, WSMsgType, web
 
+from ai_robot.core.checks import positive
 from ai_robot.core.data import encode
 from ai_robot.ports.screen import Screen, ScreenState, Touch
 
@@ -25,9 +26,6 @@ log = logging.getLogger(__name__)
 
 PROTOCOL = 1
 PAGE = "screen.html"
-SEND_TIMEOUT = 1.0  # seconds a page may take to accept a message before it is dropped
-CLOSE_TIMEOUT = 2.0  # seconds a page may take to acknowledge the end of the connection
-HEARTBEAT = 10.0  # seconds between pings that detect a page gone silent
 
 # src/ai_robot/adapters/web/screen.py -> the ui/ folder of this checkout
 DEFAULT_UI_DIR = Path(__file__).resolve().parents[5] / "ui"
@@ -56,12 +54,27 @@ class WebScreen(Screen):
     """Serves the renderer and drives it over a WebSocket.
 
     The screen is at ``http://<host>:<port>/``. ``ui_dir`` is the renderer's folder;
-    by default, the ``ui`` folder of this checkout.
+    by default, the ``ui`` folder of this checkout. A page that takes more than
+    ``send_timeout`` seconds to accept a message is dropped, and reconnects; one that
+    stays silent is found by pings every ``heartbeat`` seconds; closing waits up to
+    ``close_timeout`` seconds.
     """
 
-    def __init__(self, *, host: str, port: int, ui_dir: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int,
+        send_timeout: float,
+        heartbeat: float,
+        close_timeout: float,
+        ui_dir: str = "",
+    ) -> None:
         if not 0 <= port <= 65535:
             raise ValueError(f"port must be from 0 to 65535, got {port}")
+        self.send_timeout = positive("send_timeout", send_timeout)
+        self.heartbeat = positive("heartbeat", heartbeat)
+        self.close_timeout = positive("close_timeout", close_timeout)
         self.ui_dir = Path(ui_dir) if ui_dir else DEFAULT_UI_DIR
         if not (self.ui_dir / PAGE).is_file():
             raise ValueError(f"ui_dir: no {PAGE} in {self.ui_dir}")
@@ -83,7 +96,7 @@ class WebScreen(Screen):
         app.router.add_get("/", self._page)
         app.router.add_static("/", self.ui_dir)
         app.on_response_prepare.append(_no_cache)
-        runner = web.AppRunner(app, access_log=None, shutdown_timeout=2.0)
+        runner = web.AppRunner(app, access_log=None, shutdown_timeout=self.close_timeout)
         await runner.setup()
         try:
             await web.TCPSite(runner, self.host, self.port).start()
@@ -143,7 +156,7 @@ class WebScreen(Screen):
         return web.FileResponse(self.ui_dir / PAGE)
 
     async def _connect(self, request: web.Request) -> web.WebSocketResponse:
-        page = web.WebSocketResponse(heartbeat=HEARTBEAT, timeout=CLOSE_TIMEOUT)
+        page = web.WebSocketResponse(heartbeat=self.heartbeat, timeout=self.close_timeout)
         await page.prepare(request)
         self.pages[page] = {}
         try:
@@ -212,7 +225,7 @@ class WebScreen(Screen):
     async def _send(self, page: web.WebSocketResponse, text: str) -> None:
         """Send ``text`` to ``page``; a page that cannot take it is dropped and reconnects."""
         try:
-            async with asyncio.timeout(SEND_TIMEOUT):
+            async with asyncio.timeout(self.send_timeout):
                 await page.send_str(text)
         except (TimeoutError, ConnectionError) as error:
             log.warning("dropping a screen page: %s", error or type(error).__name__)

@@ -28,11 +28,12 @@ Version **1.0**:
   - The robot sends `Authorization: Bearer <token>` in the opening handshake. The token comes from the environment variable `AI_ROBOT_CLOUD_TOKEN`, never from a file in the repository.
   - The server refuses unknown credentials with HTTP 401, before the WebSocket opens.
 - **One connection per robot.** When the same robot connects again, the server closes the older connection with code 4002.
-- **Liveness.** A side that has received nothing for 10 s sends a WebSocket ping, and closes the connection if no pong follows (SES-3).
-- **Reconnection.** After a loss, the robot waits before connecting again, a random time from 0 to `min(60 s, 1 s × 2ⁿ)`, where n counts the failed attempts in a row. This is exponential backoff with full jitter (SES-4). A connection that reaches the `hello` exchange resets n.
+- **Liveness.** A side that has received nothing for a while sends a WebSocket ping, and closes the connection if no pong follows (SES-3). On the robot, a while is `ping_after`, 10 s as shipped.
+- **Reconnection.** After a loss, the robot waits before connecting again, a random time from 0 to `min(reconnect_max, reconnect_first × 2ⁿ)`, where n counts the failed attempts in a row: up to 1 s, then 2 s, and so on to 60 s as shipped. This is exponential backoff with full jitter (SES-4). A connection that reaches the `hello` exchange resets n.
 - **Compression.** None per message: audio is already compressed, and control messages are small.
+- **The robot's settings.** The robot's timings and rates in this section are settings, in `[ports.cloud.websocket]` of `software/config/base.toml`: what this document gives are the values as shipped. The sizes, the codes and the versions are the protocol's own, and do not change without a new version.
 - **Sizes.** A text frame holds up to 1 MiB, a binary frame up to 64 KiB. A larger frame closes the connection with 1009.
-- **Rates.** The robot handles up to 50 text messages a second from the cloud, in bursts of up to 100. It drops the rest and logs it (SEC-15).
+- **Rates.** The robot handles up to `rate` text messages a second from the cloud, in bursts of up to `burst`: 50 and 100 as shipped. It drops the rest and logs it (SEC-15).
 
 | Close code | When |
 |---|---|
@@ -41,7 +42,7 @@ Version **1.0**:
 | 1009 | A frame was too large |
 | 1011 | An internal error |
 | 4000 | The protocol version is not supported |
-| 4001 | No valid `hello` came within 5 s |
+| 4001 | No valid `hello` came in time |
 | 4002 | A newer connection from the same robot replaced this one |
 
 ## Messages
@@ -75,7 +76,7 @@ Version **1.0**:
 
 ### `hello`
 
-The robot sends `hello` as soon as the connection opens. The cloud answers with its own within 5 s (SES-2). Neither side sends anything else before the exchange.
+The robot sends `hello` as soon as the connection opens. The cloud answers with its own within 5 s (SES-2); the robot waits `hello_timeout`, 5 s as shipped, before it closes the connection with 4001. Neither side sends anything else before the exchange.
 
 ```json
 {"type": "hello", "id": "r1", "protocol": "1.0", "software": "0.1.0",

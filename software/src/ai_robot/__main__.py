@@ -19,6 +19,7 @@ from ai_robot.app import App
 from ai_robot.core.config import CONFIG_DIR_ENV, ConfigError, get_table, load_config
 
 PROFILE_ENV = "AI_ROBOT_PROFILE"
+EXIT_INTERRUPTED = 130  # 128 + SIGINT: how shells report a command stopped by Ctrl+C
 LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
 log = logging.getLogger("ai_robot")
@@ -43,7 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         # A second Ctrl+C, or the first one where signal handlers are unavailable
         # (Windows; the robot has then already been stopped).
-        return 130
+        return EXIT_INTERRUPTED
     except Exception:
         log.exception("stopped by an error")
         return 1

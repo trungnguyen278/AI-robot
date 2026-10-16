@@ -32,7 +32,7 @@ class SimAudioIn(AudioIn):
 class SimAudioOut(AudioOut):
     """A speaker that plays nothing, but takes as long as real playback would."""
 
-    def __init__(self, *, sample_rate: int, channels: int, buffer_ms: float = 200) -> None:
+    def __init__(self, *, sample_rate: int, channels: int, buffer_ms: float) -> None:
         self._format = AudioFormat(sample_rate, channels)
         self._buffer = positive("buffer_ms", buffer_ms) / 1000
         self._ends_at = 0.0  # event loop time at which the queued audio has been played

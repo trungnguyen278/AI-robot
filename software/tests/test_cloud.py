@@ -33,6 +33,14 @@ from ai_robot.ports import Capability, EventKind, SafetyClass
 
 TIMEOUT = 2.0
 
+# The screen module's settings, as shipped in config/base.toml.
+SCREEN = {
+    "voice_rate": 25.0,
+    "reaction_seconds": 3.0,
+    "reaction_max_seconds": 30.0,
+    "scene_max_seconds": 86400.0,
+}
+
 SWITCH = {
     "type": "object",
     "properties": {"on": {"type": "boolean"}},
@@ -304,7 +312,9 @@ def screen_robot() -> tuple[SimScreen, SimCloud, ScreenModule, CloudModule]:
     bus = Bus()
     screen = SimScreen()
     cloud = SimCloud()
-    module = ScreenModule(context("screen", bus, {"screen": screen}), quiet_db=-50, loud_db=-10)
+    module = ScreenModule(
+        context("screen", bus, {"screen": screen}), quiet_db=-50, loud_db=-10, **SCREEN
+    )
     return screen, cloud, module, cloud_module(bus, cloud)
 
 
@@ -346,7 +356,10 @@ def test_the_cloud_can_show_an_expression_a_mood_and_a_scene() -> None:
 
 def test_the_screens_capabilities_follow_the_vocabulary() -> None:
     vocabulary = load_vocabulary()
-    show, mood, scene = capabilities(vocabulary)
+    limits = {key: SCREEN[key] for key in SCREEN if key != "voice_rate"}
+    show, mood, scene = capabilities(vocabulary, **limits)
+    assert show.input_schema["properties"]["seconds"]["maximum"] == 30.0
+    assert scene.input_schema["properties"]["seconds"]["maximum"] == 86400.0
     expression = show.input_schema["properties"]["expression"]
     assert list(expression["enum"]) == list(vocabulary["expressions"])
     assert list(show.input_schema["properties"]["tone"]["enum"]) == vocabulary["tones"]

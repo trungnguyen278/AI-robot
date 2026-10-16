@@ -29,6 +29,7 @@ import aiohttp
 from aiohttp import WSCloseCode, WSMsgType
 
 from ai_robot import software_version
+from ai_robot.core.checks import finite, positive
 from ai_robot.core.config import protocol_dir
 from ai_robot.core.data import Schema, encode, plain
 from ai_robot.ports.cloud import (
@@ -42,23 +43,21 @@ from ai_robot.ports.cloud import (
 
 log = logging.getLogger(__name__)
 
+# Fixed by the protocol (protocol/cloud/README.md and schema.json), not settings: the
+# cloud relies on them.
 PROTOCOL = "1.0"
 MCP_VERSION = "2026-07-28"
 TOKEN_ENV = "AI_ROBOT_CLOUD_TOKEN"  # the robot's credentials, provisional (decision 5)
-HELLO_TIMEOUT = 5.0  # seconds the cloud has to answer the robot's hello
-PING_AFTER = 10.0  # seconds without anything received before a ping
-SEND_TIMEOUT = 5.0  # seconds a message may take to go out before the connection is dropped
 MAX_TEXT = 1 << 20  # bytes in a text frame
 MAX_BINARY = 64 << 10  # bytes in a binary frame
-RATE = 50.0  # text messages a second the robot handles from the cloud...
-BURST = 100  # ...in bursts of up to this many
-DROP_REPORT = 10.0  # seconds between two reports of dropped messages
-RECONNECT_FIRST = 1.0  # seconds: the longest first wait before reconnecting
-RECONNECT_MAX = 60.0  # seconds: the longest wait before reconnecting
-LIST_TTL_MS = 60_000  # how long the cloud may cache the catalogue, as MCP's ttlMs
-SEEN = 1000  # message ids remembered, so that a resent message never acts twice
+MAX_ID = 64  # characters in a message id ($defs/id in schema.json)
+MAX_ERROR = 1024  # characters in an error's message ($defs/error in schema.json)
+CLOSE_REASON_BYTES = 123  # the longest reason a close frame carries (RFC 6455, 5.5)
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
-CONNECT_TIMEOUT = 10.0  # seconds to reach the server
+
+# How this implementation works, which nobody needs to tune.
+SEEN = 1000  # message ids remembered, so that a resent message never acts twice
+DROP_REPORT = 10.0  # seconds between two reports of dropped messages
 
 # Close codes (protocol/cloud/README.md)
 UNSUPPORTED_PROTOCOL = 4000
@@ -137,6 +136,12 @@ def _not_json(name: str) -> Any:
     raise ValueError(f"{name} is not JSON")
 
 
+def _close_reason(reason: str) -> bytes:
+    """``reason`` cut to fit a close frame. A character the cut splits is dropped, so
+    that the reason stays valid UTF-8, as RFC 6455 requires."""
+    return reason.encode()[:CLOSE_REASON_BYTES].decode(errors="ignore").encode()
+
+
 def _utc_offset() -> int:
     """The local clock's offset from UTC, in minutes."""
     offset = datetime.now().astimezone().utcoffset()
@@ -163,10 +168,44 @@ class WebSocketCloud(Cloud):
     """The link to the cloud at ``url``: ``wss://``, or ``ws://`` to this computer for
     development. The robot's credentials come from the environment variable
     ``AI_ROBOT_CLOUD_TOKEN``, sent as a bearer token; without it, the robot connects
-    without credentials."""
+    without credentials.
 
-    def __init__(self, *, url: str) -> None:
+    The other settings, in seconds unless they say, are explained in
+    ``config/base.toml`` (``[ports.cloud.websocket]``).
+    """
+
+    def __init__(
+        self,
+        *,
+        url: str,
+        connect_timeout: float,
+        hello_timeout: float,
+        ping_after: float,
+        send_timeout: float,
+        close_timeout: float,
+        reconnect_first: float,
+        reconnect_max: float,
+        rate: float,
+        burst: int,
+        catalogue_ttl: float,
+    ) -> None:
         self.url = _check_url(url)
+        self.connect_timeout = positive("connect_timeout", connect_timeout)
+        self.hello_timeout = positive("hello_timeout", hello_timeout)
+        self.ping_after = positive("ping_after", ping_after)
+        self.send_timeout = positive("send_timeout", send_timeout)
+        self.close_timeout = positive("close_timeout", close_timeout)
+        self.reconnect_first = positive("reconnect_first", reconnect_first)
+        self.reconnect_max = positive("reconnect_max", reconnect_max)
+        if self.reconnect_max < self.reconnect_first:
+            raise ValueError("reconnect_max must not be below reconnect_first")
+        self.rate = positive("rate", rate)
+        if burst < 1:
+            raise ValueError(f"burst must be at least 1, got {burst}")
+        self.burst = burst
+        self.catalogue_ttl = finite("catalogue_ttl", catalogue_ttl)
+        if self.catalogue_ttl < 0:
+            raise ValueError(f"catalogue_ttl must not be negative, got {catalogue_ttl}")
         self.capabilities: dict[str, Capability] = {}
         self.event_kinds: list[EventKind] = []
         self.session: Session | None = None
@@ -186,7 +225,7 @@ class WebSocketCloud(Cloud):
         if not os.environ.get(TOKEN_ENV):
             log.info("no %s set: the robot connects to the cloud without credentials", TOKEN_ENV)
         self._http = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=None, connect=CONNECT_TIMEOUT)
+            timeout=aiohttp.ClientTimeout(total=None, connect=self.connect_timeout)
         )
         self._task = asyncio.create_task(self._run(), name="cloud link")
 
@@ -276,9 +315,9 @@ class WebSocketCloud(Cloud):
                 async with self._http.ws_connect(
                     self.url,
                     headers=self._headers(),
-                    heartbeat=PING_AFTER,
+                    heartbeat=self.ping_after,
                     max_msg_size=MAX_TEXT,
-                    timeout=aiohttp.ClientWSTimeout(ws_receive=None, ws_close=2.0),
+                    timeout=aiohttp.ClientWSTimeout(ws_receive=None, ws_close=self.close_timeout),
                 ) as socket:
                     session = Session(self, socket, self._schema, next(self._numbers))
                     try:
@@ -307,7 +346,7 @@ class WebSocketCloud(Cloud):
                     log.warning("cannot reach the cloud: %s", error or type(error).__name__)
                     reported = True
             failures = 0 if reached else failures + 1
-            delay = random.uniform(0, min(RECONNECT_MAX, RECONNECT_FIRST * 2**failures))
+            delay = random.uniform(0, min(self.reconnect_max, self.reconnect_first * 2**failures))
             await asyncio.sleep(delay)
 
     def _headers(self) -> dict[str, str]:
@@ -335,7 +374,7 @@ class Session:
         self.calls: dict[str, tuple[Any, str]] = {}  # call id -> request id, its message
         self._ids = itertools.count(1)
         self._seen: deque[str] = deque(maxlen=SEEN)
-        self._bucket = Bucket(RATE, BURST)
+        self._bucket = Bucket(link.rate, link.burst)
         self._dropped = 0  # messages dropped since the last report
         self._reported = -DROP_REPORT  # when dropped messages were last reported
         self._warned: set[str] = set()
@@ -348,7 +387,7 @@ class Session:
         hello = self.link.hello()
         await self.send(hello)
         try:
-            answer = await asyncio.wait_for(self._hello(), HELLO_TIMEOUT)
+            answer = await asyncio.wait_for(self._hello(), self.link.hello_timeout)
         except TimeoutError:
             await self._close(NO_HELLO, "no hello")
             log.warning("the cloud did not answer the robot's hello")
@@ -411,7 +450,7 @@ class Session:
         await self.send({"type": "bye", "reason": reason})
 
     async def _close(self, code: int, reason: str) -> None:
-        await self.socket.close(code=code, message=reason.encode()[:120])
+        await self.socket.close(code=code, message=_close_reason(reason))
 
     def cancel_calls(self) -> list[str]:
         """The calls still in progress, which the session can no longer answer."""
@@ -426,7 +465,7 @@ class Session:
         message = {"type": message["type"], "id": f"r{next(self._ids)}", **message}
         text = encode(message)
         try:
-            async with asyncio.timeout(SEND_TIMEOUT):
+            async with asyncio.timeout(self.link.send_timeout):
                 await self.socket.send_str(text)
         except (TimeoutError, ConnectionError) as error:
             log.warning("cannot send to the cloud: %s", error or type(error).__name__)
@@ -440,7 +479,7 @@ class Session:
         await self.send(message)
 
     async def _error(self, code: str, text: str, reply_to: str | None = None) -> None:
-        message: dict[str, Any] = {"type": "error", "code": code, "message": text[:1024]}
+        message: dict[str, Any] = {"type": "error", "code": code, "message": text[:MAX_ERROR]}
         if reply_to is not None:
             message["reply_to"] = reply_to
         await self.send(message)
@@ -465,7 +504,7 @@ class Session:
         problem = self.schema.problem(message)
         if problem is not None:
             reply_to = message.get("id") if isinstance(message, dict) else None
-            valid = isinstance(reply_to, str) and 0 < len(reply_to) <= 64
+            valid = isinstance(reply_to, str) and 0 < len(reply_to) <= MAX_ID
             await self._error("invalid_message", problem, reply_to if valid else None)
             return
         if message["id"] in self._seen:
@@ -540,7 +579,7 @@ class Session:
         return {
             "supportedVersions": [MCP_VERSION],
             "capabilities": {"tools": {"listChanged": True}},
-            "ttlMs": LIST_TTL_MS,
+            "ttlMs": self._ttl_ms(),
             "cacheScope": "private",
         }
 
@@ -548,7 +587,11 @@ class Session:
         if params.get("cursor") is not None:
             raise Rejected(INVALID_PARAMS, "Invalid cursor: the catalogue has one page")
         tools = [_tool(capability) for _, capability in sorted(self.link.capabilities.items())]
-        return {"tools": tools, "ttlMs": LIST_TTL_MS, "cacheScope": "private"}
+        return {"tools": tools, "ttlMs": self._ttl_ms(), "cacheScope": "private"}
+
+    def _ttl_ms(self) -> int:
+        """How long the cloud may cache the catalogue: MCP's ``ttlMs``."""
+        return round(self.link.catalogue_ttl * 1000)
 
     async def _call(self, request: Any, params: Mapping[str, Any], message: str) -> None:
         name = params.get("name")
