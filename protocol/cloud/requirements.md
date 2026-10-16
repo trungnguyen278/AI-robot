@@ -40,7 +40,7 @@ What the previous generation did, kept as a reference: one WebSocket per device,
 
 | ID | Data | When | Notes |
 |---|---|---|---|
-| IO-1 | **Hello**: device identifier, protocol version, software version, locale, time zone, the media formats it offers (§6.3), capability catalogue (§5) | At the start of every session | No personal data beyond what identifies the device |
+| IO-1 | **Hello**: device identifier, protocol version, software version, locale, time zone, the media formats it offers (§6.3); then the capability catalogue (§5) | At the start of every session | No personal data beyond what identifies the device |
 | IO-2 | **User speech**, as compressed audio | Only during a turn (§6): after the wake word, a tap or an expected follow-up | Never before the trigger (PRIV-1) |
 | IO-3 | **Turn events**: turn started (with the trigger), end of speech, cancelled, barge-in (the user interrupted, with how much of the answer had been played) | As they happen | The cloud needs the played position to forget the unheard part of its answer, as `conversation.item.truncate` does in the OpenAI Realtime API |
 | IO-4 | **Context** with each turn: interaction state, what the screen shows, volume and mute, battery and charging, connectivity, local time | At turn start and on request | A snapshot, so that the AI knows the situation; the context sent with events in Alexa Voice Service works this way ([AVS context](https://web.archive.org/web/20240612194441/https://www.developer.amazon.com/en-US/docs/alexa/alexa-voice-service/context.html)) |
@@ -77,7 +77,7 @@ The cloud will learn to do more over time: new expressions and scenes, gestures,
 | EXT-9 | On the robot, capabilities **MUST** be registered by the module that owns them and turned into bus messages. For example, `screen.show_expression` becomes an `ExpressionRequest` from a `cloud.*` source, at a priority the robot chooses. A new robot feature then adds a capability in its own module, with no change to the cloud link. |
 | EXT-10 | The cloud **SHOULD** be able to hand the catalogue to its language model as tool definitions unchanged: name, description and input schema. |
 
-Proposed shape (decision 2 in §13): JSON-RPC 2.0 messages shaped like the tools of the [Model Context Protocol](https://modelcontextprotocol.io/specification/2025-06-18/server/tools): `tools/list`, `tools/call` with `inputSchema`/`outputSchema`, results with `isError`, and `notifications/tools/list_changed`. That is the format language models already use for tools, and the open-source xiaozhi-esp32 devices use MCP over their WebSocket for exactly this kind of control ([xiaozhi protocol](https://github.com/78/xiaozhi-esp32/blob/main/docs/websocket.md)). In MCP terms the robot is the server that offers tools, and the cloud is the client that calls them.
+Proposed shape (decision 2 in §13, [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md)): the tools of the [Model Context Protocol](https://modelcontextprotocol.io/specification/2026-07-28/server/tools), in JSON-RPC 2.0 messages: `tools/list`, `tools/call` with `inputSchema`/`outputSchema`, results with `isError`, and `notifications/tools/list_changed`. That is the format language models already use for tools, and the open-source xiaozhi-esp32 devices use MCP over their WebSocket for exactly this kind of control ([xiaozhi protocol](https://github.com/78/xiaozhi-esp32/blob/main/docs/websocket.md)). In MCP terms the robot is the server that offers tools, and the cloud is the client that calls them.
 
 ## 6. Sessions and conversations
 
@@ -86,7 +86,7 @@ Proposed shape (decision 2 in §13): JSON-RPC 2.0 messages shaped like the tools
 | ID | Requirement |
 |---|---|
 | SES-1 | The robot **MUST** open the connection: outbound only, with no port open to the internet on the robot (SEC-16). |
-| SES-2 | The session **MUST** start with authentication (SEC-4), then a hello exchange: versions, the media offer and answer (§6.3), the catalogue, the event subscriptions. A side that receives no valid hello within a few seconds closes the connection. |
+| SES-2 | The session **MUST** start with authentication (SEC-4), then a hello exchange (versions, the media offer and answer of §6.3, the event subscriptions) and the catalogue (§5). A side that receives no valid hello within a few seconds closes the connection. |
 | SES-3 | Both sides **MUST** detect a dead connection within a bounded time (heartbeats) and close it. |
 | SES-4 | The robot **MUST** reconnect after a loss with exponential backoff and jitter, up to a ceiling, so that a server outage does not end in every robot reconnecting at once (ETSI 5.9). |
 | SES-5 | A session **SHOULD** survive a short disconnection: the robot resumes it, and the cloud continues the conversation and resends results it had not had acknowledged. A connection that lives for minutes inside a session that lives for hours is how the Gemini Live API works ([session management](https://ai.google.dev/gemini-api/docs/live-session)). |
@@ -220,8 +220,8 @@ Each becomes an ADR, `Proposed` until agreed.
 
 | # | Decision | Options | Leaning |
 |---|---|---|---|
-| 1 | Transport | WebSocket over TLS, carrying JSON and binary audio frames (the previous generation, xiaozhi, the OpenAI and Gemini realtime APIs). WebRTC (built for lossy networks, more complex). MQTT plus UDP audio. | A WebSocket first, with the audio path behind an interface so that WebRTC can replace it if home networks call for it |
-| 2 | Message format | JSON-RPC 2.0 with MCP-shaped capabilities (§5). A protocol of our own. | MCP-shaped JSON-RPC: standard, and what language models already consume |
+| 1 | Transport | WebSocket over TLS, carrying JSON and binary audio frames (the previous generation, xiaozhi, the OpenAI and Gemini realtime APIs). WebRTC (built for lossy networks, more complex). MQTT plus UDP audio. | A WebSocket first, with the audio path behind an interface so that WebRTC can replace it if home networks call for it: [ADR-0007](../../docs/decisions/0007-cloud-link-transport.md) |
+| 2 | Message format | JSON-RPC 2.0 with MCP-shaped capabilities (§5). A protocol of our own. | MCP for capabilities, standard and what language models already consume, inside the link's own JSON messages: [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md) |
 | 3 | Audio formats offered, and the baseline (§6.3) | Opus at 16 or 24 kHz, 20 or 60 ms frames, at several bit rates; 16-bit PCM at 16 kHz | Offer Opus first and keep 16-bit PCM at 16 kHz as the baseline; the frame lengths and bit rates to offer come from measurements on the Pi |
 | 4 | End of speech | On the robot (voice activity detection), the cloud confirming. In the cloud only. | Both: the robot ends turns locally, and the cloud may end them earlier |
 | 5 | Device identity and credentials | A client certificate (mutual TLS). Short-lived tokens signed with the device's key. A long-lived token from set-up (the previous generation). | A per-device key pair made on the robot; short-lived credentials derived from it |
@@ -234,7 +234,7 @@ Retrieved 2026-10-16:
 
 - Previous generation: [Luni_Robot network notes](https://github.com/trungnguyen278/Luni_Robot/blob/main/docs/modules/network.md).
 - [xiaozhi-esp32 WebSocket protocol](https://github.com/78/xiaozhi-esp32/blob/main/docs/websocket.md): hello with audio parameters (Opus 16 kHz, 60 ms frames), bearer token, `listen`/`tts`/`llm` emotion messages, MCP for device control.
-- [Model Context Protocol, tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) (revision 2025-06-18): `tools/list`, `tools/call`, schemas, errors, security considerations.
+- [Model Context Protocol, tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) (revision 2026-07-28, the latest; [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md) summarises what it changed): `tools/list`, `tools/call`, schemas, errors, security considerations.
 - [Gemini Live API, session management](https://ai.google.dev/gemini-api/docs/live-session): connections of about 10 minutes inside resumable sessions.
 - [OpenAI Realtime API reference](https://developers.openai.com/api/reference/resources/realtime): audio buffers (`input_audio_buffer.append`), speech detected by the server (`input_audio_buffer.speech_started`), and dropping the audio the user did not hear (`conversation.item.truncate`).
 - Alexa Voice Service, [context](https://web.archive.org/web/20240612194441/https://www.developer.amazon.com/en-US/docs/alexa/alexa-voice-service/context.html) and [API overview](https://web.archive.org/web/20240520071257/https://www.developer.amazon.com/en-US/docs/alexa/alexa-voice-service/api-overview.html), archived copies from 2024, since the pages are offline: interfaces made of directives and events, the interfaces and versions each device reports, context with each event.
