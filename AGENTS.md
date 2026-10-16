@@ -11,4 +11,4 @@ Guidance for AI coding assistants working in this repository. Read [README.md](R
 
 ## Task checklists
 
-Each folder in `.claude/skills/` holds one step-by-step checklist in plain Markdown (`SKILL.md`); its header says when to use it. Follow the matching checklist before changing hardware documentation, Raspberry Pi configuration, decisions or the dev log.
+Each folder in `.claude/skills/` holds one step-by-step checklist in plain Markdown (`SKILL.md`); its header says when to use it. Follow the matching checklist before changing hardware documentation, Raspberry Pi configuration, decisions or the dev log, and the `review` checklist before handing a pull request over.
