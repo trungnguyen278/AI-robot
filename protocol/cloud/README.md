@@ -1,6 +1,6 @@
 # Cloud link — robot ⇄ ai-robot-server
 
-> **Status:** requirements drafted ([requirements.md](requirements.md)); no protocol yet. The decisions listed in [requirements §13](requirements.md#13-decisions-to-make) come first, as ADRs.
+> **Status:** requirements drafted ([requirements.md](requirements.md)); transport and messages proposed in [ADR-0007](../../docs/decisions/0007-cloud-link-transport.md) and [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md); no protocol yet. The other decisions listed in [requirements §13](requirements.md#13-decisions-to-make) follow, as ADRs.
 
 The robot's core AI runs in the cloud, in `ai-robot-server`, which will be built anew (not created yet). The robot captures, plays, shows and moves, and keeps everything safe. This link carries speech both ways, the context of each turn, events, and the calls through which the cloud drives the robot.
 

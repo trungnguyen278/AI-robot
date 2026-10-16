@@ -13,3 +13,5 @@ Each significant decision is a short file: context, decision, alternatives consi
 | [0004](0004-pi-software-first.md) | Raspberry Pi software first; body controller not chosen yet | Accepted | 2026-10-15 |
 | [0005](0005-pi-software-platform.md) | Pi software platform: Raspberry Pi OS, Python with C++ extensions, no ROS 2 for now | Proposed | 2026-10-15 |
 | [0006](0006-screen-renderer.md) | Screen: a browser renderer with a procedural face, driven by the Pi software | Proposed | 2026-10-16 |
+| [0007](0007-cloud-link-transport.md) | Cloud link transport: one WebSocket over TLS, opened by the robot, with the audio kept separable | Proposed | 2026-10-16 |
+| [0008](0008-cloud-link-messages.md) | Cloud link messages: typed JSON, MCP for capabilities, binary audio frames | Proposed | 2026-10-16 |

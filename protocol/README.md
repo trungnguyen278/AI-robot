@@ -6,6 +6,6 @@ The **single source of truth** for each protocol between the robot's components.
 |---|---|---|
 | [Body link](body/README.md) | The Pi 5 and the body controller | Not decided yet |
 | [Screen](screen/README.md) | The Pi software (`software/`) and the screen renderer (`ui/`) | Version 1, proposed in [ADR-0006](../docs/decisions/0006-screen-renderer.md) |
-| [Cloud link](cloud/README.md) | The robot (`software/`) and `ai-robot-server` | Requirements drafted ([requirements.md](cloud/requirements.md)) |
+| [Cloud link](cloud/README.md) | The robot (`software/`) and `ai-robot-server` | Requirements drafted ([requirements.md](cloud/requirements.md)); transport and messages proposed in [ADR-0007](../docs/decisions/0007-cloud-link-transport.md) and [ADR-0008](../docs/decisions/0008-cloud-link-messages.md) |
 
 A protocol change goes here first, then to both sides, in the same pull request ([CONTRIBUTING.md](../CONTRIBUTING.md#documentation-travels-with-the-change)).
