@@ -5,13 +5,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import math
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 from ai_robot.core.bus import Message, Subscription
+from ai_robot.core.capabilities import CapabilityHost
 from ai_robot.core.checks import finite
+from ai_robot.core.config import protocol_dir
 from ai_robot.core.module import Module, ModuleContext
 from ai_robot.messages import (
     BatteryReport,
@@ -24,7 +28,7 @@ from ai_robot.messages import (
     ScreenTouched,
     SoundLevel,
 )
-from ai_robot.ports import Screen, ScreenState
+from ai_robot.ports import Capability, EventKind, SafetyClass, Screen, ScreenState
 
 M = TypeVar("M", bound=Message)
 T = TypeVar("T")
@@ -43,6 +47,164 @@ INTERACTION_EXPRESSIONS: dict[InteractionState, str | None] = {
 INTERACTION_SOURCE = "interaction"  # the source of the requests made for the conversation
 
 VOICE_INTERVAL = 0.04  # seconds between two voice levels sent to the screen (25 per second)
+
+# The sources of the cloud's requests, and how long a reaction lasts unless it says.
+CLOUD_REACTION = "cloud.reaction"
+CLOUD_MOOD = "cloud.mood"
+CLOUD_SCENE = "cloud.scene"
+REACTION_SECONDS = 3.0
+
+TOUCHED = EventKind(
+    "screen.touched",
+    "Someone tapped the screen",
+    {
+        "type": "object",
+        "properties": {
+            "x": {"type": "number", "minimum": 0, "maximum": 1, "description": "From the left"},
+            "y": {"type": "number", "minimum": 0, "maximum": 1, "description": "From the top"},
+        },
+        "required": ["x", "y"],
+        "additionalProperties": False,
+    },
+)
+
+
+def load_vocabulary(path: Path | None = None) -> Mapping[str, Any]:
+    """The screen protocol's vocabulary (protocol/screen/vocabulary.json)."""
+    path = protocol_dir() / "screen" / "vocabulary.json" if path is None else path
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _showing(kind: str, nullable: bool = False) -> dict[str, Any]:
+    showing: dict[str, Any] = {
+        "type": ["string", "null"] if nullable else "string",
+        "description": f"The {kind} the screen shows now; a more important one may hide yours",
+    }
+    return {
+        "type": "object",
+        "properties": {"showing": showing},
+        "required": ["showing"],
+        "additionalProperties": False,
+    }
+
+
+def _data_schema(fields: Mapping[str, Any]) -> dict[str, Any]:
+    """The JSON Schema of a scene's data, from its fields in the vocabulary."""
+    properties: dict[str, Any] = {}
+    for name, field in fields.items():
+        prop: dict[str, Any] = {"type": field["type"]}
+        if "values" in field:
+            prop["enum"] = list(field["values"])
+        if "max_length" in field:
+            prop["maxLength"] = field["max_length"]
+        if "description" in field:
+            prop["description"] = field["description"]
+        properties[name] = prop
+    return {"type": "object", "properties": properties, "additionalProperties": False}
+
+
+def capabilities(vocabulary: Mapping[str, Any]) -> list[Capability]:
+    """What the cloud can ask of the screen, from the screen protocol's vocabulary, so
+    that the cloud sees exactly the expressions, colours and scenes the renderer draws."""
+    expressions = dict(vocabulary["expressions"])
+    looks = "; ".join(f"{name}: {look}" for name, look in expressions.items())
+    tone = {
+        "type": "string",
+        "enum": list(vocabulary["tones"]),
+        "description": "A colour; the expression's own when missing",
+    }
+    scenes = dict(vocabulary["scenes"])
+    contents = "; ".join(f"{name}: {scene['description']}" for name, scene in scenes.items())
+    return [
+        Capability(
+            name="screen.show_expression",
+            title="Show an expression",
+            description=(
+                "Show an expression on the robot's face for a few seconds, as a reaction; "
+                "the face then goes back to what it showed before."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "enum": list(expressions),
+                        "description": looks,
+                    },
+                    "seconds": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 30,
+                        "description": f"How long; {REACTION_SECONDS:g} when missing",
+                    },
+                    "tone": tone,
+                },
+                "required": ["expression"],
+                "additionalProperties": False,
+            },
+            output_schema=_showing("expression"),
+            safety=SafetyClass.INFORMATIONAL,
+        ),
+        Capability(
+            name="screen.set_mood",
+            title="Set the mood",
+            description=(
+                "Set the robot's lasting mood: an expression shown whenever nothing more "
+                "important is on the face, until it is changed. null clears it."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": ["string", "null"],
+                        "enum": [*expressions, None],
+                        "description": looks,
+                    },
+                    "tone": tone,
+                },
+                "required": ["expression"],
+                "additionalProperties": False,
+            },
+            output_schema=_showing("expression"),
+            safety=SafetyClass.INFORMATIONAL,
+        ),
+        Capability(
+            name="screen.show_scene",
+            title="Show a scene",
+            description=(
+                "Fill the screen with a scene while the face watches from a corner. "
+                "null removes the scene the cloud asked for."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "scene": {
+                        "type": ["string", "null"],
+                        "enum": [*scenes, None],
+                        "description": contents,
+                    },
+                    "data": {"type": "object", "description": "What the scene shows"},
+                    "seconds": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 86400,
+                        "description": "How long; until replaced or removed when missing",
+                    },
+                },
+                "required": ["scene"],
+                "additionalProperties": False,
+                "allOf": [
+                    {
+                        "if": {"properties": {"scene": {"const": name}}},
+                        "then": {"properties": {"data": _data_schema(scene["data"])}},
+                    }
+                    for name, scene in scenes.items()
+                ],
+            },
+            output_schema=_showing("scene", nullable=True),
+            safety=SafetyClass.INFORMATIONAL,
+        ),
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +272,11 @@ class ScreenModule(Module):
     - The status row: the battery, from ``BatteryReport``.
     - The gaze (``LookAt``) and, while the robot listens, the microphone's loudness
       go straight to the renderer.
-    - Taps on the screen are published as ``ScreenTouched``.
+    - Taps on the screen are published as ``ScreenTouched``, and sent to the cloud as
+      the event ``screen.touched``.
+    - The cloud can ask for an expression, a mood or a scene (``capabilities``): a
+      reaction, at ``ScreenPriority.REACTION``; a mood, at ``AMBIENT``; a scene, at
+      ``REACTION``.
 
     The renderer animates on its own (transitions, blinking, glances, its start-up),
     so this module sends only changes.
@@ -142,6 +308,7 @@ class ScreenModule(Module):
         self.batteries = self._subscribe(BatteryReport)
         self.levels = self._subscribe(SoundLevel)
         self.gazes = self._subscribe(LookAt)
+        self.capabilities = CapabilityHost(self)
 
     def _subscribe(self, kind: type[M]) -> Subscription[M]:
         subscription = self.bus.subscribe(kind)
@@ -150,6 +317,13 @@ class ScreenModule(Module):
 
     async def start(self) -> None:
         await self._refresh()
+        vocabulary = await asyncio.to_thread(load_vocabulary)
+        offered = capabilities(vocabulary)
+        handlers = (self._show_expression, self._set_mood, self._show_scene)
+        for capability, handler in zip(offered, handlers, strict=True):
+            self.capabilities.add(capability, handler)
+        self.capabilities.add_event(TOUCHED)
+        self.capabilities.offer()
 
     async def run(self) -> None:
         async with asyncio.TaskGroup() as tasks:
@@ -161,10 +335,12 @@ class ScreenModule(Module):
             tasks.create_task(self._follow(self.gazes, self._on_gaze))
             tasks.create_task(self._expire())
             tasks.create_task(self._forward_taps())
+            tasks.create_task(self.capabilities.serve())
 
     async def stop(self) -> None:
         for subscription in self.subscriptions:
             subscription.close()
+        self.capabilities.close()
 
     @staticmethod
     async def _follow(
@@ -261,6 +437,41 @@ class ScreenModule(Module):
         while True:
             touch = await self.screen.touched()
             self.bus.publish(ScreenTouched(touch.x, touch.y))
+            self.capabilities.emit(TOUCHED.name, {"x": touch.x, "y": touch.y})
+
+    # ---- what the cloud can ask (``capabilities``) ----
+
+    async def _show_expression(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        face = Face(arguments["expression"], arguments.get("tone"))
+        seconds = arguments.get("seconds", REACTION_SECONDS)
+        self.faces.put(
+            CLOUD_REACTION, face, priority=ScreenPriority.REACTION, expires=self._expires(seconds)
+        )
+        return await self._showing_expression()
+
+    async def _set_mood(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        expression = arguments["expression"]
+        face = None if expression is None else Face(expression, arguments.get("tone"))
+        self.faces.put(CLOUD_MOOD, face, priority=ScreenPriority.AMBIENT)
+        return await self._showing_expression()
+
+    async def _show_scene(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        name = arguments["scene"]
+        scene = None if name is None else Scene(name, arguments.get("data", {}))
+        self.scenes.put(
+            CLOUD_SCENE,
+            scene,
+            priority=ScreenPriority.REACTION,
+            expires=self._expires(arguments.get("seconds")),
+        )
+        await self._refresh()
+        assert self.state is not None
+        return {"showing": self.state.scene}
+
+    async def _showing_expression(self) -> Mapping[str, Any]:
+        await self._refresh()
+        assert self.state is not None
+        return {"showing": self.state.expression}
 
     @staticmethod
     def _now() -> float:

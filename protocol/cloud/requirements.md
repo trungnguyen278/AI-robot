@@ -67,7 +67,7 @@ The cloud will learn to do more over time: new expressions and scenes, gestures,
 | ID | Requirement |
 |---|---|
 | EXT-1 | The robot **MUST** publish a catalogue of capabilities at the start of each session. Each entry has a namespaced name (`screen.show_expression`, `motion.look_at`, `timer.set`), a description, a JSON Schema for its arguments and one for its result, a version, a safety class (SEC-8) and limits (rate, duration). |
-| EXT-2 | The cloud **MUST** be able to call any catalogue capability through one generic call message, and receive one generic result message: a result, an error in the capability (it ran and failed), or a protocol error (unknown capability, invalid arguments, not allowed). |
+| EXT-2 | The cloud **MUST** be able to call any catalogue capability through one generic call message, and receive one generic result message. The result is one of three kinds:<br>• a result;<br>• an error in the capability: it ran and failed, or its arguments were invalid, worded so that a language model can correct itself, as MCP advises;<br>• a protocol error: an unknown capability, or a malformed call.<br>A capability the robot's owner does not allow is not in the catalogue (SEC-9). |
 | EXT-3 | Results **MUST** be structured data that matches the declared result schema, so that the AI can use them. |
 | EXT-4 | When capabilities change during a session (a module started, hardware added, a setting changed), the robot **MUST** say so, and the cloud **MUST** read the catalogue again. |
 | EXT-5 | Long actions (driving somewhere, playing music, a sequence of gestures) **MUST** report progress, be cancellable, and end with a result, as ROS 2 actions do. |

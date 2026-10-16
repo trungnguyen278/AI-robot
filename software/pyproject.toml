@@ -10,7 +10,8 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
-  "aiohttp>=3.13,<4",  # the screen's web adapter (adapters/web)
+  "aiohttp>=3.13,<4",  # the screen and the cloud link (adapters/web)
+  "jsonschema>=4.23,<5",  # checking data against the protocols' JSON Schemas
 ]
 
 [project.optional-dependencies]

@@ -24,6 +24,15 @@ from ai_robot.ports.body import (
     Safety,
 )
 from ai_robot.ports.camera import Camera, Frame
+from ai_robot.ports.cloud import (
+    CallCancelled,
+    Capability,
+    Cloud,
+    EventKind,
+    LinkStatus,
+    SafetyClass,
+    ToolCall,
+)
 from ai_robot.ports.daylight import Daylight, SunTimes
 from ai_robot.ports.image import Color, Image
 from ai_robot.ports.screen import Screen, ScreenState, Touch
@@ -35,6 +44,7 @@ PORT_TYPES: dict[str, type[Port]] = {
     "camera": Camera,
     "screen": Screen,
     "ai_backend": AIBackend,
+    "cloud": Cloud,
     "daylight": Daylight,
     "drive": DriveBase,
     "joints": Joints,
@@ -52,22 +62,29 @@ __all__ = [
     "AudioIn",
     "AudioOut",
     "BatteryStatus",
+    "CallCancelled",
     "Camera",
+    "Capability",
+    "Cloud",
     "Color",
     "Daylight",
     "DriveBase",
+    "EventKind",
     "Frame",
     "Image",
     "JointInfo",
     "Joints",
     "Lights",
+    "LinkStatus",
     "Port",
     "Pose",
     "Power",
     "RangeSensor",
     "Safety",
+    "SafetyClass",
     "Screen",
     "ScreenState",
     "SunTimes",
+    "ToolCall",
     "Touch",
 ]
