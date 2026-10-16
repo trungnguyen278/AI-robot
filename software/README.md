@@ -10,7 +10,7 @@ Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependen
 modules    system · motion · voice · vision · screen · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · ai_backend
+ports      audio_in · audio_out · camera · screen · ai_backend · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -23,7 +23,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `voice` | `audio_in`, `audio_out`, `ai_backend` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
-| `behavior` | — | Decides what the robot does; publishes the interaction state |
+| `behavior` | `daylight` | Decides what the robot does: the interaction state; for now, reactions to taps, the clock when idle, a sleepy face from sunset to sunrise |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.
 - **Message:** what a module tells the others; a frozen dataclass in `messages.py`, whose class is the topic.
@@ -49,7 +49,7 @@ software/
 │   ├── native.py           C++ functions, with pure-Python fallbacks
 │   ├── core/               Configuration, bus, module base class, factory
 │   ├── ports/              Port interfaces
-│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (the screen, served to a browser)
+│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (the screen, served to a browser), sun/ (sunrise and sunset)
 │   └── modules/            Module registry and the modules
 ├── native/                 Optional C++ extension (pybind11 + scikit-build-core)
 └── tests/

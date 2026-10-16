@@ -25,6 +25,10 @@ enabled = ["system", "voice", "vision", "screen", "behavior", "motion"]
 [modules.system]
 battery_interval = 5.0  # seconds between battery reports
 
+[modules.behavior]
+idle_minutes = 5.0  # with no tap or conversation for this long, the screen shows the clock
+sleepy_after_sunset = 0.0  # hours after sunset when the face turns sleepy; it wakes at sunrise
+
 [modules.screen]
 # Microphone loudness (dBFS) that the face's voice reaction maps to 0 and to 1.
 # Placeholders until the microphones are measured.
@@ -68,6 +72,16 @@ port = 8770
 # Speech recognition, conversation and speech synthesis.
 [ports.ai_backend]
 adapter = "stub"
+
+# When the sun rises and sets. "fixed" until the robot's place is known; for the real
+# times, select "solar" in local.toml with the robot's latitude and longitude (see
+# local.example.toml), so that the place stays on this machine.
+[ports.daylight]
+adapter = "fixed"
+
+[ports.daylight.fixed]
+sunrise = "06:00"
+sunset = "18:00"
 
 # ---- Body: simulated until the body controller is chosen (docs/decisions/0004) ----
 
