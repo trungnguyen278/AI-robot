@@ -23,7 +23,7 @@
 |---|---|---|
 | Raspberry Pi 5 | Audio, vision, face, AI, networking (built-in Wi-Fi/BLE), behavior | Real-time control loops |
 | Body controller (microcontroller not chosen yet — [ADR-0004](decisions/0004-pi-software-first.md)) | Servos, motors and encoders, distance sensor, LEDs, battery voltage, safe stop when the Pi goes silent | Networking |
-| `ai-robot-server` (later) | STT/LLM/TTS, storage, device management | |
+| `ai-robot-server` (later) | The core AI: speech recognition, conversation, voice, and probably moods; storage, device management, updates | Physical safety: the robot checks every call locally |
 | `ai-robot-app` (later) | Pairing, settings, remote control | |
 
 ## Principles
@@ -58,6 +58,6 @@ The screen is the exception that is real already: the `screen` module decides wh
 - [ ] Which microcontroller becomes the body controller ([ADR-0004](decisions/0004-pi-software-first.md)).
 - [ ] Pi ⇄ body link (concept v0 shows UART/I2C) and the packet format.
 - [ ] Does the body controller or the Pi drive the motor driver?
-- [ ] How AI work is split between the camera, the Pi and the server.
+- [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md), and its decisions (transport, message format, audio, device identity, updates) come next.
 - [ ] Audio: ReSpeaker HAT or MAX98357A — they cannot share the I2S pins; see [hardware/README.md](../hardware/README.md).
 - [ ] How the robot draws its screen — proposed in [ADR-0006](decisions/0006-screen-renderer.md): a renderer in a full-screen browser ([ui/](../ui/README.md)), driven by the Pi software over the [screen protocol](../protocol/screen/README.md).
