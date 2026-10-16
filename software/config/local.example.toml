@@ -10,3 +10,11 @@
 # Watch the screen from another device on the network (anyone on it can then see it):
 # [ports.screen.web]
 # host = "0.0.0.0"
+
+# Sunrise and sunset computed for where the robot is: latitude and longitude in
+# degrees, north and east positive. They stay on this machine.
+# [ports.daylight]
+# adapter = "solar"
+# [ports.daylight.solar]
+# latitude = 0.0
+# longitude = 0.0

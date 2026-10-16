@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 import pytest
 
 import ai_robot.app
@@ -215,7 +216,8 @@ def test_desktop_profile(shipped_config: Path) -> None:
         return shown and levels.pending > 0 and batteries.pending > 0
 
     run_until(app, going)
-    assert screen.state.expression == "neutral"
+    # The default face, or the sleepy one if the configured sunset has passed.
+    assert screen.state.expression in {"neutral", "sleepy"}
     assert lights.color == (0, 0, 0)  # switched off when stopping
 
 
@@ -273,3 +275,39 @@ def test_an_app_runs_only_once(events: list[str]) -> None:
     run(app, 0.01)
     with pytest.raises(RuntimeError, match="runs only once"):
         run(app, 0.01)
+
+
+def test_a_tap_on_the_screen_reaches_the_face(shipped_config: Path) -> None:
+    """From a page's tap, through behavior and screen, back to the page; then the clock."""
+    table = load_config("desktop", shipped_config)
+    table["ports"]["screen"]["web"]["port"] = 0
+    table["modules"]["behavior"]["idle_minutes"] = 0.01  # 0.6 s
+    app = App(table)
+    app.build()
+    screen: Any = app.adapters["screen"]
+
+    async def main() -> None:
+        stop = asyncio.Event()
+
+        async def page() -> None:
+            while screen.state is None:  # the robot is starting
+                await asyncio.sleep(0.01)
+            base = "http://{}:{}".format(*screen.address)
+            async with aiohttp.ClientSession() as session, session.ws_connect(f"{base}/ws") as ws:
+
+                async def state_where(test: Callable[[dict[str, Any]], bool]) -> None:
+                    while True:
+                        message = await ws.receive_json(timeout=5)
+                        if message["type"] == "state" and test(message):
+                            return
+
+                await ws.send_json({"type": "touch", "x": 0.5, "y": 0.5})
+                await state_where(lambda m: m["face"]["expression"] == "happy")
+                await state_where(lambda m: (m["scene"] or {}).get("name") == "clock")
+            stop.set()
+
+        client = asyncio.create_task(page())
+        await asyncio.wait_for(app.run(stop), 15)
+        await client
+
+    asyncio.run(main())

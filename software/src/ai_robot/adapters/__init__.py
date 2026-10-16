@@ -2,7 +2,7 @@
 """Adapters: the implementations of the ports.
 
 The configuration selects one adapter per port (``adapter = "sim"``). Adapters are
-grouped by technology (``sim/``, ``web/``; ALSA, Picamera2 or the body link later), so the
+grouped by technology (``sim/``, ``web/``, ``sun/``; ALSA, Picamera2 or the body link later), so the
 libraries of a technology are imported only when one of its adapters is selected.
 """
 
@@ -25,6 +25,10 @@ ADAPTERS: dict[str, dict[str, str]] = {
         "web": "ai_robot.adapters.web.screen:WebScreen",
     },
     "ai_backend": {"stub": "ai_robot.adapters.sim.ai:StubAIBackend"},
+    "daylight": {
+        "fixed": "ai_robot.adapters.sun.daylight:FixedDaylight",
+        "solar": "ai_robot.adapters.sun.daylight:SolarDaylight",
+    },
     "drive": {"sim": "ai_robot.adapters.sim.body:SimDriveBase"},
     "joints": {"sim": "ai_robot.adapters.sim.body:SimJoints"},
     "range": {"sim": "ai_robot.adapters.sim.body:SimRangeSensor"},
