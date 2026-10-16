@@ -43,6 +43,23 @@ The scope is the affected area: `software`, `ui`, `firmware`, `protocol`, `hardw
 
 Example: `feat(firmware): read MG540 encoders with PCNT`
 
+Keep commit messages short. Every commit stays in the history for good, and the diff already shows what changed.
+
+- **The subject** says what changes, in under 72 characters.
+- **A body** is optional: at most a few lines on *why*, when the subject does not say it.
+- **No inventories.** Leave out lists of files, settings or tests, and test counts.
+- **No review narratives.** What a review found belongs in the conversation or the dev log, not in the commit.
+
+## Pull requests
+
+- A pull request carries **exactly one commit**, written as a Conventional Commit. To change it, amend that commit (`git commit --amend`) and update the branch with `git push --force-with-lease`; do not push follow-up commits.
+- A branch that already has several commits is squashed locally before pushing: `git reset --soft $(git merge-base origin/main HEAD)`, then commit once.
+- Pull requests are merged with a merge commit, the only merge method enabled on GitHub, so each pull request adds one merge commit and its single commit to `main`.
+- The description is short, following the template:
+  - a few sentences on what changes and why;
+  - one line on how it was tested;
+  - the checklist.
+
 ## Adding or removing a component
 
 The repository is a set of independent components: `software/`, `ui/`, each module under `firmware/`, `protocol/` and `tools/`.
