@@ -5,8 +5,7 @@
    one motion out while the next fades in.
 */
 
-const TAU = Math.PI * 2;
-const ease = (x) => 1 - (1 - x) ** 3;
+import { TAU, ease } from './math.js';
 
 export const MOTIONS = {
   // Hops up and down, squashing on each landing.
@@ -68,7 +67,7 @@ export const MOTIONS = {
 
   // Pops wide open, then settles.
   pop: (t) => {
-    const grow = t < 0.12 ? ease(t / 0.12) : Math.max(0, 1 - (t - 0.12) / 0.5);
+    const grow = t < 0.12 ? ease.out(t / 0.12) : Math.max(0, 1 - (t - 0.12) / 0.5);
     return { eyes: { w: 14 * grow, h: 14 * grow } };
   },
 };

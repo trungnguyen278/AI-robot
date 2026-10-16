@@ -50,7 +50,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 
 Until the body controller exists, the body ports (`drive`, `joints`, `range`, `power`, `lights`, `safety`) stay simulated; then one adapter implements them over the link to the body controller.
 
-The screen is the exception that is real already: the `screen` module decides what it shows (expression, gaze, battery), and a renderer page in [`ui/`](../ui/README.md), shown full screen by a browser, draws it and keeps the face alive on its own. They talk over the [screen protocol](../protocol/screen/README.md) (proposed in [ADR-0006](decisions/0006-screen-renderer.md)).
+The screen is the exception that is real already: the `screen` module decides what it shows (the expression, a scene such as the clock or the weather, the gaze, the battery), and a renderer page in [`ui/`](../ui/README.md), shown full screen by a browser, draws it and keeps the face alive on its own. They talk over the [screen protocol](../protocol/screen/README.md) (proposed in [ADR-0006](decisions/0006-screen-renderer.md)).
 
 ## Open questions (each should become an ADR)
 

@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-16
+- **Revised:** 2026-10-16, with scenes (still proposed; see the dev log)
 
 ## Context
 
@@ -21,12 +22,12 @@
 
 ## Decision
 
-1. **The software decides what to show, the renderer how.** The Pi software's `screen` module picks the expression and the status (battery). A page in `ui/` draws it: it runs the frame loop, the transitions and the life of the face (blinking, glances, breathing, the gaze, the voice) on its own. On the robot it runs in Chromium in kiosk mode, and in any browser elsewhere.
+1. **The software decides what to show, the renderer how.** The Pi software's `screen` module picks the expression, the scene (a page of information such as the time, the weather or a timer, drawn from the data it is sent) and the status (battery). A page in `ui/` draws it: it runs the frame loop, the transitions and the life of the face (blinking, glances, breathing, the gaze, the voice) on its own. On the robot it runs in Chromium in kiosk mode, and in any browser elsewhere.
 2. **One protocol between them**, in [`protocol/screen/`](../../protocol/screen/README.md): JSON messages over a WebSocket served by the software (`web` adapter of the `screen` port). The software sends the whole state on every change and to every page that connects. It sends gaze and voice level as separate messages, and the page reports its size and taps.
-3. **Priorities and timeouts decide the expression.** Every module may ask for one, with a priority and an optional duration; the highest request still valid wins, and `neutral` when there is none. This replaces the previous generation's hold modes and random idle rotation.
+3. **Priorities and timeouts decide the expression and the scene**, each on its own. Every module may ask for one, with a priority and an optional duration; the highest request still valid wins, and `neutral` (or no scene) when there is none. While a scene fills the screen, the face keeps its expression and watches from a corner, as in the previous generation's scene design. This replaces that generation's hold modes and random idle rotation.
 4. **A procedural face.** An expression is data: eye, lid, brow and mouth numbers, plus a colour, a motion, an effect and how much of each life layer it keeps. Any expression blends into any other, even in the middle of a transition.
 5. **Any screen.** The face is laid out from the screen's size and shape (rectangular or round); there is no fixed stage.
-6. **Plain JavaScript modules drawing on a 2D canvas**: no build step and no framework, so the same files run on the robot, in a browser, in headless tests and in an Artifact. WebGL waits until a measurement on the Pi 5 calls for it.
+6. **Plain JavaScript modules drawing on a 2D canvas**: no build step and no framework, so the same files run on the robot, in a browser and in headless tests. For hosts that refuse separate script files, such as an Artifact, an optional tool inlines them into one page. WebGL waits until a measurement on the Pi 5 calls for it. The renderer also owns what belongs to the page itself: its start-up animation, and reloading when the software serves new files.
 7. **The previous library becomes the reference** (`ui/legacy/`): its designs move into the new renderer one by one (14 expressions to start with), and it is deleted when they all have.
 
 ## Alternatives considered
@@ -42,8 +43,8 @@
 ## Consequences
 
 - Positive: transitions between any two expressions; a face that follows a gaze and a voice and stays alive while the software is busy; any screen size or shape. The same code runs on the robot, in a browser, in tests and in the Artifact. Either side can be replaced without touching the other, and both are tested against the protocol's vocabulary.
-- Negative / accepted trade-offs: a browser on the robot (memory, start-up time). The software gets its first runtime dependency, aiohttp. The previous library's 82 categories have to be ported: 14 expressions exist, and no scene (clock, weather, timers…) or status screen yet.
-- Follow-up: measure frame rate, CPU and memory on a Pi 5 with the 7" display (`chrome://gpu`, the studio's frame-rate readout). Set up the kiosk (labwc autostart). Port the scenes as pages, have behaviors request expressions, and have vision send `LookAt`.
+- Negative / accepted trade-offs: a browser on the robot (memory, start-up time). The software gets its first runtime dependency, aiohttp. The previous library's 82 categories have to be ported: 14 expressions and 5 scenes (clock, weather, timer, charging, start-up) exist so far.
+- Follow-up: measure frame rate, CPU and memory on a Pi 5 with the 7" display (`chrome://gpu`, the studio's frame-rate readout). Set up the kiosk (labwc autostart). Port the remaining scenes, have behaviors request expressions and scenes, and have vision send `LookAt`.
 
 ## References
 

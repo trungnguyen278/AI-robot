@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 /* Draws one frame of the animator (animator.js) on a 2D canvas: the background, the
-   face with its glow, the effects, and the status row (time and battery). */
+   scenes, the face with its glow and effects, and the status row (time and battery). */
 
 import { EFFECTS } from './effects.js';
+import { TAU, clamp } from './math.js';
 import { EYE_SPACING } from './pose.js';
+import { SCENES } from './scenes/index.js';
+import { batteryPercent, boltPath, hhmm } from './scenes/kit.js';
+import { font } from './text.js';
 import { BACKGROUND, TONES, rgba } from './tones.js';
 
 const GLOW = 5;          // blur of the glow, in face units
@@ -12,14 +16,12 @@ const BROW_WIDTH = 10;
 const MOUTH_WIDTH = 4;
 const LOW_BATTERY = 15;  // percent: the battery turns red at or below it
 
-const TAU = Math.PI * 2;
 const rad = (deg) => (deg * Math.PI) / 180;
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-/** Draw `frame` on `ctx` for the screen `layout` (layout.js). `status`, if given,
-    shows the time and `{ battery, charging }`; `dpr` is the canvas's pixels per CSS
-    pixel. */
-export function drawFrame(ctx, layout, frame, { status = null, dpr = 1, now = new Date() } = {}) {
+/** Draw `frame` on `ctx` for the screen `layout` (layout.js). `status` is
+    `{ battery, charging }`; `statusRow` shows it with the time along the top; `dpr`
+    is the canvas's pixels per CSS pixel; `now` is the time to show. */
+export function drawFrame(ctx, layout, frame, { status = {}, statusRow = true, dpr = 1, now = new Date() } = {}) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
@@ -33,19 +35,37 @@ export function drawFrame(ctx, layout, frame, { status = null, dpr = 1, now = ne
     ctx.clip();
   }
 
+  // Scenes, under the face. The blur is in device pixels: the canvas transform does
+  // not scale it.
+  const pixels = layout.scale * dpr;
+  for (const scene of frame.scenes) {
+    if (scene.alpha <= 0) continue;
+    ctx.save();
+    ctx.translate(layout.cx, layout.cy);
+    ctx.scale(layout.scale, layout.scale);
+    const ink = rgba(scene.rgb);
+    ctx.fillStyle = ink;
+    ctx.strokeStyle = ink;
+    ctx.shadowColor = rgba(scene.rgb, scene.glow);
+    ctx.shadowBlur = GLOW * pixels;
+    SCENES[scene.name].draw(ctx, scene.t, { alpha: scene.alpha, data: scene.data, now, status, pixels });
+    ctx.restore();
+  }
+
+  // The face, in its slot while a scene is on screen.
   const { face, left, right } = frame.pose;
+  const { slot } = frame;
   ctx.save();
-  ctx.translate(layout.cx, layout.cy);
-  ctx.scale(layout.scale, layout.scale);
+  ctx.translate(layout.cx + slot.x * layout.scale, layout.cy + slot.y * layout.scale);
+  ctx.scale(layout.scale * slot.scale, layout.scale * slot.scale);
   ctx.translate(face.x, face.y);
   ctx.rotate(rad(face.tilt));
   ctx.scale(face.scale, face.scale);
   const color = rgba(frame.rgb);
   ctx.fillStyle = color;
   ctx.strokeStyle = color;
-  // The blur is in device pixels: the canvas transform does not scale it.
   ctx.shadowColor = rgba(frame.rgb, frame.glow);
-  ctx.shadowBlur = GLOW * layout.scale * face.scale * dpr;
+  ctx.shadowBlur = GLOW * layout.scale * Math.max(slot.scale, 0.4) * face.scale * dpr;
   drawEye(ctx, left, -EYE_SPACING / 2, 1);
   drawEye(ctx, right, EYE_SPACING / 2, -1);
   drawMouth(ctx, face);
@@ -58,7 +78,7 @@ export function drawFrame(ctx, layout, frame, { status = null, dpr = 1, now = ne
   }
   ctx.restore();
 
-  if (status) drawStatus(ctx, layout, status, frame.rgb, now);
+  if (statusRow) drawStatus(ctx, layout, status, frame.rgb, now, frame.clockAlpha);
   ctx.restore();
 }
 
@@ -147,37 +167,44 @@ function drawMouth(ctx, face) {
 }
 
 function bolt(ctx, cx, cy, size) {
-  ctx.beginPath();
-  ctx.moveTo(cx + 0.15 * size, cy - 0.5 * size);
-  ctx.lineTo(cx - 0.3 * size, cy + 0.08 * size);
-  ctx.lineTo(cx, cy + 0.08 * size);
-  ctx.lineTo(cx - 0.15 * size, cy + 0.5 * size);
-  ctx.lineTo(cx + 0.3 * size, cy - 0.08 * size);
-  ctx.lineTo(cx, cy - 0.08 * size);
-  ctx.closePath();
+  boltPath(ctx, cx, cy, size);
   ctx.fill();
 }
 
-function drawStatus(ctx, layout, { battery = null, charging = null }, rgb, now) {
-  const clock = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const percent = Number.isFinite(battery) ? Math.round(clamp(battery, 0, 100)) : null;
-  const low = percent !== null && percent <= LOW_BATTERY && !charging;
+// The time (faded out by `clockAlpha` while a scene shows its own) and the battery.
+// Each keeps its own place, so that neither moves when the other changes.
+function drawStatus(ctx, layout, status, rgb, now, clockAlpha) {
+  const percent = batteryPercent(status);
+  const low = percent !== null && percent <= LOW_BATTERY && !status.charging;
   const ink = rgba(rgb, 0.6);
+  const warn = rgba(TONES.red.rgb, 0.85);
+  const clock = (x, y) => {
+    if (clockAlpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha *= clockAlpha;
+    ctx.fillText(hhmm(now), x, y);
+    ctx.restore();
+  };
   ctx.save();
   ctx.shadowBlur = 0;
   ctx.fillStyle = ink;
   ctx.strokeStyle = ink;
-  ctx.textBaseline = 'middle';
 
   if (layout.shape === 'round') {
+    // The time left of the centre and the battery right of it; the time alone, centred.
     const size = layout.radius * 0.085;
     const y = layout.cy - layout.radius * 0.8;
-    ctx.font = `600 ${size}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    const label = percent === null ? clock : `${clock} · ${percent}%`;
-    if (low) ctx.fillStyle = rgba(TONES.red.rgb, 0.85);
-    ctx.fillText(label, layout.cx, y);
-    if (charging) bolt(ctx, layout.cx + ctx.measureText(label).width / 2 + size * 0.6, y, size);
+    const gap = size * 0.4;
+    ctx.font = font(size, 600);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = percent === null ? 'center' : 'right';
+    clock(percent === null ? layout.cx : layout.cx - gap, y);
+    if (percent !== null) {
+      ctx.textAlign = 'left';
+      if (low) ctx.fillStyle = warn;
+      ctx.fillText(`${percent}%`, layout.cx + gap, y);
+      if (status.charging) bolt(ctx, layout.cx + gap + ctx.measureText(`${percent}%`).width + size * 0.5, y, size);
+    }
     ctx.restore();
     return;
   }
@@ -186,9 +213,10 @@ function drawStatus(ctx, layout, { battery = null, charging = null }, rgb, now) 
   const size = rowH * 0.42;
   const pad = rowH * 0.5;
   const y = rowH / 2;
-  ctx.font = `600 ${size}px system-ui, sans-serif`;
+  ctx.font = font(size, 600);
+  ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  ctx.fillText(clock, pad, y);
+  clock(pad, y);
   if (percent === null) {
     ctx.restore();
     return;
@@ -204,14 +232,13 @@ function drawStatus(ctx, layout, { battery = null, charging = null }, rgb, now) 
   ctx.stroke();
   ctx.fillRect(bx + bw + line, y - bh * 0.22, 1.6 * line, bh * 0.44);
   const inset = 1.8 * line;
-  ctx.fillStyle = low ? rgba(TONES.red.rgb, 0.85) : ink;
+  ctx.fillStyle = low ? warn : ink;
   ctx.beginPath();
   ctx.roundRect(bx + inset, y - bh / 2 + inset, (bw - 2 * inset) * (percent / 100), bh - 2 * inset, bh * 0.1);
   ctx.fill();
-  ctx.fillStyle = low ? rgba(TONES.red.rgb, 0.85) : ink;
   ctx.textAlign = 'right';
   let x = bx - size * 0.45;
-  if (charging) {
+  if (status.charging) {
     bolt(ctx, x - size * 0.3, y, size);
     x -= size * 0.85;
   }

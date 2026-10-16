@@ -2,7 +2,7 @@
 /* Player: plays an animator (animator.js) on a canvas. It sizes the canvas to its box
    and to the screen's pixel density, and draws a frame on every display refresh. Its
    clock, in seconds, is the animator's time; `speed` slows it down to study a
-   transition. */
+   transition. The time it shows is the software's (`offset`, set by link.js). */
 
 import { drawFrame } from './draw.js';
 import { fit } from './layout.js';
@@ -16,6 +16,7 @@ export class Player {
     this.showStatus = status;
     this.status = { battery: null, charging: null };
     this.speed = 1;
+    this.offset = 0; // seconds the software's clock is ahead of this page's
     this.fps = 0;
     this.clock = 0;
     this.last = null;
@@ -29,6 +30,11 @@ export class Player {
   /** The animator's present time, in seconds. */
   now() {
     return this.clock;
+  }
+
+  /** The time of day, on the software's clock. */
+  wallClock() {
+    return new Date(Date.now() + this.offset * 1000);
   }
 
   resize() {
@@ -49,8 +55,10 @@ export class Player {
   draw() {
     const frame = this.animator.frame(this.clock);
     drawFrame(this.ctx, this.layout, frame, {
-      status: this.showStatus ? this.status : null,
+      status: this.status,
+      statusRow: this.showStatus,
       dpr: this.dpr,
+      now: this.wallClock(),
     });
     return frame;
   }

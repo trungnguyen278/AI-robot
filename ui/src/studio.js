@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 /* The studio (index.html): plays the face on any screen and drives it by hand, the
-   way the robot software drives it over the screen protocol. Adding `#<expression>`
-   or `#<screen id>` to the address opens the studio on it. */
+   way the robot software drives it over the screen protocol. Adding `#<expression>`,
+   `#<scene>` or `#<screen id>` to the address opens the studio on it. */
 
 import { Animator } from './animator.js';
 import { EXPRESSIONS } from './expressions.js';
 import { PROFILES } from './layout.js';
 import { Player } from './player.js';
+import { SCENES, sceneTone } from './scenes/index.js';
+import { CONDITIONS } from './scenes/weather.js';
 import { TONES, rgba } from './tones.js';
 
 const $ = (id) => document.getElementById(id);
@@ -19,26 +21,88 @@ player.start();
 
 let tone = null; // null: each expression's own colour
 
-// Expressions.
-const chips = $('expressions');
-for (const [name, spec] of Object.entries(EXPRESSIONS)) {
+// A chip named `name`, with a dot of `toneName`'s colour unless it is null.
+function addChip(container, name, toneName, onClick) {
   const chip = document.createElement('button');
   chip.type = 'button';
   chip.className = 'chip';
   chip.dataset.name = name;
   chip.setAttribute('aria-pressed', 'false');
-  const dot = document.createElement('span');
-  dot.className = 'dot';
-  dot.style.background = rgba(TONES[spec.tone].rgb);
-  chip.append(dot, name);
-  chip.addEventListener('click', () => show(name));
-  chips.append(chip);
+  if (toneName) {
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.style.background = rgba(TONES[toneName].rgb);
+    chip.append(dot);
+  }
+  chip.append(name);
+  chip.addEventListener('click', onClick);
+  container.append(chip);
 }
 
-function show(name) {
-  const shown = animator.set(name, tone, player.now());
-  for (const chip of chips.children) chip.setAttribute('aria-pressed', String(chip.dataset.name === shown));
+function press(container, name) {
+  for (const chip of container.children) chip.setAttribute('aria-pressed', String(chip.dataset.name === name));
 }
+
+// Expressions.
+const chips = $('expressions');
+for (const [name, spec] of Object.entries(EXPRESSIONS)) addChip(chips, name, spec.tone, () => show(name));
+
+function show(name) {
+  press(chips, animator.set(name, tone, player.now()));
+}
+
+// Scenes, with data for those that take some.
+const NONE = 'none';
+const sceneChips = $('scenes');
+let timer = null; // { duration, ends_at } of the timer started last
+
+addChip(sceneChips, NONE, null, () => showScene(null));
+for (const [name, spec] of Object.entries(SCENES)) {
+  addChip(sceneChips, name, sceneTone(spec, spec.example), () => showScene(name, { restart: true }));
+}
+
+const conditionSelect = $('weather-condition');
+for (const [value, { label }] of Object.entries(CONDITIONS)) conditionSelect.append(new Option(label, value));
+conditionSelect.value = SCENES.weather.example.condition;
+
+function startTimer() {
+  const duration = Math.max(6, Number($('timer-minutes').value) * 60 || 60);
+  timer = { duration, ends_at: player.wallClock().getTime() / 1000 + duration };
+}
+
+function sceneData(name) {
+  if (name === 'weather') {
+    const temperature = $('weather-temperature').value; // '' while empty or half typed
+    return {
+      condition: conditionSelect.value,
+      temperature: temperature === '' ? null : Number(temperature),
+      unit: $('weather-unit').value,
+      night: $('weather-night').checked,
+      place: $('weather-place').value,
+    };
+  }
+  if (name === 'timer') {
+    if (!timer) startTimer();
+    return { ...timer, label: $('timer-label').value };
+  }
+  return { ...SCENES[name]?.example };
+}
+
+// Show scene `name` (null: none); `restart` plays it from the start, a timer anew.
+function showScene(name, { restart = false } = {}) {
+  if (restart && name === 'timer') startTimer();
+  const shown = animator.setScene(name, name ? sceneData(name) : {}, player.now(), { restart });
+  press(sceneChips, shown ?? NONE);
+  $('scene-weather').hidden = shown !== 'weather';
+  $('scene-timer').hidden = shown !== 'timer';
+}
+press(sceneChips, NONE);
+
+for (const id of ['weather-condition', 'weather-temperature', 'weather-unit', 'weather-night', 'weather-place']) {
+  $(id).addEventListener('input', () => showScene('weather'));
+}
+$('timer-label').addEventListener('input', () => showScene('timer'));
+$('timer-start').addEventListener('click', () => showScene('timer', { restart: true }));
 
 // Colour.
 const toneSelect = $('tone');
@@ -132,11 +196,12 @@ $('charging').addEventListener('change', updateStatus);
 const readout = $('readout');
 setInterval(() => {
   const { width, height } = player.layout;
-  readout.textContent = `${animator.expression} · ${tone ?? 'own colour'} · `
+  readout.textContent = `${animator.expression}${animator.scene ? ` on ${animator.scene}` : ''} · ${tone ?? 'own colour'} · `
     + `${Math.round(width)} × ${Math.round(height)} px · ${Math.round(player.fps)} fps`;
 }, 250);
 
-// Start from the address (#happy, #round-360…), or on the 7" LCD with "neutral".
+// Start from the address (#happy, #clock, #round-360…), or on the 7" LCD with "neutral".
 const token = location.hash.slice(1);
 setScreen(PROFILES.some((p) => p.id === token) ? token : PROFILES[0].id);
 show(Object.hasOwn(EXPRESSIONS, token) ? token : 'neutral');
+if (Object.hasOwn(SCENES, token)) showScene(token);

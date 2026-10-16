@@ -1,35 +1,44 @@
 // SPDX-License-Identifier: MIT
 /* Tests of the renderer (how to run them: ui/README.md).
 
-   They check the expressions against the screen protocol's vocabulary, draw every
-   expression on every screen profile, and check the animator: same calls give the
-   same frames, transitions never jump, and protocol messages land where they should.
-   The page also shows every expression, for a look. The verdict goes to #result as
-   data-status="pass" or data-status="fail", with one line per failure.
+   They check the expressions and scenes against the screen protocol's vocabulary,
+   draw every expression and every scene (with good, missing and malformed data) on
+   every screen profile, and check the animator: the same calls give the same frames,
+   transitions never jump, scenes move the face smoothly and keep it still between
+   two scenes that share a corner, and protocol messages land where they should. The
+   page also shows every expression and scene, for a look. The verdict goes to
+   #result as data-status="pass" or data-status="fail", with one line per failure.
 */
 
-import { Animator, TRANSITION } from '../src/animator.js';
+import { Animator, SCENE_TRANSITION, TRANSITION } from '../src/animator.js';
 import { drawFrame } from '../src/draw.js';
 import { EFFECTS } from '../src/effects.js';
 import { DEFAULT_EXPRESSION, EXPRESSIONS } from '../src/expressions.js';
 import { PROFILES, fit } from '../src/layout.js';
-import { PROTOCOL, apply } from '../src/link.js';
+import { Link, PROTOCOL, apply } from '../src/link.js';
 import { MOTIONS } from '../src/motions.js';
 import { EYE, FACE } from '../src/pose.js';
+import { SCENES, sceneSlot, sceneTone } from '../src/scenes/index.js';
+import { CORNER } from '../src/scenes/kit.js';
+import { LABEL_LENGTH } from '../src/scenes/timer.js';
+import { CONDITIONS, PLACE_LENGTH, UNITS } from '../src/scenes/weather.js';
+import { clip } from '../src/text.js';
 import { TONES } from '../src/tones.js';
 
 const VOCABULARY = '../../protocol/screen/vocabulary.json';
 const MOMENTS = [0, 0.37, 1.9, 4.4];
 const LIFE_KEYS = ['blink', 'glance', 'breathe', 'voice'];
+const STEP = 1 / 120; // seconds between two frames, in the motion checks
 
 const failures = [];
 const fail = (where, message) => failures.push(`${where}: ${message}`);
 const check = (ok, where, message) => {
   if (!ok) fail(where, message);
 };
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // An animator without blinks or glances, so that frames are easy to compare.
-function still(expression, seed = 3) {
+function still(expression = DEFAULT_EXPRESSION, seed = 3) {
   const animator = new Animator({ expression, seed });
   animator.enabled = { blink: false, glance: false, breathe: false };
   return animator;
@@ -42,8 +51,18 @@ async function checkVocabulary() {
   for (const name of Object.keys(vocabulary.expressions)) {
     check(Object.hasOwn(EXPRESSIONS, name), name, 'required by the protocol, missing from expressions.js');
   }
-  check(Object.keys(TONES).join() === vocabulary.tones.join(), 'tones',
+  check(same(Object.keys(TONES), vocabulary.tones), 'tones',
     `tones.js has ${Object.keys(TONES).join(', ')}; the protocol lists ${vocabulary.tones.join(', ')}`);
+  for (const name of Object.keys(vocabulary.scenes)) {
+    check(Object.hasOwn(SCENES, name), name, 'required by the protocol, missing from scenes/');
+  }
+  // What the scenes accept, against what the protocol says they take.
+  const { weather, timer } = vocabulary.scenes;
+  check(same(Object.keys(CONDITIONS), weather.data.condition.values), 'weather',
+    `draws ${Object.keys(CONDITIONS).join(', ')}; the protocol lists ${weather.data.condition.values.join(', ')}`);
+  check(same(UNITS, weather.data.unit.values), 'weather', 'units differ from the protocol');
+  check(PLACE_LENGTH === weather.data.place.max_length, 'weather', 'place length differs from the protocol');
+  check(LABEL_LENGTH === timer.data.label.max_length, 'timer', 'label length differs from the protocol');
 }
 
 function checkExpressions() {
@@ -66,6 +85,24 @@ function checkExpressions() {
   }
 }
 
+const slotOk = (slot) => Boolean(slot) && ['x', 'y', 'scale'].every((key) => Number.isFinite(slot[key]));
+
+function checkScenes() {
+  for (const [name, spec] of Object.entries(SCENES)) {
+    check(typeof spec.draw === 'function', name, 'no draw function');
+    check(spec.example && typeof spec.example === 'object', name, 'no example data');
+    check(Object.hasOwn(TONES, sceneTone(spec, spec.example)), name, 'no known tone');
+    for (const t of MOMENTS) check(slotOk(sceneSlot(spec, t)), name, `no valid face slot at ${t} s`);
+  }
+  // The weather's colour and its sky agree on what counts as night.
+  const weather = SCENES.weather;
+  for (const night of [1, 'true', 'yes']) {
+    check(sceneTone(weather, { condition: 'clear', night }) === sceneTone(weather, { condition: 'clear' }),
+      'weather', `night: ${JSON.stringify(night)} must count as day, as it does for the sky`);
+  }
+  check(sceneTone({ tone: () => 'no-such-tone' }, {}) === 'cyan', 'scenes', 'an unknown tone must read as cyan');
+}
+
 function litPixels(ctx, width, height) {
   const { data } = ctx.getImageData(0, 0, width, height);
   let lit = 0;
@@ -73,21 +110,35 @@ function litPixels(ctx, width, height) {
   return lit;
 }
 
+// Draw `animator` at every moment, then check that something was drawn.
+function drawAll(where, ctx, layout, animator) {
+  for (const t of MOMENTS) {
+    try {
+      drawFrame(ctx, layout, animator.frame(t), { status: { battery: 12, charging: true } });
+    } catch (error) {
+      fail(`${where} at ${t} s`, error.message);
+    }
+  }
+  check(litPixels(ctx, layout.width, layout.height) > layout.width * layout.height * 0.01, where, 'almost nothing drawn');
+}
+
+// Data that is wrong in every way a scene could trip on.
+const NONSENSE = {
+  condition: 'volcano', temperature: 'hot', unit: 7, night: 'yes', place: 42,
+  ends_at: null, duration: -5, label: {},
+};
+
 function checkDrawing() {
   for (const profile of PROFILES) {
-    const { width, height, shape } = profile;
-    const layout = fit(width, height, shape);
-    const ctx = new OffscreenCanvas(width, height).getContext('2d');
-    for (const name of Object.keys(EXPRESSIONS)) {
-      const animator = still(name);
-      for (const t of MOMENTS) {
-        try {
-          drawFrame(ctx, layout, animator.frame(t), { status: { battery: 12, charging: true } });
-        } catch (error) {
-          fail(`${name} on ${profile.id} at ${t} s`, error.message);
-        }
+    const layout = fit(profile.width, profile.height, profile.shape);
+    const ctx = new OffscreenCanvas(profile.width, profile.height).getContext('2d');
+    for (const name of Object.keys(EXPRESSIONS)) drawAll(`${name} on ${profile.id}`, ctx, layout, still(name));
+    for (const [name, spec] of Object.entries(SCENES)) {
+      for (const data of [{ ...spec.example, ends_at: Date.now() / 1000 + 30 }, {}, NONSENSE]) {
+        const animator = still();
+        animator.setScene(name, data, 0);
+        drawAll(`scene ${name} on ${profile.id}`, ctx, layout, animator);
       }
-      check(litPixels(ctx, width, height) > width * height * 0.01, `${name} on ${profile.id}`, 'almost nothing drawn');
     }
   }
 }
@@ -100,7 +151,7 @@ function checkAnimator() {
     const t = i / 60;
     if (i === 120) { a.set('happy', null, t); b.set('happy', null, t); }
     if (i === 300) { a.look({ x: 0.5, y: -0.3 }); b.look({ x: 0.5, y: -0.3 }); }
-    if (JSON.stringify(a.frame(t)) !== JSON.stringify(b.frame(t))) {
+    if (!same(a.frame(t), b.frame(t))) {
       fail('animator', `two animators with the same seed differ at ${t.toFixed(2)} s`);
       break;
     }
@@ -108,11 +159,11 @@ function checkAnimator() {
 
   // Transitions start where the face is and never jump, even when interrupted.
   const names = Object.keys(EXPRESSIONS);
-  const animator = still(DEFAULT_EXPRESSION);
+  const animator = still();
   let previous = animator.frame(0).pose;
   let worst = { jump: 0, at: '' };
   for (let i = 1; i <= 1200; i++) {
-    const t = i / 120;
+    const t = i * STEP;
     if (i % 19 === 0) animator.set(names[(i / 19) % names.length], null, t); // faster than TRANSITION
     const { pose } = animator.frame(t);
     for (const part of ['face', 'left', 'right']) {
@@ -123,7 +174,6 @@ function checkAnimator() {
     }
     previous = pose;
   }
-  // 1/120 s steps: no number may move by more than this in one step.
   check(worst.jump < 6, 'transitions', `jump of ${worst.jump.toFixed(2)} in ${worst.at}`);
 
   // Once a transition is over, only the new expression is left.
@@ -136,10 +186,129 @@ function checkAnimator() {
     'an unknown expression must show the default one');
 }
 
+// Frames of `animator` from `from` to `to` seconds; `act(t)` runs before each.
+function frames(animator, from, to, act = () => {}) {
+  const out = [];
+  for (let t = from; t <= to + 1e-9; t += STEP) {
+    act(t);
+    out.push(animator.frame(t));
+  }
+  return out;
+}
+
+// The largest change between two frames of `value(frame)`.
+const largestStep = (list, value) => list.slice(1).reduce((m, f, i) => Math.max(m, Math.abs(value(f) - value(list[i]))), 0);
+
+function checkSceneMotion() {
+  // Switching between two scenes that share the corner keeps the face there.
+  const corner = still();
+  corner.setScene('clock', {}, 0);
+  let drift = 0;
+  for (const { slot } of frames(corner, 1, 1.6, (t) => { if (t === 1) corner.setScene('weather', {}, t); })) {
+    drift = Math.max(drift, Math.hypot(slot.x - CORNER.x, slot.y - CORNER.y), 100 * Math.abs(slot.scale - CORNER.scale));
+  }
+  check(drift < 0.5, 'scenes', `the face left its corner by ${drift.toFixed(2)} while the scene changed`);
+
+  // Scenes that come and go faster than they fade never make the face jump.
+  const names = [null, ...Object.keys(SCENES)];
+  const busy = still();
+  let i = 0;
+  const busyFrames = frames(busy, 0, 10, () => { if (++i % 23 === 0) busy.setScene(names[(i / 23) % names.length], {}, i * STEP); });
+  const jump = Math.max(
+    largestStep(busyFrames, (f) => f.slot.x), largestStep(busyFrames, (f) => f.slot.y),
+    100 * largestStep(busyFrames, (f) => f.slot.scale));
+  check(jump < 6, 'scenes', `the face jumped by ${jump.toFixed(2)} between two frames`);
+  check(busy.setScene('no-such-scene', {}, 11) === null, 'scenes', 'an unknown scene must show none');
+
+  // A scene asked for again while it fades out fades back in from where it was.
+  const back = still();
+  back.setScene('clock', {}, 0);
+  const backFrames = frames(back, 1, 2, (t) => {
+    if (Math.abs(t - 1) < 1e-9) back.setScene(null, {}, t);
+    if (Math.abs(t - 1.2) < STEP / 2) back.setScene('clock', {}, t);
+  });
+  const alpha = (f) => f.scenes.reduce((sum, s) => sum + s.alpha, 0);
+  check(largestStep(backFrames, alpha) < 0.05 && Math.abs(alpha(backFrames.at(-1)) - 1) < 1e-6
+    && back.sceneLayers.length === 1, 'scenes', 'a scene asked for again must fade back in smoothly');
+
+  // `restart` plays a scene from its start.
+  back.setScene('clock', {}, 3, { restart: true });
+  check(back.sceneLayers.at(-1).start === 3, 'scenes', 'restart must start the scene again');
+
+  // New data that changes the colour fades it in; new data that does not, does not.
+  const sky = still();
+  sky.setScene('weather', { condition: 'clear' }, 0);
+  sky.setScene('weather', { condition: 'clear', temperature: 20 }, 1);
+  check(sky.sceneLayers.length === 1, 'scenes', 'new data must update the scene in place');
+  sky.setScene('weather', { condition: 'rain' }, 2);
+  const crossfade = sky.frame(2.2);
+  check(crossfade.scenes.length === 2 && Math.abs(crossfade.slot.x - CORNER.x) < 1e-6, 'scenes',
+    'a new colour must fade in over the old one, with the face kept in its corner');
+
+  // A held scene plays to its end; what was asked for meanwhile follows.
+  const wake = still();
+  wake.setScene('boot', {}, 0, { instant: true, hold: SCENES.boot.length });
+  wake.setScene(null, {}, 0.1);
+  wake.setScene('clock', {}, 0.2);
+  wake.frame(0.6);
+  check(wake.scene === 'boot', 'scenes', 'a held scene must stay until its end');
+  wake.frame(SCENES.boot.length + 0.05);
+  check(wake.scene === 'clock', 'scenes', 'the scene asked for during a hold must follow it');
+
+  // The status row's time fades with the clock scene instead of blinking out.
+  const fade = still();
+  const fadeFrames = frames(fade, 0, 1, (t) => { if (t === 0) fade.setScene('clock', {}, t); });
+  check(largestStep(fadeFrames, (f) => f.clockAlpha) < 0.05 && fadeFrames.at(-1).clockAlpha === 0, 'status',
+    'the status row\'s time must fade out smoothly while the clock comes in');
+
+  // When a scene leaves, the face goes back to the middle.
+  const leaving = still();
+  leaving.setScene('clock', {}, 0);
+  leaving.setScene(null, {}, 1);
+  const after = leaving.frame(1 + SCENE_TRANSITION + 0.01);
+  check(after.scenes.length === 0 && after.slot.scale === 1, 'scenes', 'the face must be back in the middle');
+}
+
+// What a scene writes, with the font and position of each piece of text.
+function written(name, data, now = new Date()) {
+  const ctx = new OffscreenCanvas(320, 240).getContext('2d');
+  const texts = [];
+  const fillText = ctx.fillText.bind(ctx);
+  ctx.fillText = (value, x, y) => {
+    texts.push({ value, x, font: ctx.font, align: ctx.textAlign });
+    fillText(value, x, y);
+  };
+  SCENES[name].draw(ctx, 1, { alpha: 1, data, now, status: {}, pixels: 1 });
+  return { ctx, texts };
+}
+
+function checkSceneText() {
+  const now = new Date();
+  const joined = (name, data) => written(name, data, now).texts.map((t) => t.value).join('');
+  check(joined('timer', {}).includes('--:--'), 'timer', 'without ends_at it must show --:--');
+  check(joined('timer', { ends_at: now.getTime() / 1000 + 65, duration: 120 }).includes('1:05'), 'timer',
+    'the time left is wrong');
+  check(joined('timer', { ends_at: now.getTime() / 1000 - 1, duration: 60 }).includes('Done'), 'timer',
+    'at zero it must say Done');
+
+  // The temperature shrinks to fit its column instead of running off the screen.
+  for (const [temperature, unit] of [[104, 'F'], [-12, 'C'], [-99, 'C'], [199, 'F']]) {
+    const { ctx, texts } = written('weather', { condition: 'rain', temperature, unit }, now);
+    const last = texts.find((t) => t.value === `°${unit}`);
+    ctx.font = last.font;
+    const right = last.x + ctx.measureText(last.value).width;
+    check(right <= 151, 'weather', `${temperature}°${unit} runs to x=${right.toFixed(1)}`);
+  }
+
+  const tea = 'Tea time 🍵🍵🍵🍵';
+  check(clip(tea, 12) === 'Tea time 🍵🍵🍵' && !/[\uD800-\uDBFF]$/.test(clip(tea, 11)), 'text',
+    'clip must count characters, not UTF-16 units');
+}
+
 function checkProtocol() {
-  const player = { animator: still(DEFAULT_EXPRESSION), status: {}, now: () => 2 };
+  const player = { animator: still(), status: {}, offset: 0, now: () => 2 };
   apply({ type: 'state', face: { expression: 'sad', tone: 'red' }, status: { battery: 40, charging: true } }, player);
-  const top = player.animator.layers[player.animator.layers.length - 1];
+  const top = player.animator.layers.at(-1);
   check(top.name === 'sad' && top.tone === 'red', 'state', `shows ${top.name} in ${top.tone}`);
   check(player.status.battery === 40 && player.status.charging === true, 'state', 'status not applied');
   apply({ type: 'state', face: { expression: 42 }, status: { battery: 'full' } }, player);
@@ -152,22 +321,52 @@ function checkProtocol() {
   apply({ type: 'voice', level: 0.5 }, player);
   check(player.animator.heard.target === 0.5, 'voice', 'level not applied');
   check(apply({ type: 'from-the-future' }, player) === false, 'messages', 'unknown types must be ignored');
+
+  apply({ type: 'state', face: {}, scene: { name: 'weather', data: { condition: 'rain', temperature: 18 } } }, player);
+  check(player.animator.scene === 'weather', 'state', 'scene not shown');
+  apply({ type: 'state', face: {}, scene: { name: 'weather', data: { condition: 'rain', temperature: 12 } } }, player);
+  const layers = player.animator.sceneLayers;
+  check(layers.length === 1 && layers[0].data.temperature === 12, 'state',
+    'new data must update the scene without starting it again');
+  apply({ type: 'state', face: {}, scene: null }, player);
+  check(player.animator.scene === null, 'state', 'a null scene must take the scene away');
+  apply({ type: 'state', face: {}, scene: { name: 'volcano' } }, player);
+  check(player.animator.scene === null, 'state', 'an unknown scene must show none');
+
+  // Times from the software are read on its clock.
+  apply({ type: 'hello', protocol: PROTOCOL, time: Date.now() / 1000 + 30 }, player);
+  check(Math.abs(player.offset - 30) < 1, 'hello', `the software's clock is off by ${player.offset.toFixed(2)} s, not 30`);
+
+  // A page out of date reloads itself.
+  const reloads = [];
+  const link = new Link(player, { url: 'ws://unused', reload: () => reloads.push(true) });
+  link.hello({ protocol: PROTOCOL, revision: 'a' });
+  link.hello({ protocol: PROTOCOL, revision: 'a' });
+  check(reloads.length === 0, 'hello', 'the same revision must not reload the page');
+  link.hello({ protocol: PROTOCOL, revision: 'b' });
+  check(reloads.length === 1, 'hello', 'a new revision must reload the page');
 }
 
-// Every expression on the previous generation's 320 × 240 screen, for a look.
+// Every expression and scene on the previous generation's 320 × 240 screen, for a look.
 function showSheet() {
   const sheet = document.getElementById('sheet');
   const layout = fit(320, 240, 'rect');
-  for (const name of Object.keys(EXPRESSIONS)) {
+  const add = (caption, frame) => {
     const figure = document.createElement('figure');
     const canvas = document.createElement('canvas');
     canvas.width = 320;
     canvas.height = 240;
-    drawFrame(canvas.getContext('2d'), layout, still(name).frame(1.2), { status: { battery: 82, charging: false } });
-    const caption = document.createElement('figcaption');
-    caption.textContent = name;
-    figure.append(canvas, caption);
+    drawFrame(canvas.getContext('2d'), layout, frame, { status: { battery: 82, charging: false } });
+    const label = document.createElement('figcaption');
+    label.textContent = caption;
+    figure.append(canvas, label);
     sheet.append(figure);
+  };
+  for (const name of Object.keys(EXPRESSIONS)) add(name, still(name).frame(1.2));
+  for (const [name, spec] of Object.entries(SCENES)) {
+    const animator = still();
+    animator.setScene(name, { ...spec.example, ends_at: Date.now() / 1000 + 200 }, 0);
+    add(`scene: ${name}`, animator.frame(2.4));
   }
 }
 
@@ -176,14 +375,17 @@ function showSheet() {
   try {
     await checkVocabulary();
     checkExpressions();
+    checkScenes();
     checkDrawing();
     checkAnimator();
+    checkSceneMotion();
+    checkSceneText();
     checkProtocol();
     showSheet();
-    summary = `${Object.keys(EXPRESSIONS).length} expressions · ${PROFILES.length} screens · `
-      + `${MOMENTS.length} moments · protocol ${PROTOCOL}`;
+    summary = `${Object.keys(EXPRESSIONS).length} expressions · ${Object.keys(SCENES).length} scenes · `
+      + `${PROFILES.length} screens · ${MOMENTS.length} moments · protocol ${PROTOCOL}`;
   } catch (error) {
-    fail('tests', error.message);
+    fail('tests', error.stack ?? error.message);
   }
   const status = failures.length ? 'fail' : 'pass';
   const result = document.getElementById('result');

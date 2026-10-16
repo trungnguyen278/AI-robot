@@ -9,8 +9,11 @@ full-screen browser shows the page; on a computer, any browser can.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +37,29 @@ def _fraction(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and 0 <= value <= 1
 
 
+def _encode(message: dict[str, Any]) -> str:
+    """The JSON text of ``message``. Scene data is already plain JSON values in
+    read-only mappings and tuples (``ports.screen.scene_data``); NaN is refused, as
+    JSON has none and a page would drop the whole message."""
+    return json.dumps(message, allow_nan=False, default=_plain)
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return dict(value)
+    raise TypeError(f"{type(value).__name__} is not JSON")
+
+
+def _revision(folder: Path) -> str:
+    """A fingerprint of the renderer's files: it changes whenever one of them does."""
+    digest = hashlib.sha256()
+    for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+        digest.update(path.relative_to(folder).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
 async def _no_cache(request: web.Request, response: web.StreamResponse) -> None:
     """Make the browser check for newer files, so that an update shows on reload."""
     response.headers["Cache-Control"] = "no-cache"
@@ -55,14 +81,16 @@ class WebScreen(Screen):
         self.host = host
         self.port = port
         self.address: tuple[str, int] | None = None  # where it listens, once open
-        self.state = ScreenState()
+        self.revision = ""  # fingerprint of the renderer's files, once open
+        self.state: ScreenState | None = None  # None until the first show()
         self.gaze: tuple[float, float] | None = None
         self.pages: dict[web.WebSocketResponse, dict[str, Any]] = {}  # page -> its "ready"
         self._touches: asyncio.Queue[Touch] = asyncio.Queue()
         self._runner: web.AppRunner | None = None
-        self._unknown: set[str] = set()
+        self._unknown: set[tuple[str, str]] = set()
 
     async def open(self) -> None:
+        self.revision = await asyncio.to_thread(_revision, self.ui_dir)
         app = web.Application()
         app.router.add_get("/ws", self._connect)
         app.router.add_get("/", self._page)
@@ -89,8 +117,8 @@ class WebScreen(Screen):
 
     async def show(self, state: ScreenState) -> None:
         self.state = state
-        self._check_expression()
-        await self._broadcast(self._state_message())
+        self._check_names()
+        await self._broadcast(self._state_message(state))
 
     async def look(self, target: tuple[float, float] | None) -> None:
         self.gaze = target
@@ -102,12 +130,22 @@ class WebScreen(Screen):
     async def touched(self) -> Touch:
         return await self._touches.get()
 
-    def _state_message(self) -> dict[str, Any]:
-        state = self.state
+    def _hello_message(self) -> dict[str, Any]:
+        return {
+            "type": "hello",
+            "protocol": PROTOCOL,
+            "revision": self.revision,
+            "time": time.time(),
+        }
+
+    def _state_message(self, state: ScreenState) -> dict[str, Any]:
+        scene = None if state.scene is None else {"name": state.scene, "data": state.scene_data}
         return {
             "type": "state",
             "face": {"expression": state.expression, "tone": state.tone},
+            "scene": scene,
             "status": {"battery": state.battery, "charging": state.charging},
+            "time": time.time(),
         }
 
     def _look_message(self) -> dict[str, Any]:
@@ -122,13 +160,13 @@ class WebScreen(Screen):
         await page.prepare(request)
         self.pages[page] = {}
         try:
-            # The whole state, so that a page that (re)connects shows the right thing.
-            for message in (
-                {"type": "hello", "protocol": PROTOCOL},
-                self._state_message(),
-                self._look_message(),
-            ):
-                await self._send(page, json.dumps(message))
+            # The whole state, so that a page that (re)connects shows the right thing. A
+            # page that connects before the first show() waits for it, on its start-up.
+            messages = [self._hello_message()]
+            if self.state is not None:
+                messages += [self._state_message(self.state), self._look_message()]
+            for message in messages:
+                await self._send(page, _encode(message))
             async for message in page:
                 if message.type == WSMsgType.TEXT:
                     self._receive(page, message.data)
@@ -155,7 +193,7 @@ class WebScreen(Screen):
                 message.get("height"),
                 message.get("shape"),
             )
-            self._check_expression()
+            self._check_names()
         elif kind == "touch":
             x, y = message.get("x"), message.get("y")
             if _fraction(x) and _fraction(y):
@@ -163,21 +201,25 @@ class WebScreen(Screen):
             else:
                 log.warning("screen page sent a tap off the screen: %r", message)
 
-    def _check_expression(self) -> None:
-        """Warn once per name about an expression that no connected page knows."""
-        name = self.state.expression
-        known = [
-            ready["expressions"]
-            for ready in self.pages.values()
-            if isinstance(ready.get("expressions"), list)
-        ]
-        if known and name not in self._unknown and not any(name in names for names in known):
-            self._unknown.add(name)
-            log.warning("no screen page knows the expression %r; it shows its default", name)
+    def _check_names(self) -> None:
+        """Warn once per name about an expression or a scene no ready page knows. A
+        page that lists none of a kind (an older renderer) knows none of it."""
+        state = self.state
+        ready = [message for message in self.pages.values() if message]
+        if state is None or not ready:
+            return
+        wanted = [("expressions", state.expression, "its default expression")]
+        if state.scene is not None:
+            wanted.append(("scenes", state.scene, "no scene"))
+        for kind, name, instead in wanted:
+            known = any(name in (page.get(kind) or ()) for page in ready)
+            if not known and (kind, name) not in self._unknown:
+                self._unknown.add((kind, name))
+                log.warning("no screen page knows the %s %r; it shows %s", kind[:-1], name, instead)
 
     async def _broadcast(self, message: dict[str, Any]) -> None:
         if self.pages:
-            text = json.dumps(message)
+            text = _encode(message)
             await asyncio.gather(*(self._send(page, text) for page in list(self.pages)))
 
     async def _send(self, page: web.WebSocketResponse, text: str) -> None:

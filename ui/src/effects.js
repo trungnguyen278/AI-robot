@@ -7,7 +7,8 @@
    expression, and `look.voice` is the loudness of the voice the face reacts to.
 */
 
-const TAU = Math.PI * 2;
+import { TAU } from './math.js';
+import { text } from './text.js';
 
 function heart(ctx, cx, cy, size) {
   const k = size / 30;
@@ -39,13 +40,6 @@ function sparkle(ctx, cx, cy, radius) {
     ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
   }
   ctx.fill();
-}
-
-function text(ctx, value, x, y, size) {
-  ctx.font = `700 ${size}px system-ui, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(value, x, y);
 }
 
 // Fades in over the start of a cycle and out over its end.
