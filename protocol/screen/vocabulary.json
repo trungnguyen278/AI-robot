@@ -16,5 +16,37 @@
     "excited": "Bouncing, with sparkles",
     "scared": "Small trembling eyes, a drop of sweat"
   },
+  "scenes": {
+    "charging": {
+      "description": "A battery filling up, with the level from the status",
+      "data": {}
+    },
+    "clock": {
+      "description": "The present time on a dial and in digits, with the date",
+      "data": {}
+    },
+    "timer": {
+      "description": "A ring that empties as the time runs out; pulses at zero",
+      "data": {
+        "ends_at": {"type": "number", "description": "Unix time, in seconds on the software's clock, when it rings"},
+        "duration": {"type": "number", "description": "Its length in seconds"},
+        "label": {"type": "string", "max_length": 16, "description": "Optional name"}
+      }
+    },
+    "weather": {
+      "description": "An animated sky, the temperature and the place",
+      "data": {
+        "condition": {
+          "type": "string",
+          "values": ["clear", "partly-cloudy", "cloudy", "rain", "storm", "snow", "fog"],
+          "description": "The sky"
+        },
+        "temperature": {"type": "number", "description": "In the unit"},
+        "unit": {"type": "string", "values": ["C", "F"], "description": "C when missing"},
+        "night": {"type": "boolean", "description": "true to show the moon instead of the sun"},
+        "place": {"type": "string", "max_length": 18, "description": "Optional"}
+      }
+    }
+  },
   "tones": ["cyan", "warm", "rose", "red", "blue", "green", "purple", "orange", "white"]
 }

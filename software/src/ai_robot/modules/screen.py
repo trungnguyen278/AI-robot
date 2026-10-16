@@ -6,9 +6,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import math
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 from ai_robot.core.bus import Message, Subscription
 from ai_robot.core.checks import finite
@@ -19,6 +19,7 @@ from ai_robot.messages import (
     InteractionChanged,
     InteractionState,
     LookAt,
+    SceneRequest,
     ScreenPriority,
     ScreenTouched,
     SoundLevel,
@@ -26,6 +27,7 @@ from ai_robot.messages import (
 from ai_robot.ports import Screen, ScreenState
 
 M = TypeVar("M", bound=Message)
+T = TypeVar("T")
 
 DEFAULT_EXPRESSION = "neutral"
 
@@ -44,16 +46,27 @@ VOICE_INTERVAL = 0.04  # seconds between two voice levels sent to the screen (25
 
 
 @dataclass(frozen=True, slots=True)
-class Request:
+class Face:
     expression: str
-    tone: str | None
+    tone: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Scene:
+    name: str
+    data: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class Request(Generic[T]):
+    content: T
     priority: int
     expires: float | None  # event-loop time; None: until replaced or withdrawn
     order: int  # arrival order: the newest wins among equal priorities
 
 
-class Arbiter:
-    """Chooses the expression to show from the requests of several sources.
+class Arbiter(Generic[T]):
+    """Chooses what to show from the requests of several sources.
 
     Each source holds at most one request. The highest priority that has not expired
     wins, the newest among equals: the multiplexer pattern of ROS's twist_mux, also how
@@ -61,25 +74,20 @@ class Arbiter:
     """
 
     def __init__(self) -> None:
-        self._requests: dict[str, Request] = {}
+        self._requests: dict[str, Request[T]] = {}
         self._order = 0
 
     def put(
-        self,
-        source: str,
-        expression: str,
-        *,
-        priority: int,
-        tone: str | None = None,
-        expires: float | None = None,
+        self, source: str, content: T | None, *, priority: int, expires: float | None = None
     ) -> None:
+        """Record ``source``'s request, replacing its previous one; ``None`` withdraws it."""
+        if content is None:
+            self._requests.pop(source, None)
+            return
         self._order += 1
-        self._requests[source] = Request(expression, tone, priority, expires, self._order)
+        self._requests[source] = Request(content, priority, expires, self._order)
 
-    def withdraw(self, source: str) -> None:
-        self._requests.pop(source, None)
-
-    def winner(self, now: float) -> Request | None:
+    def winner(self, now: float) -> Request[T] | None:
         """The request to show at ``now``; expired ones are dropped."""
         for source, request in list(self._requests.items()):
             if request.expires is not None and request.expires <= now:
@@ -96,14 +104,16 @@ class ScreenModule(Module):
 
     - Expressions: other modules ask with ``ExpressionRequest``; the conversation
       (``InteractionChanged``) asks on its own at ``ScreenPriority.INTERACTION``.
-      ``Arbiter`` picks one, ``neutral`` when nothing is asked.
+      An ``Arbiter`` picks one, ``neutral`` when nothing is asked.
+    - Scenes: other modules ask with ``SceneRequest``, and a second ``Arbiter`` picks
+      one. The face keeps its expression while it watches a scene from a corner.
     - The status row: the battery, from ``BatteryReport``.
     - The gaze (``LookAt``) and, while the robot listens, the microphone's loudness
       go straight to the renderer.
     - Taps on the screen are published as ``ScreenTouched``.
 
-    The renderer animates on its own (transitions, blinking, glances), so this module
-    sends only changes.
+    The renderer animates on its own (transitions, blinking, glances, its start-up),
+    so this module sends only changes.
     """
 
     owns = ("screen",)
@@ -116,8 +126,9 @@ class ScreenModule(Module):
         if self.loud_db <= self.quiet_db:
             raise ValueError("loud_db must be above quiet_db")
         self.screen = self.port("screen", Screen)
-        self.arbiter = Arbiter()
-        self.state = ScreenState()
+        self.faces: Arbiter[Face] = Arbiter()
+        self.scenes: Arbiter[Scene] = Arbiter()
+        self.state: ScreenState | None = None  # what the screen was last given
         self.listening = False
         self._battery: float | None = None
         self._charging: bool | None = None
@@ -125,7 +136,8 @@ class ScreenModule(Module):
         self._level_sent_at = -math.inf
         self._changed = asyncio.Event()
         self.subscriptions: list[Subscription[Any]] = []
-        self.requests = self._subscribe(ExpressionRequest)
+        self.expression_requests = self._subscribe(ExpressionRequest)
+        self.scene_requests = self._subscribe(SceneRequest)
         self.interaction = self._subscribe(InteractionChanged)
         self.batteries = self._subscribe(BatteryReport)
         self.levels = self._subscribe(SoundLevel)
@@ -137,11 +149,12 @@ class ScreenModule(Module):
         return subscription
 
     async def start(self) -> None:
-        await self.screen.show(self.state)
+        await self._refresh()
 
     async def run(self) -> None:
         async with asyncio.TaskGroup() as tasks:
-            tasks.create_task(self._follow(self.requests, self._on_request))
+            tasks.create_task(self._follow(self.expression_requests, self._on_expression))
+            tasks.create_task(self._follow(self.scene_requests, self._on_scene))
             tasks.create_task(self._follow(self.interaction, self._on_interaction))
             tasks.create_task(self._follow(self.batteries, self._on_battery))
             tasks.create_task(self._follow(self.levels, self._on_level))
@@ -160,27 +173,31 @@ class ScreenModule(Module):
         async for message in subscription:
             await handle(message)
 
-    async def _on_request(self, request: ExpressionRequest) -> None:
-        if request.expression is None:
-            self.arbiter.withdraw(request.source)
-        else:
-            expires = None if request.duration is None else self._now() + request.duration
-            self.arbiter.put(
-                request.source,
-                request.expression,
-                priority=request.priority,
-                tone=request.tone,
-                expires=expires,
-            )
+    def _expires(self, duration: float | None) -> float | None:
+        return None if duration is None else self._now() + duration
+
+    async def _on_expression(self, request: ExpressionRequest) -> None:
+        face = None if request.expression is None else Face(request.expression, request.tone)
+        self.faces.put(
+            request.source, face, priority=request.priority, expires=self._expires(request.duration)
+        )
+        await self._refresh()
+
+    async def _on_scene(self, request: SceneRequest) -> None:
+        scene = None if request.scene is None else Scene(request.scene, request.data)
+        self.scenes.put(
+            request.source,
+            scene,
+            priority=request.priority,
+            expires=self._expires(request.duration),
+        )
         await self._refresh()
 
     async def _on_interaction(self, message: InteractionChanged) -> None:
         self.listening = message.state in (InteractionState.TRIGGERED, InteractionState.LISTENING)
         expression = INTERACTION_EXPRESSIONS[message.state]
-        if expression is None:
-            self.arbiter.withdraw(INTERACTION_SOURCE)
-        else:
-            self.arbiter.put(INTERACTION_SOURCE, expression, priority=ScreenPriority.INTERACTION)
+        face = None if expression is None else Face(expression)
+        self.faces.put(INTERACTION_SOURCE, face, priority=ScreenPriority.INTERACTION)
         if not self.listening and self._level > 0:
             await self._send_level(0.0)
         await self._refresh()
@@ -212,10 +229,14 @@ class ScreenModule(Module):
 
     async def _refresh(self) -> None:
         """Send the state to the screen if it changed, and re-arm the expiry timer."""
-        winner = self.arbiter.winner(self._now())
+        now = self._now()
+        face = self.faces.winner(now)
+        scene = self.scenes.winner(now)
         state = ScreenState(
-            expression=winner.expression if winner else DEFAULT_EXPRESSION,
-            tone=winner.tone if winner else None,
+            expression=face.content.expression if face else DEFAULT_EXPRESSION,
+            tone=face.content.tone if face else None,
+            scene=scene.content.name if scene else None,
+            scene_data=scene.content.data if scene else {},
             battery=self._battery,
             charging=self._charging,
         )
@@ -228,7 +249,8 @@ class ScreenModule(Module):
         """Refresh when the next request expires, or when the requests change."""
         while True:
             self._changed.clear()
-            deadline = self.arbiter.next_expiry()
+            expiries = (self.faces.next_expiry(), self.scenes.next_expiry())
+            deadline = min((d for d in expiries if d is not None), default=None)
             timeout = None if deadline is None else max(0.0, deadline - self._now())
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._changed.wait(), timeout)

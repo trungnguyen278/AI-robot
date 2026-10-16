@@ -35,6 +35,13 @@ jobs:
           google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=20000 \
             --dump-dom http://127.0.0.1:8000/ui/tests/runtime.html > result.html
           python3 ui/tests/result.py result.html
+      - name: Single-file builds (the renderer's tests, run on a build of their page)
+        run: |
+          python3 ui/tools/single_file.py --out studio.html
+          python3 ui/tools/single_file.py --fragment --out studio-fragment.html
+          python3 ui/tools/single_file.py --page tests/runtime.html --out ui/tests/runtime-single.html
+          google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=20000             --dump-dom http://127.0.0.1:8000/ui/tests/runtime-single.html > result.html
+          python3 ui/tests/result.py result.html
       - name: Previous library (smoke test)
         run: |
           google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=60000 \

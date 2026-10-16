@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,26 @@ def run(app: App, seconds: float) -> None:
         stop = asyncio.Event()
         asyncio.get_running_loop().call_later(seconds, stop.set)
         await app.run(stop)
+
+    asyncio.run(main())
+
+
+def run_until(app: App, done: Callable[[], bool], timeout: float = 10.0) -> None:
+    """Run ``app`` until ``done()`` is true, failing after ``timeout`` seconds."""
+
+    async def main() -> None:
+        stop = asyncio.Event()
+
+        async def watch() -> None:
+            began = time.monotonic()
+            while not done():
+                assert time.monotonic() - began < timeout, "the robot did not get going"
+                await asyncio.sleep(0.01)
+            stop.set()
+
+        watcher = asyncio.create_task(watch())
+        await app.run(stop)
+        await watcher
 
     asyncio.run(main())
 
@@ -185,14 +206,17 @@ def test_desktop_profile(shipped_config: Path) -> None:
     app.build()
     levels = app.bus.subscribe(SoundLevel)
     batteries = app.bus.subscribe(BatteryReport)
-    run(app, 0.3)
     screen: Any = app.adapters["screen"]
     lights: Any = app.adapters["lights"]
+
+    def going() -> bool:
+        """Every module at work: sound, battery reports, and the battery on screen."""
+        shown = screen.state is not None and screen.state.battery is not None
+        return shown and levels.pending > 0 and batteries.pending > 0
+
+    run_until(app, going)
     assert screen.state.expression == "neutral"
-    assert screen.state.battery is not None  # the battery reached the status row
     assert lights.color == (0, 0, 0)  # switched off when stopping
-    assert levels.pending > 0
-    assert batteries.pending > 0
 
 
 def test_stopping_during_startup(events: list[str]) -> None:

@@ -18,11 +18,11 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 
 | Module | Owns ports | Responsibility (planned) |
 |---|---|---|
-| `system` | `power`, `lights` | Battery reports, status light, clean shutdown on low battery |
+| `system` | `power`, `lights` | Battery reports, status light, the charging scene when plugged in; planned: clean shutdown on low battery |
 | `motion` | `drive`, `joints`, `range`, `safety` | Tracks, neck and arms; obstacle and emergency-stop checks |
 | `voice` | `audio_in`, `audio_out`, `ai_backend` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |
-| `screen` | `screen` | What the screen shows: the expression asked with the highest priority, the gaze, the voice, the battery; taps |
+| `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
 | `behavior` | — | Decides what the robot does; publishes the interaction state |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.

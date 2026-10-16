@@ -106,7 +106,7 @@
   .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25); }
   .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
   label { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
-  select, input[type="number"] {
+  select, input[type="number"], input[type="text"] {
     font: inherit; font-size: 14px; color: var(--ink); background: var(--chip);
     border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; min-width: 0;
   }
@@ -152,6 +152,29 @@
       <fieldset>
         <legend>Expression</legend>
         <div class="chips" id="expressions"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Scene</legend>
+        <div class="chips" id="scenes"></div>
+        <div class="row" id="scene-weather" hidden>
+          <label>Sky <select id="weather-condition"></select></label>
+          <label>Temperature <input type="number" id="weather-temperature" min="-99" max="199" value="24"></label>
+          <label>Unit
+            <select id="weather-unit">
+              <option value="C">°C</option>
+              <option value="F">°F</option>
+            </select>
+          </label>
+          <label><input type="checkbox" id="weather-night"> Night</label>
+          <label>Place <input type="text" id="weather-place" value="Home" maxlength="18" size="10"></label>
+        </div>
+        <div class="row" id="scene-timer" hidden>
+          <label>Minutes <input type="number" id="timer-minutes" min="0.1" max="600" step="0.1" value="1"></label>
+          <label>Label <input type="text" id="timer-label" value="Tea" maxlength="16" size="8"></label>
+          <button type="button" class="plain" id="timer-start">Start</button>
+        </div>
+        <p class="hint">The face moves to the corner and keeps its expression; the robot software picks scenes the same way as expressions.</p>
       </fieldset>
 
       <fieldset>

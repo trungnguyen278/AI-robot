@@ -64,3 +64,6 @@ node_modules/
 recordings/
 *.log
 tmp/
+
+# ---- UI: single-file build of the tests page (ui/tools/single_file.py) ----
+ui/tests/runtime-single.html

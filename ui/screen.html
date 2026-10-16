@@ -25,11 +25,16 @@
   import { Animator } from './src/animator.js';
   import { Link } from './src/link.js';
   import { Player } from './src/player.js';
+  import { SCENES } from './src/scenes/index.js';
 
   const canvas = document.getElementById('screen');
   const offline = document.getElementById('offline');
   const shape = location.hash === '#round' ? 'round' : 'rect';
-  const player = new Player(canvas, new Animator({ seed: Date.now() }), { shape });
+  const animator = new Animator({ seed: Date.now() });
+  // The screen wakes up as the page opens: the start-up plays to its end, then the
+  // software's latest state shows.
+  animator.setScene('boot', {}, 0, { instant: true, hold: SCENES.boot.length });
+  const player = new Player(canvas, animator, { shape });
   player.start();
 
   // Show the dot only when the software has been unreachable for a while.

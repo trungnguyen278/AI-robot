@@ -7,11 +7,15 @@ classes defined here. Each class is one topic.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
+from typing import Any
 
 from ai_robot.core.bus import Message
+from ai_robot.core.checks import finite, positive
 from ai_robot.ports.body import BatteryStatus
+from ai_robot.ports.screen import scene_data
 
 
 class InteractionState(StrEnum):
@@ -73,8 +77,34 @@ class ExpressionRequest(Message):
     tone: str | None = None  # None: the expression's own colour
 
     def __post_init__(self) -> None:
-        if self.duration is not None and not self.duration > 0:
-            raise ValueError(f"duration must be positive, got {self.duration!r}")
+        if self.duration is not None:
+            positive("duration", self.duration)
+
+
+@dataclass(frozen=True, slots=True)
+class SceneRequest(Message):
+    """Ask the screen for a scene. Published by any module, read by screen.
+
+    A scene fills the screen with information (a clock, the weather, a timer…) while
+    the face watches from a corner. Requests work as for ``ExpressionRequest``: one per
+    ``source``, ``scene=None`` withdraws it, the highest ``priority`` that has not
+    expired wins, and with none the face has the screen to itself. Scenes and the
+    ``data`` each one takes are listed in the screen protocol
+    (protocol/screen/vocabulary.json). ``data`` must convert to JSON, finite numbers
+    only; it is kept as a deep, read-only copy (``ports.screen.scene_data``), so that
+    no subscriber can change what the others receive.
+    """
+
+    source: str
+    scene: str | None
+    data: Mapping[str, Any] = field(default_factory=dict)
+    priority: int = ScreenPriority.REACTION
+    duration: float | None = None  # seconds; None: until replaced or withdrawn
+
+    def __post_init__(self) -> None:
+        if self.duration is not None:
+            positive("duration", self.duration)
+        object.__setattr__(self, "data", scene_data(self.data))
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +112,14 @@ class LookAt(Message):
     """Where the eyes should look. Published by vision (planned), read by screen."""
 
     target: tuple[float, float] | None  # x, y from -1 to 1 across the screen; None: roam
+
+    def __post_init__(self) -> None:
+        if self.target is not None:
+            x, y = (
+                min(1.0, max(-1.0, finite(name, value)))
+                for name, value in zip("xy", self.target, strict=True)
+            )
+            object.__setattr__(self, "target", (x, y))
 
 
 @dataclass(frozen=True, slots=True)

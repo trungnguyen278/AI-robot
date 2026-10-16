@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""The screen module: requests, the conversation, the status row, voice, gaze and taps."""
+"""The screen module: requests, scenes, the conversation, the status row, voice, gaze, taps."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 from collections.abc import AsyncIterator
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,7 @@ from ai_robot.messages import (
     InteractionChanged,
     InteractionState,
     LookAt,
+    SceneRequest,
     ScreenPriority,
     ScreenTouched,
     SoundLevel,
@@ -38,17 +41,20 @@ from ai_robot.ports import BatteryStatus
 VOCABULARY = Path(__file__).resolve().parents[2] / "protocol" / "screen" / "vocabulary.json"
 
 
-def make() -> tuple[Bus, SimScreen, ScreenModule]:
-    bus = Bus()
-    screen = SimScreen()
-    ctx = ModuleContext(
+def context(bus: Bus, screen: SimScreen) -> ModuleContext:
+    return ModuleContext(
         name="screen",
         bus=bus,
         ports={"screen": screen},
         robot=RobotInfo(display_name="Robot"),
         log=logging.getLogger("test"),
     )
-    return bus, screen, ScreenModule(ctx, quiet_db=-50.0, loud_db=-10.0)
+
+
+def make() -> tuple[Bus, SimScreen, ScreenModule]:
+    bus = Bus()
+    screen = SimScreen()
+    return bus, screen, ScreenModule(context(bus, screen), quiet_db=-50.0, loud_db=-10.0)
 
 
 @contextlib.asynccontextmanager
@@ -71,35 +77,44 @@ async def settle() -> None:
 
 
 def test_arbiter_picks_the_highest_priority_then_the_newest() -> None:
-    arbiter = Arbiter()
+    arbiter: Arbiter[str] = Arbiter()
     assert arbiter.winner(0) is None
     arbiter.put("a", "happy", priority=10)
     arbiter.put("b", "sad", priority=50)
     arbiter.put("c", "angry", priority=10)
-    assert arbiter.winner(0).expression == "sad"  # type: ignore[union-attr]
-    arbiter.withdraw("b")
-    assert arbiter.winner(0).expression == "angry"  # type: ignore[union-attr]
+    assert arbiter.winner(0).content == "sad"  # type: ignore[union-attr]
+    arbiter.put("b", None, priority=50)  # withdrawn
+    assert arbiter.winner(0).content == "angry"  # type: ignore[union-attr]
     arbiter.put("a", "love", priority=10)  # a source replaces its own request
-    assert arbiter.winner(0).expression == "love"  # type: ignore[union-attr]
+    assert arbiter.winner(0).content == "love"  # type: ignore[union-attr]
 
 
 def test_arbiter_drops_expired_requests() -> None:
-    arbiter = Arbiter()
+    arbiter: Arbiter[str] = Arbiter()
     arbiter.put("a", "happy", priority=50, expires=1.0)
     arbiter.put("b", "sad", priority=10, expires=3.0)
     assert arbiter.next_expiry() == 1.0
-    assert arbiter.winner(0.5).expression == "happy"  # type: ignore[union-attr]
-    assert arbiter.winner(1.0).expression == "sad"  # type: ignore[union-attr]
+    assert arbiter.winner(0.5).content == "happy"  # type: ignore[union-attr]
+    assert arbiter.winner(1.0).content == "sad"  # type: ignore[union-attr]
     assert arbiter.next_expiry() == 3.0
     assert arbiter.winner(3.0) is None
     assert arbiter.next_expiry() is None
+
+
+def test_the_first_state_is_shown_at_start() -> None:
+    async def main() -> None:
+        _, screen, module = make()
+        async with running(module):
+            assert screen.updates == 1
+            assert (screen.state.expression, screen.state.scene) == (DEFAULT_EXPRESSION, None)
+
+    asyncio.run(main())
 
 
 def test_the_conversation_drives_the_face() -> None:
     async def main() -> None:
         bus, screen, module = make()
         async with running(module):
-            assert screen.state.expression == DEFAULT_EXPRESSION
             for state, expression in [
                 (InteractionState.TRIGGERED, "listening"),
                 (InteractionState.LISTENING, "listening"),
@@ -141,6 +156,31 @@ def test_requests_outrank_the_conversation_and_expire() -> None:
     asyncio.run(main())
 
 
+def test_scenes_come_and_go_while_the_face_keeps_its_expression() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            bus.publish(InteractionChanged(InteractionState.LISTENING))
+            bus.publish(SceneRequest("behavior", "weather", {"condition": "rain"}, duration=0.05))
+            await settle()
+            assert screen.state.scene == "weather"
+            assert dict(screen.state.scene_data) == {"condition": "rain"}
+            assert screen.state.expression == "listening"
+            await asyncio.sleep(0.1)
+            await settle()
+            assert screen.state.scene is None
+
+            bus.publish(SceneRequest("behavior", "clock"))
+            bus.publish(SceneRequest("timers", "timer", {"duration": 60}, priority=80))
+            await settle()
+            assert screen.state.scene == "timer"
+            bus.publish(SceneRequest("timers", None))
+            await settle()
+            assert screen.state.scene == "clock"
+
+    asyncio.run(main())
+
+
 def test_only_changes_reach_the_screen() -> None:
     async def main() -> None:
         bus, screen, module = make()
@@ -148,9 +188,11 @@ def test_only_changes_reach_the_screen() -> None:
             shown = screen.updates
             for _ in range(3):
                 bus.publish(BatteryReport(BatteryStatus(voltage=7.4, percent=63.0, charging=True)))
+            bus.publish(SceneRequest("behavior", "weather", {"days": [18, 19]}))
+            bus.publish(SceneRequest("behavior", "weather", {"days": [18, 19]}))  # the same
             await settle()
             assert (screen.state.battery, screen.state.charging) == (63.0, True)
-            assert screen.updates == shown + 1
+            assert screen.updates == shown + 2
 
     asyncio.run(main())
 
@@ -201,19 +243,49 @@ def test_gaze_and_taps() -> None:
     asyncio.run(main())
 
 
+def test_gaze_is_checked_and_kept_on_the_screen() -> None:
+    assert LookAt((2, -1.5)).target == (1.0, -1.0)
+    with pytest.raises(ValueError, match="x must be a finite number"):
+        LookAt((math.nan, 0.0))
+
+
+def test_scene_data_is_a_deep_read_only_copy() -> None:
+    days = [18, {"high": 19}]
+    request = SceneRequest("behavior", "weather", {"days": days})
+    days.append(20)  # the publisher's own list
+    assert request.data["days"] == (18, {"high": 19})
+    with pytest.raises(TypeError):
+        request.data["condition"] = "fog"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        request.data["days"][1]["high"] = 0  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"temperature": math.nan},
+        {"temperature": math.inf},
+        {"hourly": {(9, 0): 18}},
+        {"day": date(2026, 10, 17)},
+    ],
+)
+def test_scene_data_must_convert_to_json(data: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="scene data must convert to JSON"):
+        SceneRequest("behavior", "weather", data)
+
+
 def test_settings_are_checked() -> None:
-    bus = Bus()
-    ctx = ModuleContext(
-        "screen", bus, {"screen": SimScreen()}, RobotInfo("Robot"), logging.getLogger()
-    )
+    ctx = context(Bus(), SimScreen())
     with pytest.raises(ConfigError, match="loud_db must be above quiet_db"):
         create(ScreenModule, "modules.screen", ctx, quiet_db=-10.0, loud_db=-50.0)
-    with pytest.raises(ValueError, match="duration must be positive"):
-        ExpressionRequest("behavior", "happy", duration=0)
+    for duration in (0, -1, math.inf):
+        with pytest.raises(ValueError, match="duration must be a positive number"):
+            ExpressionRequest("behavior", "happy", duration=duration)
+        with pytest.raises(ValueError, match="duration must be a positive number"):
+            SceneRequest("behavior", "clock", duration=duration)
 
 
 def test_the_expressions_used_are_in_the_protocol() -> None:
     vocabulary = json.loads(VOCABULARY.read_text(encoding="utf-8"))
-    names = set(vocabulary["expressions"])
-    used = {DEFAULT_EXPRESSION} | {e for e in INTERACTION_EXPRESSIONS.values() if e}
-    assert used <= names
+    expressions = {DEFAULT_EXPRESSION} | {e for e in INTERACTION_EXPRESSIONS.values() if e}
+    assert expressions <= set(vocabulary["expressions"])

@@ -7,27 +7,31 @@
      previous one blends out (shape, colour, motion, effect), starting from wherever
      the face is, even in the middle of another transition;
    - life layers on top: breathing, glances around while nothing holds the gaze, the
-     gaze target, the voice, and blinking.
+     gaze target, the voice, and blinking;
+   - scenes (scenes/): a scene fades in over SCENE_TRANSITION seconds while the face
+     moves to the scene's slot, and back when it goes. Slots are blended by weight,
+     with "no scene" as the rest, so the face stays put between two scenes that
+     share a slot.
 
    Time is passed in (seconds) and randomness comes from a seeded generator, so the
    same calls give the same frames; the tests rely on it.
 */
 
 import { DEFAULT_EXPRESSION, EXPRESSIONS } from './expressions.js';
+import { TAU, clamp, smooth, unsmooth } from './math.js';
 import { motionDelta } from './motions.js';
 import { addDelta, blendPoses, makePose } from './pose.js';
+import { SCENES, sceneSlot, sceneTone } from './scenes/index.js';
 import { TONES } from './tones.js';
 
 export const TRANSITION = 0.28;
+export const SCENE_TRANSITION = 0.5;
 
-const TAU = Math.PI * 2;
 const NO_LIFE = { blink: 0, glance: 0, breathe: 0 };
 const BLINK_CLOSE = 0.06; // seconds to close the eyes
 const BLINK_OPEN = 0.1;   // and to open them again
 const VOICE_HOLD = 0.5;   // a voice level older than this counts as silence
 
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const smooth = (x) => x * x * (3 - 2 * x);
 // Moves `value` towards `target`, `tau` being the time it takes to cover about 63 %.
 const approach = (value, target, dt, tau) => target + (value - target) * Math.exp(-dt / tau);
 
@@ -55,6 +59,8 @@ export class Animator {
     this.random = generator(seed);
     this.time = time;
     this.layers = []; // the expressions on screen, the newest last
+    this.sceneLayers = []; // the scenes on screen, the newest last
+    this.held = { until: -Infinity, next: null }; // a scene that plays to its end first
     this.enabled = { blink: true, glance: true, breathe: true };
     this.gaze = { target: null, x: 0, y: 0 };
     this.glance = { x: 0, y: 0, toX: 0, toY: 0, next: time + this.between(1.4, 4) };
@@ -70,6 +76,12 @@ export class Animator {
   /** The expression on screen, or arriving there. */
   get expression() {
     return this.layers[this.layers.length - 1].name;
+  }
+
+  /** The scene on screen, or arriving there; null for none. */
+  get scene() {
+    const top = this.sceneLayers[this.sceneLayers.length - 1];
+    return top && top.leave === null ? top.name : null;
   }
 
   /** Move to the expression `name`, in `tone` (null: the expression's own colour).
@@ -100,6 +112,39 @@ export class Animator {
     return known;
   }
 
+  /** Show the scene `name` with `data`, or no scene (null); an unknown name shows
+      none. Returns the scene on screen.
+
+      New data for the scene on screen updates it without starting it again, unless
+      it changes the scene's colour (then the new one fades in), and a scene asked
+      for again while it fades out fades back in from where it is. Options:
+      `restart` plays it from the start anyway; `instant` skips the fade in; `hold`
+      keeps it on screen for that many seconds, any other scene asked for meanwhile
+      following when they are over. */
+  setScene(name, data = {}, time = this.time, { instant = false, restart = false, hold = 0 } = {}) {
+    const known = typeof name === 'string' && Object.hasOwn(SCENES, name) ? name : null;
+    if (time < this.held.until) {
+      this.held.next = { name: known, data };
+      return this.scene;
+    }
+    const top = this.sceneLayers[this.sceneLayers.length - 1];
+    if (top && top.name === known && !restart && sceneTone(top.spec, data) === sceneTone(top.spec, top.data)) {
+      top.data = data;
+      if (top.leave !== null) {
+        top.enter = time - unsmooth(this.weight(top, time, SCENE_TRANSITION)) * SCENE_TRANSITION;
+        top.leave = null;
+      }
+      return known;
+    }
+    for (const layer of this.sceneLayers) if (layer.leave === null) layer.leave = time;
+    if (known) {
+      const enter = instant ? -Infinity : time;
+      this.sceneLayers.push({ name: known, spec: SCENES[known], data, start: time, enter, leave: null });
+      this.held.until = hold > 0 ? time + hold : -Infinity;
+    }
+    return known;
+  }
+
   /** Look at `target`, `{ x, y }` from -1 to 1 across the screen, or roam (null). */
   look(target) {
     this.gaze.target = target ? { x: clamp(target.x, -1, 1), y: clamp(target.y, -1, 1) } : null;
@@ -115,9 +160,9 @@ export class Animator {
     if (this.blinking.start === null) this.blinking.start = time;
   }
 
-  weight(layer, time) {
-    const enter = smooth(clamp((time - layer.enter) / TRANSITION, 0, 1));
-    const leave = layer.leave === null ? 1 : 1 - smooth(clamp((time - layer.leave) / TRANSITION, 0, 1));
+  weight(layer, time, span = TRANSITION) {
+    const enter = smooth(clamp((time - layer.enter) / span, 0, 1));
+    const leave = layer.leave === null ? 1 : 1 - smooth(clamp((time - layer.leave) / span, 0, 1));
     return enter * leave;
   }
 
@@ -229,7 +274,41 @@ export class Animator {
     }
     for (const eye of eyes) eye.h += (3 - eye.h) * closed;
 
+    // Scenes, each with its colour. The face's slot is the average of the scenes'
+    // slots by weight, "no scene" (the face in the middle, full size) taking the rest.
+    if (this.held.next && time >= this.held.until) {
+      const { name, data } = this.held.next;
+      this.held.next = null;
+      this.setScene(name, data, time);
+    }
+    this.sceneLayers = this.sceneLayers.filter(
+      (layer) => layer.leave === null || time - layer.leave < SCENE_TRANSITION,
+    );
+    const sum = { x: 0, y: 0, scale: 0 };
+    let shown = 0;
+    let hidesClock = 0;
+    const scenes = [];
+    for (const layer of this.sceneLayers) {
+      const weight = this.weight(layer, time, SCENE_TRANSITION);
+      const since = time - layer.start;
+      const target = sceneSlot(layer.spec, since);
+      for (const key of ['x', 'y', 'scale']) sum[key] += weight * target[key];
+      shown += weight;
+      const tone = TONES[sceneTone(layer.spec, layer.data)];
+      scenes.push({ name: layer.name, data: layer.data, alpha: weight, t: since, rgb: tone.rgb, glow: tone.glow });
+      if (layer.spec.clock === false) hidesClock = Math.max(hidesClock, weight);
+    }
+    const rest = Math.max(0, 1 - shown);
+    const slot = {
+      x: sum.x / (shown + rest),
+      y: sum.y / (shown + rest),
+      scale: (sum.scale + rest) / (shown + rest),
+    };
+
     const top = this.layers[this.layers.length - 1];
-    return { pose, rgb, glow, effects, voice: heard.level, expression: top.name, tone: top.tone };
+    return {
+      pose, rgb, glow, effects, voice: heard.level, expression: top.name, tone: top.tone,
+      scenes, slot, clockAlpha: 1 - hidesClock,
+    };
   }
 }
