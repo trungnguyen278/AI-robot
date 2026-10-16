@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_DIR_ENV = "AI_ROBOT_CONFIG_DIR"
+PROTOCOL_DIR_ENV = "AI_ROBOT_PROTOCOL_DIR"
 
 
 class ConfigError(Exception):
@@ -27,6 +28,15 @@ def default_config_dir() -> Path:
         return Path(value)
     # src/ai_robot/core/config.py -> software/config
     return Path(__file__).resolve().parents[3] / "config"
+
+
+def protocol_dir() -> Path:
+    """``$AI_ROBOT_PROTOCOL_DIR`` if set, otherwise the ``protocol`` folder of this
+    checkout: the definitions the robot shares with the screen and the cloud."""
+    if value := os.environ.get(PROTOCOL_DIR_ENV):
+        return Path(value)
+    # src/ai_robot/core/config.py -> protocol
+    return Path(__file__).resolve().parents[4] / "protocol"
 
 
 def available_profiles(config_dir: Path) -> list[str]:

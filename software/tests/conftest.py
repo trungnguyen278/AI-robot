@@ -14,6 +14,8 @@ def _ignore_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the developer's own settings out of the tests."""
     monkeypatch.delenv("AI_ROBOT_CONFIG_DIR", raising=False)
     monkeypatch.delenv("AI_ROBOT_PROFILE", raising=False)
+    monkeypatch.delenv("AI_ROBOT_PROTOCOL_DIR", raising=False)
+    monkeypatch.delenv("AI_ROBOT_CLOUD_TOKEN", raising=False)
 
 
 @pytest.fixture

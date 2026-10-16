@@ -30,7 +30,7 @@ ai-robot/
 ├── software/    Robot software on the Raspberry Pi 5 (Python + C++)
 ├── ui/          The screen renderer: the robot's face, in a browser, on any screen
 ├── firmware/    Microcontroller modules (body-controller: microcontroller not chosen yet)
-├── protocol/    Protocols between components (Pi ⇄ body, software ⇄ screen)
+├── protocol/    Protocols between components (Pi ⇄ body, software ⇄ screen, robot ⇄ cloud)
 ├── hardware/    Bill of materials, power tree, pin map, component notes, CAD
 ├── docs/        Vision, architecture, decision records (ADRs), dev log
 ├── tools/       Utility scripts

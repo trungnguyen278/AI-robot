@@ -13,12 +13,12 @@ import hashlib
 import json
 import logging
 import time
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from aiohttp import WSCloseCode, WSMsgType, web
 
+from ai_robot.core.data import encode
 from ai_robot.ports.screen import Screen, ScreenState, Touch
 
 log = logging.getLogger(__name__)
@@ -35,19 +35,6 @@ DEFAULT_UI_DIR = Path(__file__).resolve().parents[5] / "ui"
 
 def _fraction(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and 0 <= value <= 1
-
-
-def _encode(message: dict[str, Any]) -> str:
-    """The JSON text of ``message``. Scene data is already plain JSON values in
-    read-only mappings and tuples (``ports.screen.scene_data``); NaN is refused, as
-    JSON has none and a page would drop the whole message."""
-    return json.dumps(message, allow_nan=False, default=_plain)
-
-
-def _plain(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return dict(value)
-    raise TypeError(f"{type(value).__name__} is not JSON")
 
 
 def _revision(folder: Path) -> str:
@@ -166,7 +153,7 @@ class WebScreen(Screen):
             if self.state is not None:
                 messages += [self._state_message(self.state), self._look_message()]
             for message in messages:
-                await self._send(page, _encode(message))
+                await self._send(page, encode(message))
             async for message in page:
                 if message.type == WSMsgType.TEXT:
                     self._receive(page, message.data)
@@ -219,7 +206,7 @@ class WebScreen(Screen):
 
     async def _broadcast(self, message: dict[str, Any]) -> None:
         if self.pages:
-            text = _encode(message)
+            text = encode(message)
             await asyncio.gather(*(self._send(page, text) for page in list(self.pages)))
 
     async def _send(self, page: web.WebSocketResponse, text: str) -> None:

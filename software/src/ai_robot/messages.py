@@ -14,7 +14,9 @@ from typing import Any
 
 from ai_robot.core.bus import Message
 from ai_robot.core.checks import finite, positive
+from ai_robot.core.data import frozen
 from ai_robot.ports.body import BatteryStatus
+from ai_robot.ports.cloud import Capability, EventKind
 from ai_robot.ports.screen import scene_data
 
 
@@ -128,3 +130,89 @@ class ScreenTouched(Message):
 
     x: float  # from 0 at the left edge to 1 at the right one
     y: float  # from 0 at the top to 1 at the bottom
+
+
+# ---- Capabilities and events: what the cloud can ask of the robot and hear from it ----
+# (protocol/cloud/README.md). The cloud module talks to the cloud; the module that owns a
+# capability or an event offers it and serves it, so that a new one needs no change to
+# the cloud module (requirements EXT-9). ``core.capabilities.CapabilityHost`` does the
+# bookkeeping for a module.
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityOffered(Message):
+    """A module offers a capability, replacing any earlier one of the same name. Read
+    by cloud."""
+
+    owner: str  # the module's name
+    capability: Capability
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityWithdrawn(Message):
+    """A module no longer offers a capability. Read by cloud."""
+
+    owner: str
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityCall(Message):
+    """Run a capability. Published by cloud once the arguments match the capability's
+    input schema; read by the capability's owner, which answers with a
+    ``CapabilityResult`` of the same ``call``."""
+
+    call: str  # unique among the calls in progress
+    name: str
+    arguments: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "arguments", frozen("arguments", self.arguments))
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityResult(Message):
+    """The outcome of a ``CapabilityCall``: its ``data``, or an ``error`` the cloud can
+    read. Published by the capability's owner, read by cloud."""
+
+    call: str
+    data: Mapping[str, Any] = field(default_factory=dict)
+    error: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "data", frozen("result data", self.data))
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityCancelled(Message):
+    """The cloud no longer wants the result of a call. Published by cloud; an owner
+    running a long action stops it."""
+
+    call: str
+
+
+@dataclass(frozen=True, slots=True)
+class EventOffered(Message):
+    """A module can send an event to the cloud. Read by cloud."""
+
+    owner: str
+    kind: EventKind
+
+
+@dataclass(frozen=True, slots=True)
+class RobotEvent(Message):
+    """An event for the cloud, sent only if the cloud subscribed to it. Published by the
+    module that offered it; ``data`` must match its schema."""
+
+    name: str
+    data: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "data", frozen("event data", self.data))
+
+
+@dataclass(frozen=True, slots=True)
+class CloudStatus(Message):
+    """Whether a session with the cloud is open. Published by cloud on every change."""
+
+    online: bool

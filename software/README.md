@@ -2,15 +2,17 @@
 
 > **Status:** skeleton. Every port has a simulated adapter, so the whole robot already runs on any computer; real adapters are added as the hardware arrives. Platform: [ADR-0005](../docs/decisions/0005-pi-software-platform.md) (proposed).
 
-Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependency: [aiohttp](https://docs.aiohttp.org/), for the screen's `web` adapter.
+Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependencies:
+- [aiohttp](https://docs.aiohttp.org/), for the `web` adapters: the screen, and the link to the cloud;
+- [jsonschema](https://python-jsonschema.readthedocs.io/), to check data against the protocols' JSON Schemas.
 
 ## How it fits together
 
 ```
-modules    system · motion · voice · vision · screen · behavior
+modules    system · motion · voice · vision · screen · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · ai_backend · daylight
+ports      audio_in · audio_out · camera · screen · ai_backend · cloud · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -23,6 +25,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `voice` | `audio_in`, `audio_out`, `ai_backend` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
+| `cloud` | `cloud` | The link to `ai-robot-server`: the cloud calls the capabilities the modules offer, and hears the events they declare ([protocol/cloud](../protocol/cloud/README.md)) |
 | `behavior` | `daylight` | Decides what the robot does: the interaction state; for now, reactions to taps, the clock when idle, a sleepy face from sunset to sunrise |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.
@@ -49,7 +52,7 @@ software/
 │   ├── native.py           C++ functions, with pure-Python fallbacks
 │   ├── core/               Configuration, bus, module base class, factory
 │   ├── ports/              Port interfaces
-│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (the screen, served to a browser), sun/ (sunrise and sunset)
+│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (aiohttp: the screen served to a browser, the cloud link), sun/ (sunrise and sunset)
 │   └── modules/            Module registry and the modules
 ├── native/                 Optional C++ extension (pybind11 + scikit-build-core)
 └── tests/
@@ -72,11 +75,24 @@ ruff check . && ruff format --check .
 
 On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`; until real adapters exist it behaves like `desktop`. `ai-robot --help` lists the options; `--duration SECONDS` stops the robot after a while, which is handy for quick checks. The environment variables are listed in [`.env.example`](.env.example).
 
-Install with `-e` from this checkout: the configuration is then read from `software/config`. With any other kind of install, point `--config-dir` or `AI_ROBOT_CONFIG_DIR` at a configuration directory, and the screen's `ui_dir` setting at the `ui` folder.
+Install with `-e` from this checkout: the configuration is then read from `software/config`, and the protocols' definitions from `protocol/`. With any other kind of install, point:
+- `--config-dir` or `AI_ROBOT_CONFIG_DIR` at a configuration directory;
+- `AI_ROBOT_PROTOCOL_DIR` at the `protocol` folder;
+- the screen's `ui_dir` setting at the `ui` folder.
 
 ### The screen
 
 While the robot runs, its screen is at <http://127.0.0.1:8770/>: open it in a browser to watch the face follow the robot. On the robot, Chromium shows that page full screen (kiosk mode). The page is the renderer in [`ui/`](../ui/README.md); the `screen` module decides what it shows, over the [screen protocol](../protocol/screen/README.md).
+
+### The cloud
+
+By default the robot talks to a simulated cloud (the `sim` adapter of the `cloud` port). It opens a session at once and asks for nothing, so the robot runs without a server.
+
+To talk to a server instead:
+1. In `config/local.toml`, select the `websocket` adapter with the server's address (see `local.example.toml`).
+2. Put the robot's credentials in the environment variable `AI_ROBOT_CLOUD_TOKEN`.
+
+The link follows the [cloud protocol](../protocol/cloud/README.md). The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change.
 
 ### C++ extension
 
@@ -109,6 +125,14 @@ Settings become keyword arguments of the adapter's or module's constructor, so a
 - **A module:** create `src/ai_robot/modules/<name>.py` with a `Module` subclass that lists its ports in `owns`; register it in `MODULES` (`modules/__init__.py`); add it to `[modules] enabled` in `config/base.toml`; add tests. When the file grows, turn it into a package (`modules/<name>/__init__.py` importing the class); the registry entry stays the same.
 - **A message:** add a frozen dataclass that derives from `Message` to `messages.py`.
 - **A port:** add an abstract class that derives from `Port` under `ports/` and register it in `PORT_TYPES`; add a simulated adapter; give the port to one module; configure it in `config/base.toml`.
+- **A capability or an event for the cloud:** do it in the module that owns what it touches.
+  1. Create a `CapabilityHost` (`core/capabilities.py`) in `__init__`.
+  2. `add` each `Capability` with its handler. A capability has a name that starts with the module's name, JSON Schemas for its arguments and its result, and a safety class.
+  3. `add_event` each `EventKind`.
+  4. `offer()` them in `start`.
+  5. Run `serve()` in `run`, and `emit()` the events.
+
+  The cloud module passes them on, and the protocol does not change.
 - **An adapter:** implement the port in `adapters/<technology>/` (for example `adapters/alsa/`), register it in `ADAPTERS` (`adapters/__init__.py`) and select it in a profile. Import its libraries only inside that folder, so that the other profiles keep working without them.
 
 ## Rules

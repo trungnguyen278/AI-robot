@@ -18,3 +18,11 @@
 # [ports.daylight.solar]
 # latitude = 0.0
 # longitude = 0.0
+
+# Connect to a cloud server instead of the simulated one. wss:// in general; ws:// only
+# to this computer, for development. The robot's credentials go in the environment
+# variable AI_ROBOT_CLOUD_TOKEN, never in a file.
+# [ports.cloud]
+# adapter = "websocket"
+# [ports.cloud.websocket]
+# url = "wss://cloud.example/robot"

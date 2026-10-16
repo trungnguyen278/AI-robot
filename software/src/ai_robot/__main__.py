@@ -12,9 +12,9 @@ import os
 import signal
 import sys
 from collections.abc import Sequence
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+from ai_robot import software_version
 from ai_robot.app import App
 from ai_robot.core.config import CONFIG_DIR_ENV, ConfigError, get_table, load_config
 
@@ -89,7 +89,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="override the level set in the configuration",
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {_version()}")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {software_version()}")
     return parser.parse_args(argv)
 
 
@@ -101,13 +101,6 @@ def _seconds(text: str) -> float:
     if not (math.isfinite(value) and value >= 0):
         raise argparse.ArgumentTypeError(f"expected a number of seconds, got {text!r}")
     return value
-
-
-def _version() -> str:
-    try:
-        return version("ai-robot")
-    except PackageNotFoundError:
-        return "(not installed)"
 
 
 def _log_level(name: object) -> int:

@@ -39,10 +39,10 @@
 Proposed in [ADR-0005](decisions/0005-pi-software-platform.md): one Python process (asyncio) with an optional C++ extension. Modules own the ports of the hardware they use; adapters implement the ports, simulated until the real parts exist. Details, and how to run and extend it: [`software/README.md`](../software/README.md).
 
 ```
-modules    system · motion · voice · vision · screen · behavior
+modules    system · motion · voice · vision · screen · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · ai_backend · daylight
+ports      audio_in · audio_out · camera · screen · ai_backend · cloud · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -52,12 +52,17 @@ Until the body controller exists, the body ports (`drive`, `joints`, `range`, `p
 
 The screen is the exception that is real already: the `screen` module decides what it shows (the expression, a scene such as the clock or the weather, the gaze, the battery), and a renderer page in [`ui/`](../ui/README.md), shown full screen by a browser, draws it and keeps the face alive on its own. They talk over the [screen protocol](../protocol/screen/README.md) (proposed in [ADR-0006](decisions/0006-screen-renderer.md)).
 
+The `cloud` module links the robot to `ai-robot-server` over the [cloud protocol](../protocol/cloud/README.md). Its transport and messages are proposed in [ADR-0007](decisions/0007-cloud-link-transport.md) and [ADR-0008](decisions/0008-cloud-link-messages.md).
+- **Capabilities.** The cloud drives the robot through MCP tools, which the modules offer on the bus: each module offers the capabilities of what it owns, such as the screen's expressions and scenes. The robot checks every call against the capability's schema and safety class.
+- **Events.** Modules declare events, and the cloud subscribes to those it wants.
+- **Without a server.** A simulated cloud stands in for it.
+
 ## Open questions (each should become an ADR)
 
 - [ ] OS, ROS 2 or not, language on the Pi, how its modules communicate — proposed in [ADR-0005](decisions/0005-pi-software-platform.md).
 - [ ] Which microcontroller becomes the body controller ([ADR-0004](decisions/0004-pi-software-first.md)).
 - [ ] Pi ⇄ body link (concept v0 shows UART/I2C) and the packet format.
 - [ ] Does the body controller or the Pi drive the motor driver?
-- [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md). The transport and the messages are proposed in [ADR-0007](decisions/0007-cloud-link-transport.md) and [ADR-0008](decisions/0008-cloud-link-messages.md); audio, device identity and updates come next.
+- [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md). The transport and the messages are proposed in [ADR-0007](decisions/0007-cloud-link-transport.md) and [ADR-0008](decisions/0008-cloud-link-messages.md), and version 1.0 of the protocol is implemented on the robot without turns and audio. Audio, device identity and updates come next.
 - [ ] Audio: ReSpeaker HAT or MAX98357A — they cannot share the I2S pins; see [hardware/README.md](../hardware/README.md).
 - [ ] How the robot draws its screen — proposed in [ADR-0006](decisions/0006-screen-renderer.md): a renderer in a full-screen browser ([ui/](../ui/README.md)), driven by the Pi software over the [screen protocol](../protocol/screen/README.md).
