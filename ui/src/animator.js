@@ -3,18 +3,19 @@
    every frame, and keeps the face alive on its own, the way a robot's animation
    process does while its behaviour engine is busy:
 
-   - transitions: a new expression blends in over TRANSITION seconds while the
+   - transitions: a new expression blends in over SETTINGS.transition seconds while the
      previous one blends out (shape, colour, motion, effect), starting from wherever
      the face is, even in the middle of another transition;
    - life layers on top: breathing, glances around while nothing holds the gaze, the
      gaze target, the voice, and blinking;
-   - scenes (scenes/): a scene fades in over SCENE_TRANSITION seconds while the face
+   - scenes (scenes/): a scene fades in over SETTINGS.sceneTransition seconds while the face
      moves to the scene's slot, and back when it goes. Slots are blended by weight,
      with "no scene" as the rest, so the face stays put between two scenes that
      share a slot.
 
    Time is passed in (seconds) and randomness comes from a seeded generator, so the
-   same calls give the same frames; the tests rely on it.
+   same calls give the same frames; the tests rely on it. How the face moves is tuned
+   in settings.js.
 */
 
 import { DEFAULT_EXPRESSION, EXPRESSIONS } from './expressions.js';
@@ -22,15 +23,16 @@ import { TAU, clamp, smooth, unsmooth } from './math.js';
 import { motionDelta } from './motions.js';
 import { addDelta, blendPoses, makePose } from './pose.js';
 import { SCENES, sceneSlot, sceneTone } from './scenes/index.js';
+import { SETTINGS } from './settings.js';
 import { TONES } from './tones.js';
 
-export const TRANSITION = 0.28;
-export const SCENE_TRANSITION = 0.5;
+const { transition: TRANSITION, sceneTransition: SCENE_TRANSITION } = SETTINGS;
+const { blink: BLINK, breathe: BREATHE, glance: GLANCE, gaze: GAZE, voice: VOICE } = SETTINGS;
 
 const NO_LIFE = { blink: 0, glance: 0, breathe: 0 };
-const BLINK_CLOSE = 0.06; // seconds to close the eyes
-const BLINK_OPEN = 0.1;   // and to open them again
-const VOICE_HOLD = 0.5;   // a voice level older than this counts as silence
+// The screen protocol's rule: a voice level older than this counts as silence
+// (protocol/screen/README.md, voice).
+const VOICE_HOLD = 0.5;
 
 // Moves `value` towards `target`, `tau` being the time it takes to cover about 63 %.
 const approach = (value, target, dt, tau) => target + (value - target) * Math.exp(-dt / tau);
@@ -63,8 +65,8 @@ export class Animator {
     this.held = { until: -Infinity, next: null }; // a scene that plays to its end first
     this.enabled = { blink: true, glance: true, breathe: true };
     this.gaze = { target: null, x: 0, y: 0 };
-    this.glance = { x: 0, y: 0, toX: 0, toY: 0, next: time + this.between(1.4, 4) };
-    this.blinking = { start: null, next: time + this.between(1.5, 4), again: false };
+    this.glance = { x: 0, y: 0, toX: 0, toY: 0, next: time + this.between(...GLANCE.every) };
+    this.blinking = { start: null, next: time + this.between(...BLINK.first), again: false };
     this.heard = { level: 0, target: 0, at: -Infinity };
     this.set(expression, tone, time, { instant: true });
   }
@@ -107,7 +109,7 @@ export class Animator {
     if (instant) this.layers = [layer];
     else {
       this.layers.push(layer);
-      if (this.random() < 0.4 && this.enabled.blink) this.blink(time); // a blink hides the change
+      if (this.random() < BLINK.onChange && this.enabled.blink) this.blink(time); // hides the change
     }
     return known;
   }
@@ -202,11 +204,11 @@ export class Animator {
     const eyes = [pose.left, pose.right];
 
     // Breathing.
-    const breath = Math.sin((TAU * time) / 4.4) * life.breathe;
-    pose.face.y += 1.6 * breath;
+    const breath = Math.sin((TAU * time) / BREATHE.period) * life.breathe;
+    pose.face.y += BREATHE.rise * breath;
     for (const eye of eyes) {
-      eye.w *= 1 + 0.012 * breath;
-      eye.h *= 1 + 0.012 * breath;
+      eye.w *= 1 + BREATHE.swell * breath;
+      eye.h *= 1 + BREATHE.swell * breath;
     }
 
     // Glances around, while nothing holds the gaze.
@@ -215,27 +217,27 @@ export class Animator {
       glance.toX = 0;
       glance.toY = 0;
     } else if (time >= glance.next) {
-      const centre = this.random() < 0.35;
-      glance.toX = centre ? 0 : this.between(-10, 10);
-      glance.toY = centre ? 0 : this.between(-5, 5);
-      glance.next = time + this.between(1.4, 4);
+      const centre = this.random() < GLANCE.centre;
+      glance.toX = centre ? 0 : this.between(-GLANCE.reach.x, GLANCE.reach.x);
+      glance.toY = centre ? 0 : this.between(-GLANCE.reach.y, GLANCE.reach.y);
+      glance.next = time + this.between(...GLANCE.every);
     }
-    glance.x = approach(glance.x, glance.toX, dt, 0.06);
-    glance.y = approach(glance.y, glance.toY, dt, 0.06);
+    glance.x = approach(glance.x, glance.toX, dt, GLANCE.speed);
+    glance.y = approach(glance.y, glance.toY, dt, GLANCE.speed);
     pose.face.x += glance.x * life.glance;
     pose.face.y += glance.y * life.glance;
 
     // The gaze target: the face turns, the pupils lead, the nearer eye grows a little.
     const gaze = this.gaze;
-    gaze.x = approach(gaze.x, gaze.target ? gaze.target.x : 0, dt, 0.1);
-    gaze.y = approach(gaze.y, gaze.target ? gaze.target.y : 0, dt, 0.1);
-    pose.face.x += 26 * gaze.x;
-    pose.face.y += 16 * gaze.y;
+    gaze.x = approach(gaze.x, gaze.target ? gaze.target.x : 0, dt, GAZE.speed);
+    gaze.y = approach(gaze.y, gaze.target ? gaze.target.y : 0, dt, GAZE.speed);
+    pose.face.x += GAZE.face.x * gaze.x;
+    pose.face.y += GAZE.face.y * gaze.y;
     for (const eye of eyes) {
-      eye.pupilX += 10 * gaze.x + 0.6 * glance.x * life.glance;
-      eye.pupilY += 8 * gaze.y + 0.6 * glance.y * life.glance;
+      eye.pupilX += GAZE.pupils.x * gaze.x + GLANCE.pupils * glance.x * life.glance;
+      eye.pupilY += GAZE.pupils.y * gaze.y + GLANCE.pupils * glance.y * life.glance;
     }
-    const nearer = 0.06 * gaze.x;
+    const nearer = GAZE.nearer * gaze.x;
     pose.left.w *= 1 - nearer;
     pose.left.h *= 1 - nearer;
     pose.right.w *= 1 + nearer;
@@ -246,12 +248,12 @@ export class Animator {
     const heard = this.heard;
     const fresh = time - heard.at < VOICE_HOLD;
     const target = fresh ? heard.target : talk > 0 ? babble(time) : 0;
-    heard.level = approach(heard.level, target, dt, target > heard.level ? 0.04 : 0.16);
+    heard.level = approach(heard.level, target, dt, target > heard.level ? VOICE.rise : VOICE.fall);
     for (const eye of eyes) {
-      eye.w *= 1 + 0.1 * heard.level * listen;
-      eye.h *= (1 + 0.1 * heard.level * listen) * (1 - 0.06 * heard.level * talk);
+      eye.w *= 1 + VOICE.listen * heard.level * listen;
+      eye.h *= (1 + VOICE.listen * heard.level * listen) * (1 - VOICE.talk * heard.level * talk);
     }
-    pose.face.mouthOpen += 0.8 * heard.level * talk;
+    pose.face.mouthOpen += VOICE.mouth * heard.level * talk;
 
     // Blinking.
     const blinking = this.blinking;
@@ -259,20 +261,20 @@ export class Animator {
     let closed = 0;
     if (blinking.start !== null) {
       const since = time - blinking.start;
-      if (since < BLINK_CLOSE) closed = smooth(since / BLINK_CLOSE);
-      else if (since < BLINK_CLOSE + BLINK_OPEN) closed = 1 - smooth((since - BLINK_CLOSE) / BLINK_OPEN);
+      if (since < BLINK.close) closed = smooth(since / BLINK.close);
+      else if (since < BLINK.close + BLINK.open) closed = 1 - smooth((since - BLINK.close) / BLINK.open);
       else {
         blinking.start = null;
         if (blinking.again) {
           blinking.again = false;
-          blinking.next = time + 0.12;
+          blinking.next = time + BLINK.gap;
         } else {
-          blinking.again = this.random() < 0.18;
-          blinking.next = time + this.between(2.2, 5.8) / Math.max(life.blink, 0.2);
+          blinking.again = this.random() < BLINK.twice;
+          blinking.next = time + this.between(...BLINK.between) / Math.max(life.blink, BLINK.slowest);
         }
       }
     }
-    for (const eye of eyes) eye.h += (3 - eye.h) * closed;
+    for (const eye of eyes) eye.h += (BLINK.shut - eye.h) * closed;
 
     // Scenes, each with its colour. The face's slot is the average of the scenes'
     // slots by weight, "no scene" (the face in the middle, full size) taking the rest.

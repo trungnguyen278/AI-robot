@@ -144,7 +144,11 @@ class WebScreen(Screen):
             "type": "state",
             "face": {"expression": state.expression, "tone": state.tone},
             "scene": scene,
-            "status": {"battery": state.battery, "charging": state.charging},
+            "status": {
+                "battery": state.battery,
+                "charging": state.charging,
+                "low": state.battery_low,
+            },
             "time": time.time(),
         }
 

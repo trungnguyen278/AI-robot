@@ -14,10 +14,11 @@ Guidance for AI coding assistants working in this repository. Read [README.md](R
 
   Lists of files, settings and tests, and what a review found, go in the conversation or the dev log, never in git.
 - **No hard-coded values.** Before writing a number, a name or a duration in code, decide where it belongs:
-  - a value someone may want to tune (a timing, a rate, a limit, a threshold, a colour, a hardware value) goes in the component's configuration (`software/config/base.toml` for the robot software), with a comment. The code takes it as a required setting, with no default, so that the configuration shows what the robot really uses;
+  - a value someone may want to tune (a timing, a rate, a limit, a threshold, a colour, a hardware value) goes in the component's configuration (`software/config/base.toml` for the robot software, `ui/src/settings.js` for the renderer), with a comment. The code takes it as a required setting, with no default, so that the configuration shows what the robot really uses;
   - a value a protocol fixes (a version, a code, a field's limit) lives in `protocol/` and, once, in the code that speaks the protocol, named and pointing to the spec;
   - a fact (a physical or mathematical constant, a unit conversion, a published formula) stays in the code, named, with its source;
-  - a value for one robot or one machine (an address, a path, a port, a credential) is never committed: `local.toml` or an environment variable.
+  - a value for one robot or one machine (an address, a path, a port, a credential) is never committed: `local.toml` or an environment variable;
+  - design content, such as the face's shapes, motions and colours, stays in the renderer's data files (`ui/src/expressions.js`, `tones.js`…), edited with the studio.
 
 ## Task checklists
 

@@ -14,7 +14,6 @@ const GLOW = 5;          // blur of the glow, in face units
 const BROW_LENGTH = 72;
 const BROW_WIDTH = 10;
 const MOUTH_WIDTH = 4;
-const LOW_BATTERY = 15;  // percent: the battery turns red at or below it
 
 const rad = (deg) => (deg * Math.PI) / 180;
 
@@ -175,7 +174,7 @@ function bolt(ctx, cx, cy, size) {
 // Each keeps its own place, so that neither moves when the other changes.
 function drawStatus(ctx, layout, status, rgb, now, clockAlpha) {
   const percent = batteryPercent(status);
-  const low = percent !== null && percent <= LOW_BATTERY && !status.charging;
+  const low = percent !== null && status.low === true; // the robot decides, not the page
   const ink = rgba(rgb, 0.6);
   const warn = rgba(TONES.red.rgb, 0.85);
   const clock = (x, y) => {

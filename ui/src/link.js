@@ -31,6 +31,7 @@ export function apply(message, player) {
       player.status = {
         battery: Number.isFinite(status.battery) ? status.battery : null,
         charging: typeof status.charging === 'boolean' ? status.charging : null,
+        low: typeof status.low === 'boolean' ? status.low : null,
       };
       return true;
     }

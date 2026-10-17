@@ -49,6 +49,7 @@ software ──state, look, voice──▶ link.js ──▶ animator.js ──�
 | `src/player.js` | Runs an animator on a canvas, at the display's refresh rate |
 | `src/link.js` | The screen protocol: applies the software's messages, reports the page and its taps |
 | `src/tones.js` | The colour palette |
+| `src/settings.js` | How the face moves, in one place: transitions, blinks, breathing, glances, gaze, voice |
 | `screen.html` | The robot's screen |
 | `index.html`, `src/studio.js` | The studio |
 | `tests/` | The tests |
@@ -64,6 +65,7 @@ A rectangular screen keeps a status row along its top, a twelfth of its height (
 - **An expression:** add or change an entry in `src/expressions.js`; the studio shows it at once. Use the numbers of `src/pose.js`, a tone of `src/tones.js`, a motion of `src/motions.js`, an effect of `src/effects.js`. An expression the software relies on must also be listed in [`protocol/screen/vocabulary.json`](../protocol/screen/vocabulary.json).
 - **A motion or an effect:** a function in `src/motions.js` or `src/effects.js`; both take the seconds since the expression started.
 - **A scene:** a file in `src/scenes/`, registered in `src/scenes/index.js` (its header lists what a scene gives). Draw from the data the software sends, never from canned content, and cope with missing or malformed data. Keep clear of the face's corner (`CORNER` in `kit.js`), and inside a 180-unit radius so that it fits round screens. Draw what never changes through `cached()` in `kit.js`: the glow is the most expensive part of a frame, and the cache pays for it once. A scene the software relies on must also be listed, with its data, in the protocol's vocabulary, and the tests compare what the scene accepts with it.
+- **How the face moves:** tune it in `src/settings.js`, never with numbers in the code. Shapes, motions and colours are content, in the files above. What the robot decides, such as when the battery is low, comes from the software.
 - **The protocol:** change [`protocol/screen/`](../protocol/screen/README.md) first, then `src/link.js` and the software, in the same pull request.
 - Keep the animator deterministic: time is passed in, and randomness comes from its seeded generator, never from `Math.random`.
 
