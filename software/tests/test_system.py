@@ -9,6 +9,8 @@ import json
 import logging
 from pathlib import Path
 
+import pytest
+
 from ai_robot.adapters.sim.body import SimLights, SimPower
 from ai_robot.core.bus import Bus
 from ai_robot.core.module import ModuleContext, RobotInfo
@@ -23,6 +25,7 @@ SETTINGS = {
     "battery_interval": INTERVAL,
     "charging_scene_seconds": CHARGING_SECONDS,
     "ready_color": [0, 40, 0],
+    "low_battery_percent": 15.0,
 }
 
 
@@ -80,3 +83,27 @@ def test_unknown_readings_change_nothing() -> None:
 def test_the_charging_scene_is_in_the_protocol() -> None:
     vocabulary = json.loads(VOCABULARY.read_text(encoding="utf-8"))
     assert CHARGING_SCENE in vocabulary["scenes"]
+
+
+@pytest.mark.parametrize(
+    ("percent", "charging", "low"),
+    [
+        (15.0, False, True),
+        (15.5, False, False),
+        (10.0, True, False),  # plugged in: not low, even if empty
+        (10.0, None, True),  # unknown charger: low, to be safe
+        (None, False, None),  # unknown charge: unknown
+    ],
+)
+def test_the_system_judges_the_battery_low(
+    percent: float | None, charging: bool | None, low: bool | None
+) -> None:
+    ctx = ModuleContext(
+        name="system",
+        bus=Bus(),
+        ports={"power": SimPower(voltage=7.4, percent=50.0, charging=False), "lights": SimLights()},
+        robot=RobotInfo(display_name="Robot"),
+        log=logging.getLogger("test"),
+    )
+    module = SystemModule(ctx, **SETTINGS)
+    assert module.is_low(BatteryStatus(voltage=7.4, percent=percent, charging=charging)) is low

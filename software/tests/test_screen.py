@@ -206,6 +206,21 @@ def test_only_changes_reach_the_screen() -> None:
     asyncio.run(main())
 
 
+def test_the_battery_is_shown_low_when_the_system_says_so() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            empty = BatteryStatus(voltage=6.6, percent=9.0, charging=False)
+            bus.publish(BatteryReport(empty, low=True))
+            await settle()
+            assert screen.state.battery_low is True
+            bus.publish(BatteryReport(empty))  # no judgement: unknown
+            await settle()
+            assert screen.state.battery_low is None
+
+    asyncio.run(main())
+
+
 def test_the_voice_follows_the_microphone_only_while_listening() -> None:
     async def main() -> None:
         bus, screen, module = make()

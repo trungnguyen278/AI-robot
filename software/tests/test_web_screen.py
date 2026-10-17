@@ -93,7 +93,9 @@ def test_serves_the_renderer_and_drives_its_pages(ui_dir: Path) -> None:
             async with session.get(f"{base}/src/../../secret.txt") as response:
                 assert response.status in (403, 404)
 
-            await screen.show(ScreenState(expression="happy", battery=50.0, charging=False))
+            await screen.show(
+                ScreenState(expression="happy", battery=50.0, charging=False, battery_low=False)
+            )
             async with session.ws_connect(f"{base}/ws") as page:
                 # A page that connects gets the whole state at once.
                 hello = await receive(page)
@@ -104,7 +106,7 @@ def test_serves_the_renderer_and_drives_its_pages(ui_dir: Path) -> None:
                     "type": "state",
                     "face": {"expression": "happy", "tone": None},
                     "scene": None,
-                    "status": {"battery": 50.0, "charging": False},
+                    "status": {"battery": 50.0, "charging": False, "low": False},
                 }
                 assert await receive(page) == {"type": "look", "target": None}
 

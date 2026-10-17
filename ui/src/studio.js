@@ -187,10 +187,11 @@ $('status').addEventListener('change', (event) => {
 });
 function updateStatus() {
   const battery = Math.min(100, Math.max(0, Number($('battery').value) || 0));
-  player.status = { battery, charging: $('charging').checked };
+  player.status = { battery, charging: $('charging').checked, low: $('low').checked };
 }
 $('battery').addEventListener('input', updateStatus);
 $('charging').addEventListener('change', updateStatus);
+$('low').addEventListener('change', updateStatus);
 
 // Readout.
 const readout = $('readout');

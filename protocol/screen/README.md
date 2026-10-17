@@ -40,7 +40,7 @@ What to show. Sent on connection and on every change, with the software's `time`
 {"type": "state",
  "face": {"expression": "listening", "tone": null},
  "scene": {"name": "weather", "data": {"condition": "rain", "temperature": 18}},
- "status": {"battery": 82.0, "charging": false},
+ "status": {"battery": 82.0, "charging": false, "low": false},
  "time": 1792130401.5}
 ```
 
@@ -51,6 +51,7 @@ What to show. Sent on connection and on every change, with the software's `time`
 | `scene` | A scene of the vocabulary and its data, or `null` for none. The scene fills the screen while the face, keeping its expression, watches from a corner. New data for the scene on screen updates it without starting it again; an unknown name shows no scene. Optional: a missing field means `null`. |
 | `status.battery` | Battery charge in percent, from 0 to 100, or `null` if unknown. |
 | `status.charging` | `true`, `false`, or `null` if unknown. |
+| `status.low` | `true` when the robot judges the battery low (the renderer shows it in red), `false`, or `null` if unknown. Optional: a missing field means `null`. The robot decides, by its own threshold; the renderer has none. |
 
 The scenes and their data:
 

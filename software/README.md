@@ -20,7 +20,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 
 | Module | Owns ports | Responsibility (planned) |
 |---|---|---|
-| `system` | `power`, `lights` | Battery reports, status light, the charging scene when plugged in; planned: clean shutdown on low battery |
+| `system` | `power`, `lights` | Battery reports, with whether the battery is low; status light; the charging scene when plugged in; planned: clean shutdown on low battery |
 | `motion` | `drive`, `joints`, `range`, `safety` | Tracks, neck and arms; obstacle and emergency-stop checks |
 | `voice` | `audio_in`, `audio_out`, `ai_backend` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |

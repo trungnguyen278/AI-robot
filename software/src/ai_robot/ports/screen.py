@@ -29,7 +29,8 @@ class ScreenState:
     (protocol/screen/vocabulary.json); ``tone=None`` keeps the expression's own colour.
     ``scene`` names a scene of the protocol, shown with ``scene_data`` (see
     ``scene_data()``) while the face watches from a corner, or is ``None``.
-    ``battery`` (percent) and ``charging`` fill the status row; ``None`` means unknown.
+    ``battery`` (percent) and ``charging`` fill the status row, ``battery_low`` shows the
+    battery in red (the robot's judgement, from system); ``None`` means unknown.
     """
 
     expression: str = "neutral"
@@ -38,6 +39,7 @@ class ScreenState:
     scene_data: Mapping[str, Any] = field(default_factory=dict)
     battery: float | None = None
     charging: bool | None = None
+    battery_low: bool | None = None
 
     def __post_init__(self) -> None:
         if self.battery is not None and not (

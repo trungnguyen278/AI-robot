@@ -10,7 +10,8 @@
    #result as data-status="pass" or data-status="fail", with one line per failure.
 */
 
-import { Animator, SCENE_TRANSITION, TRANSITION } from '../src/animator.js';
+import { Animator } from '../src/animator.js';
+import { SETTINGS } from '../src/settings.js';
 import { drawFrame } from '../src/draw.js';
 import { EFFECTS } from '../src/effects.js';
 import { DEFAULT_EXPRESSION, EXPRESSIONS } from '../src/expressions.js';
@@ -179,7 +180,7 @@ function checkAnimator() {
   // Once a transition is over, only the new expression is left.
   const settled = still('sad');
   settled.set('angry', null, 1);
-  settled.frame(1 + TRANSITION + 0.01);
+  settled.frame(1 + SETTINGS.transition + 0.01);
   check(settled.layers.length === 1 && settled.expression === 'angry', 'transitions', 'the old expression lingers');
 
   check(new Animator().set('no-such-expression') === DEFAULT_EXPRESSION, 'animator',
@@ -265,7 +266,7 @@ function checkSceneMotion() {
   const leaving = still();
   leaving.setScene('clock', {}, 0);
   leaving.setScene(null, {}, 1);
-  const after = leaving.frame(1 + SCENE_TRANSITION + 0.01);
+  const after = leaving.frame(1 + SETTINGS.sceneTransition + 0.01);
   check(after.scenes.length === 0 && after.slot.scale === 1, 'scenes', 'the face must be back in the middle');
 }
 
@@ -311,7 +312,11 @@ function checkProtocol() {
   const top = player.animator.layers.at(-1);
   check(top.name === 'sad' && top.tone === 'red', 'state', `shows ${top.name} in ${top.tone}`);
   check(player.status.battery === 40 && player.status.charging === true, 'state', 'status not applied');
-  apply({ type: 'state', face: { expression: 42 }, status: { battery: 'full' } }, player);
+  check(player.status.low === null, 'state', 'a missing low-battery flag must read as unknown');
+  apply({ type: 'state', face: {}, status: { battery: 9, charging: false, low: true } }, player);
+  check(player.status.low === true, 'state', 'the robot\'s low-battery flag not applied');
+  apply({ type: 'state', face: { expression: 42 }, status: { battery: 'full', low: 'yes' } }, player);
+  check(player.status.low === null, 'state', 'a malformed low-battery flag must read as unknown');
   check(player.animator.expression === DEFAULT_EXPRESSION, 'state', 'a malformed expression must show the default one');
   check(player.status.battery === null, 'state', 'a malformed battery level must read as unknown');
   apply({ type: 'look', target: { x: 2, y: -0.5 } }, player);

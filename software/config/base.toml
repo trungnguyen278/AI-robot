@@ -32,6 +32,7 @@ enabled = ["system", "voice", "vision", "screen", "cloud", "behavior", "motion"]
 battery_interval = 5.0  # seconds between battery reports
 charging_scene_seconds = 4.0  # how long the charging scene stays after the robot is plugged in
 ready_color = [0, 40, 0]  # the status light while the robot runs: red, green, blue from 0 to 255
+low_battery_percent = 15.0  # at or below it, unless charging, the battery is low: shown in red
 
 [modules.behavior]
 idle_minutes = 5.0  # with no tap or conversation for this long, the screen shows the clock

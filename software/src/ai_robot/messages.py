@@ -50,6 +50,7 @@ class BatteryReport(Message):
     """The battery's state. Published by system at a regular interval."""
 
     status: BatteryStatus
+    low: bool | None = None  # whether system judges it low; None: unknown
 
 
 class ScreenPriority(IntEnum):

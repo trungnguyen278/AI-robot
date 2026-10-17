@@ -320,6 +320,7 @@ class ScreenModule(Module):
         self.listening = False
         self._battery: float | None = None
         self._charging: bool | None = None
+        self._battery_low: bool | None = None
         self._level = 0.0
         self._level_sent_at = -math.inf
         self._changed = asyncio.Event()
@@ -409,6 +410,7 @@ class ScreenModule(Module):
         percent = report.status.percent
         self._battery = None if percent is None else min(100.0, max(0.0, percent))
         self._charging = report.status.charging
+        self._battery_low = report.low
         await self._refresh()
 
     async def _on_level(self, message: SoundLevel) -> None:
@@ -442,6 +444,7 @@ class ScreenModule(Module):
             scene_data=scene.content.data if scene else {},
             battery=self._battery,
             charging=self._charging,
+            battery_low=self._battery_low,
         )
         if state != self.state:
             self.state = state
