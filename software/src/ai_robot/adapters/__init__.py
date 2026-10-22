@@ -25,7 +25,6 @@ ADAPTERS: dict[str, dict[str, str]] = {
         "sim": "ai_robot.adapters.sim.screen:SimScreen",
         "web": "ai_robot.adapters.web.screen:WebScreen",
     },
-    "ai_backend": {"stub": "ai_robot.adapters.sim.ai:StubAIBackend"},
     "cloud": {
         "sim": "ai_robot.adapters.sim.cloud:SimCloud",
         "websocket": "ai_robot.adapters.web.cloud:WebSocketCloud",

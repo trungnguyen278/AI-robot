@@ -100,10 +100,6 @@ send_timeout = 1.0  # seconds a page may take to accept a message before it is d
 heartbeat = 10.0  # seconds between pings that find a page gone silent
 close_timeout = 2.0  # seconds a page may take to acknowledge the end of the connection
 
-# Speech recognition, conversation and speech synthesis.
-[ports.ai_backend]
-adapter = "stub"
-
 # The link to ai-robot-server (protocol/cloud/README.md). "sim" until a server exists;
 # "websocket" with the server's address, set in local.toml (see local.example.toml).
 [ports.cloud]

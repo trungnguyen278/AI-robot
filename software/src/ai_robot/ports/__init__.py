@@ -9,8 +9,7 @@ every port:
 - Quantities are in SI units: metres, seconds, radians, volts.
 """
 
-from ai_robot.ports.ai import AIBackend
-from ai_robot.ports.audio import AudioClip, AudioFormat, AudioIn, AudioOut
+from ai_robot.ports.audio import AudioFormat, AudioIn, AudioOut
 from ai_robot.ports.base import Port
 from ai_robot.ports.body import (
     BatteryStatus,
@@ -43,7 +42,6 @@ PORT_TYPES: dict[str, type[Port]] = {
     "audio_out": AudioOut,
     "camera": Camera,
     "screen": Screen,
-    "ai_backend": AIBackend,
     "cloud": Cloud,
     "daylight": Daylight,
     "drive": DriveBase,
@@ -56,8 +54,6 @@ PORT_TYPES: dict[str, type[Port]] = {
 
 __all__ = [
     "PORT_TYPES",
-    "AIBackend",
-    "AudioClip",
     "AudioFormat",
     "AudioIn",
     "AudioOut",
