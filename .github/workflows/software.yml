@@ -6,11 +6,13 @@ on:
     paths:
       - "software/**"
       - "protocol/screen/**"
+      - "protocol/cloud/**"
       - ".github/workflows/software.yml"
   pull_request:
     paths:
       - "software/**"
       - "protocol/screen/**"
+      - "protocol/cloud/**"
       - ".github/workflows/software.yml"
 
 permissions:
@@ -39,6 +41,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: python -m pip install -e ".[dev]"
+      - name: LiveKit server, for the cloud link's tests
+        env:
+          VERSION: "1.13.10"
+          SHA256: c25a3e45fb922e9a93c6443d10c0ed041ba64342097e38632331736630283165
+        run: |
+          archive="$RUNNER_TEMP/livekit.tar.gz"
+          curl -sSfL -o "$archive" "https://github.com/livekit/livekit/releases/download/v${VERSION}/livekit_${VERSION}_linux_amd64.tar.gz"
+          echo "${SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" livekit-server
+          echo "LIVEKIT_SERVER=$RUNNER_TEMP/livekit-server" >> "$GITHUB_ENV"
       - name: Lint
         run: |
           ruff check .

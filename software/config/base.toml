@@ -101,22 +101,22 @@ heartbeat = 10.0  # seconds between pings that find a page gone silent
 close_timeout = 2.0  # seconds a page may take to acknowledge the end of the connection
 
 # The link to ai-robot-server (protocol/cloud/README.md). "sim" until a server exists;
-# "websocket" with the server's address, set in local.toml (see local.example.toml).
+# "livekit" with the server's address, set in local.toml (see local.example.toml).
 [ports.cloud]
 adapter = "sim"
 
-# How the link behaves (protocol/cloud/README.md, Connection). The address, url, is set
-# where the server is chosen: local.toml or a profile.
-[ports.cloud.websocket]
-connect_timeout = 10.0  # seconds to reach the server
-hello_timeout = 5.0  # seconds the cloud has to answer the robot's hello
-ping_after = 10.0  # seconds without anything from the cloud before a ping
-send_timeout = 5.0  # seconds a message may take to go out before the connection is dropped
-close_timeout = 2.0  # seconds the cloud has to acknowledge the end of the connection
+# How the link behaves (protocol/cloud/README.md). The LiveKit server's address, url,
+# is set where the server is chosen: local.toml or a profile.
+[ports.cloud.livekit]
+room = "robot"  # the room of the tokens the robot makes for a development server...
+identity = "robot"  # ...and the robot's identity in it
+connect_timeout = 10.0  # seconds to join the room
+hello_timeout = 5.0  # seconds the cloud's agent has to answer the robot's hello
 reconnect_first = 1.0  # seconds: the longest wait before the first new attempt
 reconnect_max = 60.0  # seconds: the longest wait between attempts
 rate = 50.0  # messages a second the robot handles from the cloud...
-burst = 100  # ...in bursts of up to this many; it drops the rest
+burst = 100  # ...in bursts of up to this many...
+backlog = 500  # ...while up to this many more wait their turn; it drops the rest
 catalogue_ttl = 60.0  # seconds the cloud may cache the robot's catalogue
 
 # When the sun rises and sets. "fixed" until the robot's place is known; for the real

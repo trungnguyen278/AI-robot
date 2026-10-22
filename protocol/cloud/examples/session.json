@@ -1,10 +1,9 @@
 {
-  "description": "A session as the robot runs it today: the hello exchange, MCP discovery, a subscription to catalogue changes, calls that succeed and fail, an event, and the end. The enum of expressions in tools/list is shortened here.",
+  "description": "A session as the robot runs it today, without conversations: the hello exchange, MCP discovery, a subscription to catalogue changes, calls that succeed and fail, an event, and the end. The enum of expressions in tools/list is shortened here.",
   "messages": [
     {"from": "robot", "message": {
-      "type": "hello", "id": "r1", "protocol": "1.0", "software": "0.1.0",
-      "time": 1792130400.25, "utc_offset": 420,
-      "media": {"speech": [], "voice": []},
+      "type": "hello", "id": "r1", "protocol": "2.0", "software": "0.1.0",
+      "time": 1792130400.25, "utc_offset": 420, "conversations": false,
       "events": [{
         "name": "screen.touched",
         "description": "Someone tapped the screen",
@@ -19,10 +18,9 @@
       }]
     }},
     {"from": "cloud", "message": {
-      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "1.0",
-      "session": {"id": "s-5f2a", "resume": "k-91c0", "resume_within": 120},
-      "time": 1792130400.31,
-      "media": {"speech": null, "voice": null},
+      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.0",
+      "session": {"id": "s-5f2a"},
+      "time": 1792130400.31, "conversations": true,
       "events": ["screen.touched"]
     }},
     {"from": "cloud", "message": {

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import struct
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +12,6 @@ import pytest
 from ai_robot.core.data import Schema
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "protocol" / "cloud"
-HEADER = struct.Struct(">BBBBII")  # version, stream, format, flags, sequence, timestamp
 
 
 def load(name: str) -> Any:
@@ -39,41 +37,18 @@ def test_every_message_of_the_examples_follows_the_schema(name: str) -> None:
     ids: dict[str, set[str]] = {"robot": set(), "cloud": set()}
     for step in load(f"examples/{name}")["messages"]:
         sender = step["from"]
-        if "frame" in step:
-            continue
+        if "message" not in step:
+            continue  # an audio step: what plays on a track, not a message
         message = step["message"]
         assert schemas[sender].problem(message) is None, message
         assert message["id"] not in ids[sender], f"{message['id']} is used twice"
         ids[sender].add(message["id"])
 
 
-@pytest.mark.parametrize("name", EXAMPLES)
-def test_the_frame_headers_hold_their_fields(name: str) -> None:
-    sequences: dict[int, int] = {}
-    for step in load(f"examples/{name}")["messages"]:
-        frame = step.get("frame")
-        if frame is None:
-            continue
-        header = bytes.fromhex(frame["header"])
-        assert len(header) == HEADER.size == 12
-        version, stream, form, flags, sequence, timestamp = HEADER.unpack(header)
-        assert (version, stream, form, flags, sequence, timestamp) == (
-            1,
-            frame["stream"],
-            frame["format"],
-            frame["flags"],
-            frame["sequence"],
-            frame["timestamp"],
-        )
-        assert stream == (1 if step["from"] == "robot" else 2)
-        assert sequence == sequences.get(stream, 0) + 1  # one more than the previous frame
-        sequences[stream] = sequence
-
-
 def test_messages_that_break_the_schema_are_caught() -> None:
     robot, cloud = schema("robot"), schema("cloud")
     hello = load("examples/session.json")["messages"][1]["message"]
-    assert cloud.problem({**hello, "media": {"speech": "two", "voice": None}}) is not None
+    assert cloud.problem({**hello, "conversations": "yes"}) is not None
     assert cloud.problem({key: value for key, value in hello.items() if key != "session"})
     assert cloud.problem({"type": "mcp", "id": "c9", "payload": {"jsonrpc": "1.0"}})
     assert robot.problem({"type": "event", "id": "x" * 65, "name": "a", "time": 0, "data": {}})

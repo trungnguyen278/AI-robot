@@ -13,9 +13,14 @@ from ai_robot.ports.cloud import (
     CallCancelled,
     Capability,
     Cloud,
+    CloudPart,
+    ConversationAudio,
     EventKind,
     LinkStatus,
+    RobotPart,
     ToolCall,
+    TurnCancel,
+    TurnStart,
 )
 
 Outcome = tuple[Mapping[str, Any] | None, str | None]  # the result's data, or an error
@@ -25,26 +30,40 @@ class SimCloud(Cloud):
     """A cloud that is always there and asks for nothing on its own.
 
     It opens a session as soon as the robot offers what it can do, and subscribes to
-    every event, which it keeps in ``events``. It calls a capability only when told to,
-    with ``call`` or ``begin``, as tests do.
+    every event, which it keeps in ``events``. If the robot offers conversations, it
+    takes them, and keeps the robot's part of them in ``heard``. It calls a capability,
+    or says its own part of a conversation, only when told to (``call``, ``begin``,
+    ``say``), as tests do.
     """
 
     def __init__(self) -> None:
         self.capabilities: dict[str, Capability] = {}
         self.event_kinds: dict[str, EventKind] = {}
         self.events: deque[tuple[str, Mapping[str, Any]]] = deque(maxlen=100)
+        self.heard: deque[RobotPart] = deque(maxlen=1000)
         self.online = False
+        self.conversing = False
         self._requests: asyncio.Queue[ToolCall | CallCancelled] = asyncio.Queue()
         self._statuses: asyncio.Queue[LinkStatus] = asyncio.Queue()
+        self._said: asyncio.Queue[CloudPart] = asyncio.Queue()
         self._outcomes: dict[str, asyncio.Future[Outcome]] = {}
         self._ids = itertools.count(1)
 
-    async def offer(self, capabilities: Sequence[Capability], events: Sequence[EventKind]) -> None:
+    async def offer(
+        self,
+        capabilities: Sequence[Capability],
+        events: Sequence[EventKind],
+        *,
+        conversation: ConversationAudio | None = None,
+    ) -> None:
         self.capabilities = {capability.name: capability for capability in capabilities}
         if not self.online:
             self.online = True
             self.event_kinds = {kind.name: kind for kind in events}
-            self._statuses.put_nowait(LinkStatus(True, "sim", frozenset(self.event_kinds)))
+            self.conversing = conversation is not None
+            self._statuses.put_nowait(
+                LinkStatus(True, "sim", frozenset(self.event_kinds), conversations=self.conversing)
+            )
 
     async def request(self) -> ToolCall | CallCancelled:
         return await self._requests.get()
@@ -66,6 +85,20 @@ class SimCloud(Cloud):
 
     async def status(self) -> LinkStatus:
         return await self._statuses.get()
+
+    async def converse(self, part: RobotPart) -> None:
+        if self.conversing:
+            self.heard.append(part)
+        elif isinstance(part, TurnStart):
+            self._said.put_nowait(TurnCancel(part.turn, "no conversations"))
+
+    async def conversation(self) -> CloudPart:
+        return await self._said.get()
+
+    def say(self, *parts: CloudPart) -> None:
+        """Say ``parts`` of a conversation, as the cloud would."""
+        for part in parts:
+            self._said.put_nowait(part)
 
     def begin(self, name: str, arguments: Mapping[str, Any] | None = None) -> ToolCall:
         """Call a capability as the cloud would, without waiting for the outcome."""

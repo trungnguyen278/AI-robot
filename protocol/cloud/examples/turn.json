@@ -1,39 +1,26 @@
 {
-  "description": "Turns and responses, once the robot streams audio: media negotiation on the baseline, a turn and its answer with an expression, then a reminder the user speaks over. A frame shows its 12-byte header in hex, the fields it holds, and the length of the audio after it.",
+  "description": "Turns and responses in a session with conversations: a turn and its answer with an expression, then a reminder the user speaks over. An audio step tells what plays on a track at that point; it is not a message.",
   "messages": [
     {"from": "robot", "message": {
-      "type": "hello", "id": "r1", "protocol": "1.0", "software": "0.2.0",
-      "time": 1792130400.25, "utc_offset": 420,
-      "media": {
-        "speech": [
-          {"id": 0, "codec": "opus", "rate": 16000, "channels": 1, "frame_ms": 60, "bitrate": [16000, 32000]},
-          {"id": 1, "codec": "pcm_s16le", "rate": 16000, "channels": 1, "frame_ms": 20}
-        ],
-        "voice": [
-          {"id": 0, "codec": "opus", "rate": 24000, "channels": 1, "frame_ms": 60},
-          {"id": 1, "codec": "pcm_s16le", "rate": 16000, "channels": 1, "frame_ms": 20}
-        ]
-      },
+      "type": "hello", "id": "r1", "protocol": "2.0", "software": "0.2.0",
+      "time": 1792130400.25, "utc_offset": 420, "conversations": true,
       "events": []
     }},
     {"from": "cloud", "message": {
-      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "1.0",
+      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.0",
       "session": {"id": "s-77d0"},
-      "time": 1792130400.29,
-      "media": {"speech": 1, "voice": 1},
+      "time": 1792130400.29, "conversations": true,
       "events": []
     }},
     {"from": "robot", "message": {
       "type": "turn.start", "id": "r2", "turn": "t1", "trigger": "wake_word",
       "context": {"battery": 82.0, "charging": false}
     }},
-    {"from": "robot", "frame": {"header": "01 01 01 00 00 00 00 01 00 00 00 00", "stream": 1, "format": 1, "flags": 0, "sequence": 1, "timestamp": 0, "payload": 640}},
-    {"from": "robot", "frame": {"header": "01 01 01 00 00 00 00 02 00 00 01 40", "stream": 1, "format": 1, "flags": 0, "sequence": 2, "timestamp": 320, "payload": 640}},
-    {"from": "robot", "frame": {"header": "01 01 01 01 00 00 00 03 00 00 02 80", "stream": 1, "format": 1, "flags": 1, "sequence": 3, "timestamp": 640, "payload": 640}},
-    {"from": "robot", "message": {"type": "turn.speech_end", "id": "r3", "turn": "t1"}},
+    {"from": "robot", "audio": "The user's question on the robot's speech track: 2.14 s"},
+    {"from": "robot", "message": {"type": "turn.speech_end", "id": "r3", "turn": "t1", "speech_ms": 2140}},
     {"from": "cloud", "message": {"type": "response.start", "id": "c2", "response": "a1", "turn": "t1"}},
     {"from": "cloud", "message": {"type": "response.text", "id": "c3", "response": "a1", "delta": "It is sunny in Hanoi, "}},
-    {"from": "cloud", "frame": {"header": "01 02 01 00 00 00 00 01 00 00 00 00", "stream": 2, "format": 1, "flags": 0, "sequence": 1, "timestamp": 0, "payload": 640}},
+    {"from": "cloud", "audio": "The answer's voice on the agent's track, as it is spoken"},
     {"from": "cloud", "message": {
       "type": "mcp", "id": "c4",
       "payload": {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
@@ -51,12 +38,11 @@
       }}
     }},
     {"from": "cloud", "message": {"type": "response.text", "id": "c5", "response": "a1", "delta": "28 degrees."}},
-    {"from": "cloud", "frame": {"header": "01 02 01 01 00 00 00 02 00 00 01 40", "stream": 2, "format": 1, "flags": 1, "sequence": 2, "timestamp": 320, "payload": 640}},
     {"from": "cloud", "message": {"type": "response.end", "id": "c6", "response": "a1", "follow_up": false}},
     {"from": "cloud", "message": {"type": "response.start", "id": "c7", "response": "a2", "turn": null}},
     {"from": "cloud", "message": {"type": "response.text", "id": "c8", "response": "a2", "delta": "Time to water the plants."}},
-    {"from": "cloud", "frame": {"header": "01 02 01 00 00 00 00 03 00 00 00 00", "stream": 2, "format": 1, "flags": 0, "sequence": 3, "timestamp": 0, "payload": 640}},
-    {"from": "robot", "message": {"type": "response.interrupted", "id": "r5", "response": "a2", "played_ms": 20}},
+    {"from": "cloud", "audio": "The reminder's voice on the agent's track, until the user speaks over it"},
+    {"from": "robot", "message": {"type": "response.interrupted", "id": "r5", "response": "a2"}},
     {"from": "robot", "message": {
       "type": "turn.start", "id": "r6", "turn": "t2", "trigger": "barge_in",
       "context": {"battery": 82.0, "charging": false}

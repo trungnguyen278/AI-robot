@@ -56,7 +56,7 @@ def test_shipped_profiles_build(shipped_config: Path) -> None:
 
 # What the configuration cannot ship, because it belongs to one robot or one machine.
 MACHINE_SPECIFIC = {
-    ("cloud", "websocket"): {"url": "wss://cloud.example/robot"},
+    ("cloud", "livekit"): {"url": "wss://cloud.example"},
     ("daylight", "solar"): {"latitude": 21.03, "longitude": 105.85},
 }
 

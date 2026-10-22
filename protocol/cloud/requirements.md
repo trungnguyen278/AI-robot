@@ -112,7 +112,7 @@ Neither side assumes the other's formats: they agree on them, the way SIP endpoi
 
 | ID | Requirement |
 |---|---|
-| NEG-1 | In the hello, the robot **MUST** offer, for each stream, the formats it supports, in its order of preference. The streams are the user's speech, the robot's voice, and later images and video. A format is a codec with its parameters: sample rate, channels, frame duration, and a bit-rate range. |
+| NEG-1 | When a session opens, the robot **MUST** offer, for each stream, the formats it supports, in its order of preference. The streams are the user's speech, the robot's voice, and later images and video. A format is a codec with its parameters: sample rate, channels, frame duration, and a bit-rate range. |
 | NEG-2 | The server **MUST** answer with one format per stream, taken from the offer among those it supports, or decline a stream that has none it can use. Which side's preference wins is the server's policy. FreeSWITCH calls these "generous" (the offer's order) and "greedy" (the answerer's own order) ([FreeSWITCH codec negotiation](https://developer.signalwire.com/freeswitch/media-and-codecs/codecs/)). |
 | NEG-3 | Every robot and every server **MUST** support one baseline format for speech in each direction, so that negotiation between compatible versions always succeeds. Which format is decision 3. |
 | NEG-4 | Either side **MAY** negotiate again during a session: a lower bit rate on a poor network, a higher quality for music. The exchange is atomic: the current formats stay until the answer arrives, and a change applies between turns, never in the middle of an utterance. Offers that cross **MUST** be settled by a fixed rule, such as the server withdrawing its own, so that both sides end with the same formats. |
