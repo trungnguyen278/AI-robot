@@ -193,8 +193,8 @@ The checklists used are [ETSI EN 303 645](https://www.etsi.org/deliver/etsi_en/3
 
 | ID | Requirement |
 |---|---|
-| PROV-1 | Set-up **MUST** happen through the app over Bluetooth LE: Wi-Fi credentials, binding to the owner's account, and registering the robot's identity (SEC-3). |
-| PROV-2 | The owner **MUST** confirm that the app talks to the robot in front of them, for example with a code shown on the robot's screen and typed into the app. |
+| PROV-1 | Set-up covers the Wi-Fi credentials, binding to the owner's account, and registering the robot's identity (SEC-3). It **MUST** be possible through the app over Bluetooth LE, and **MAY** happen on the robot's touch screen, where settings live too. |
+| PROV-2 | The owner **MUST** confirm that it is the robot in front of them that joins their account, for example with a code shown on the robot's screen and typed into the app, or approved on their phone. |
 | PROV-3 | Until the robot is bound, it **MUST** refuse everything but set-up, and **MUST** say so on screen. |
 | PROV-4 | A robot **MUST** be transferable to a new owner only through a reset that erases the previous owner's data and binding (PRIV-6). |
 
@@ -220,11 +220,11 @@ Each becomes an ADR, `Proposed` until agreed.
 
 | # | Decision | Options | Leaning |
 |---|---|---|---|
-| 1 | Transport | WebSocket over TLS, carrying JSON and binary audio frames (the previous generation, xiaozhi, the OpenAI and Gemini realtime APIs). WebRTC (built for lossy networks, more complex). MQTT plus UDP audio. | A WebSocket first, with the audio path behind an interface so that WebRTC can replace it if home networks call for it: [ADR-0007](../../docs/decisions/0007-cloud-link-transport.md) |
+| 1 | Transport | WebSocket over TLS, carrying JSON and binary audio frames (the previous generation, xiaozhi, the OpenAI and Gemini realtime APIs). WebRTC (built for lossy networks, more complex). MQTT plus UDP audio. | Decided: WebRTC through a LiveKit server, for the audio and the messages ([ADR-0009](../../docs/decisions/0009-cloud-link-webrtc.md), superseding [ADR-0007](../../docs/decisions/0007-cloud-link-transport.md)) |
 | 2 | Message format | JSON-RPC 2.0 with MCP-shaped capabilities (§5). A protocol of our own. | MCP for capabilities, standard and what language models already consume, inside the link's own JSON messages: [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md) |
-| 3 | Audio formats offered, and the baseline (§6.3) | Opus at 16 or 24 kHz, 20 or 60 ms frames, at several bit rates; 16-bit PCM at 16 kHz | Offer Opus first and keep 16-bit PCM at 16 kHz as the baseline; the frame lengths and bit rates to offer come from measurements on the Pi |
+| 3 | Audio formats offered, and the baseline (§6.3) | Opus at 16 or 24 kHz, 20 or 60 ms frames, at several bit rates; 16-bit PCM at 16 kHz | Decided: Opus, negotiated by SDP, which every WebRTC endpoint supports ([ADR-0009](../../docs/decisions/0009-cloud-link-webrtc.md)) |
 | 4 | End of speech | On the robot (voice activity detection), the cloud confirming. In the cloud only. | Both: the robot ends turns locally, and the cloud may end them earlier |
-| 5 | Device identity and credentials | A client certificate (mutual TLS). Short-lived tokens signed with the device's key. A long-lived token from set-up (the previous generation). | A per-device key pair made on the robot; short-lived credentials derived from it |
+| 5 | Device identity and credentials | A client certificate (mutual TLS). Short-lived tokens signed with the device's key. A long-lived token from set-up (the previous generation). | Decided: a key pair in a TPM on the robot, registered at set-up; short-lived tokens in exchange for signed assertions ([ADR-0010](../../docs/decisions/0010-device-identity.md)) |
 | 6 | Updates | Debian packages, an image with two slots, or a container | To study with the Raspberry Pi OS update tools |
 | 7 | Where moods live | In the cloud, sending expression requests, as now planned. On the robot. | In the cloud. The robot's `behavior` module keeps only local reactions (taps, offline) |
 
