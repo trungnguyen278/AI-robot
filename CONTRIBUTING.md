@@ -8,6 +8,7 @@ These conventions apply to everyone working in this repository — people and AI
 2. **Networking belongs to the Pi.** The Raspberry Pi 5 has built-in Wi-Fi and Bluetooth LE; the body microcontroller handles real-time I/O only ([ADR-0004](docs/decisions/0004-pi-software-first.md)).
 3. **Never hard-code the product name.** The display name (screen, BLE, app) lives in a single configuration file; repositories, packages and identifiers use neutral, descriptive names ([ADR-0003](docs/decisions/0003-neutral-repo-naming.md)).
 4. **Electrical safety.** Never power servos or motors from the Pi's 5 V rail. The emergency stop must cut motors and servos. The body controller must bring the robot to a safe state when the Pi's heartbeat is lost.
+5. **Build for the long run.** Choose the design that will last, even when it is more work: effort is no reason to settle for less. Do not build stopgaps meant to be replaced later. When the lasting choice is not clear yet, settle it first, with research, measurements or an ADR. Work may still land in steps, as long as each step belongs to the final design. Simulated adapters are not stopgaps: they stay, for tests and for running without hardware.
 
 ## Portability
 

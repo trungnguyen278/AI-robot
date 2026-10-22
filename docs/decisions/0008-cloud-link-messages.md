@@ -1,6 +1,6 @@
 # 0008 — Cloud link messages: typed JSON, MCP for capabilities, binary audio frames
 
-- **Status:** Proposed
+- **Status:** Proposed; point 3, the binary audio frames, superseded by [0009](0009-cloud-link-webrtc.md)
 - **Date:** 2026-10-16
 
 ## Context

@@ -1,5 +1,7 @@
 # Cloud link — robot ⇄ ai-robot-server
 
+> **Being replaced:** [ADR-0009](../../docs/decisions/0009-cloud-link-webrtc.md) moves this link to WebRTC, through a LiveKit server. Version 2.0 replaces this version's connection, media offer and audio frames; the messages stay.
+
 The link between the robot software and `ai-robot-server`:
 - On the robot (`software/`), it is the `cloud` module and the `websocket` adapter of its `cloud` port.
 - The server, built anew, does not exist yet.

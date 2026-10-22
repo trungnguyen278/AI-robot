@@ -1,6 +1,6 @@
 # 0007 — Cloud link transport: one WebSocket over TLS, opened by the robot
 
-- **Status:** Proposed
+- **Status:** Superseded by [0009](0009-cloud-link-webrtc.md)
 - **Date:** 2026-10-16
 
 ## Context

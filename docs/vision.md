@@ -14,15 +14,16 @@ A companion robot for the home: it moves on its own, sees, listens and talks, sh
 | | Full-screen scenes for everyday information: time, weather, timers, reminders, music | The previous generation had scene designs for these |
 | | Status screens: start-up, connection, updates, battery | |
 | | Touch input on the display | Capacitive touch panel ([display notes](../hardware/components/waveshare-7inch-dsi-lcd-c.md)) |
+| | Settings and other interactive screens on the display, opened by a tap or by voice | The 7" touch screen is a full user interface, not only a face |
 | See | Noticing people, faces and objects | Models can run on the camera's sensor ([camera notes](../hardware/components/raspberry-pi-ai-camera.md)) |
 | | Showing the AI what it sees | |
 | Move | Driving on tracks, avoiding obstacles, following a person | Encoders + distance sensor + camera |
 | | Turning the head towards the speaker | 2-DOF neck + camera |
 | | Gestures (waving, pointing), perhaps picking up light objects | Two 3-DOF arms; the arm design may change |
 | Sense | Distance ahead, battery level; more sensors as needed | |
-| Connect | AI service: speech recognition, conversation, speech synthesis | Cloud, `ai-robot-server` or on the Pi: not decided |
+| Connect | AI service: speech recognition, conversation, speech synthesis | In the cloud, `ai-robot-server` ([requirements](../protocol/cloud/requirements.md)) |
 | | Software updates over the air | |
-| | Phone app: setup over Bluetooth LE, settings, remote control | `ai-robot-app` |
+| | Set-up and settings on the robot's touch screen, or from a phone app over Bluetooth LE; remote control from the app | `ai-robot-app` |
 | Stay safe | Emergency stop; safe stop if the Pi goes silent | Design rule 4 in [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | | Status lights; clean shutdown before the battery runs out | [hardware/README.md](../hardware/README.md), open issue 6 |
 

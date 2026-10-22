@@ -7,6 +7,7 @@ Guidance for AI coding assistants working in this repository. Read [README.md](R
 - Reply in the language the user writes in; everything committed to the repository is in English.
 - Check the newest file in `docs/devlog/` to see where things stand, and add an entry when a work session ends.
 - Never make a decision on someone's behalf: record significant decisions as ADRs in `docs/decisions/`, and leave anything that has not been explicitly agreed as `Proposed`.
+- Build for the long run ([design rule 5](CONTRIBUTING.md#design-rules)): propose the design that will last, even when it is bigger, rather than one to replace later. "For now", "provisional" or "until X" in a proposal is a sign to settle the choice first.
 - Never state hardware specifications from memory: look them up and cite the source.
 - Keep commit messages and pull request descriptions short, as [CONTRIBUTING.md](CONTRIBUTING.md#commits) says:
   - a subject, and at most a few lines on why;

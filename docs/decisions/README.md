@@ -13,5 +13,7 @@ Each significant decision is a short file: context, decision, alternatives consi
 | [0004](0004-pi-software-first.md) | Raspberry Pi software first; body controller not chosen yet | Accepted | 2026-10-15 |
 | [0005](0005-pi-software-platform.md) | Pi software platform: Raspberry Pi OS, Python with C++ extensions, no ROS 2 for now | Proposed | 2026-10-15 |
 | [0006](0006-screen-renderer.md) | Screen: a browser renderer with a procedural face, driven by the Pi software | Proposed | 2026-10-16 |
-| [0007](0007-cloud-link-transport.md) | Cloud link transport: one WebSocket over TLS, opened by the robot, with the audio kept separable | Proposed | 2026-10-16 |
-| [0008](0008-cloud-link-messages.md) | Cloud link messages: typed JSON, MCP for capabilities, binary audio frames | Proposed | 2026-10-16 |
+| [0007](0007-cloud-link-transport.md) | Cloud link transport: one WebSocket over TLS, opened by the robot, with the audio kept separable | Superseded by [0009](0009-cloud-link-webrtc.md) | 2026-10-16 |
+| [0008](0008-cloud-link-messages.md) | Cloud link messages: typed JSON, MCP for capabilities, binary audio frames | Proposed; the audio frames superseded by [0009](0009-cloud-link-webrtc.md) | 2026-10-16 |
+| [0009](0009-cloud-link-webrtc.md) | Cloud link transport: WebRTC through a LiveKit server | Accepted | 2026-10-22 |
+| [0010](0010-device-identity.md) | Device identity: a key in a TPM, short-lived tokens from signed assertions | Accepted | 2026-10-22 |

@@ -16,11 +16,11 @@ A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carr
 A first outline of the product, not a specification: details and priorities are settled along the way. More ideas and notes: [docs/vision.md](docs/vision.md).
 
 - **Talk:** a wake word, spoken conversation with an AI assistant, and being interrupted while it speaks.
-- **Express:** animated eyes and emotions on the face display; full-screen scenes for everyday information (time, weather, timers, reminders, music); status screens (start-up, connection, updates, battery); touch input.
+- **Express:** animated eyes and emotions on the face display; full-screen scenes for everyday information (time, weather, timers, reminders, music); status screens (start-up, connection, updates, battery); touch input, and interactive screens such as settings, opened by a tap or by voice.
 - **See:** notice people, faces and objects with the camera, and show the AI what it sees.
 - **Move:** drive on its tracks while avoiding obstacles, turn its head towards people, gesture with its arms, perhaps pick up light objects.
 - **Sense:** obstacles ahead and the battery level, with more sensors as the need arises.
-- **Connect:** Wi-Fi for the AI service and for software updates; Bluetooth LE to set the robot up from a phone app, which also handles settings and remote control.
+- **Connect:** Wi-Fi for the AI service and for software updates; set-up and settings on the robot's own touch screen, or from a phone app over Bluetooth LE, which also handles remote control.
 - **Stay safe:** an emergency stop, a safe stop if the software hangs, status lights, and a clean shutdown before the battery runs out.
 
 ## Repository layout
