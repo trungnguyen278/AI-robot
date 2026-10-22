@@ -12,7 +12,7 @@ Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependen
 modules    system · motion · voice · vision · screen · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · ai_backend · cloud · daylight
+ports      audio_in · audio_out · camera · screen · cloud · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -22,7 +22,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 |---|---|---|
 | `system` | `power`, `lights` | Battery reports, with whether the battery is low; status light; the charging scene when plugged in; planned: clean shutdown on low battery |
 | `motion` | `drive`, `joints`, `range`, `safety` | Tracks, neck and arms; obstacle and emergency-stop checks |
-| `voice` | `audio_in`, `audio_out`, `ai_backend` | Wake word, voice activity detection, echo cancellation, conversation |
+| `voice` | `audio_in`, `audio_out` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
 | `cloud` | `cloud` | The link to `ai-robot-server`: the cloud calls the capabilities the modules offer, and hears the events they declare ([protocol/cloud](../protocol/cloud/README.md)) |

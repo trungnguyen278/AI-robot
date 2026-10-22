@@ -42,7 +42,7 @@ Proposed in [ADR-0005](decisions/0005-pi-software-platform.md): one Python proce
 modules    system · motion · voice · vision · screen · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · ai_backend · cloud · daylight
+ports      audio_in · audio_out · camera · screen · cloud · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile

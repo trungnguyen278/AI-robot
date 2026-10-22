@@ -32,19 +32,6 @@ class AudioFormat:
         return self.sample_rate * self.frame_bytes
 
 
-@dataclass(frozen=True, slots=True)
-class AudioClip:
-    """A piece of audio and its format."""
-
-    format: AudioFormat
-    pcm: bytes
-
-    @property
-    def duration(self) -> float:
-        """Length in seconds."""
-        return len(self.pcm) / self.format.bytes_per_second
-
-
 class AudioIn(Port):
     """Microphones."""
 
