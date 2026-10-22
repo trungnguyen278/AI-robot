@@ -47,6 +47,7 @@ from ai_robot.ports.cloud import (
     Voice,
 )
 from ai_robot.ports.daylight import Daylight, SunTimes
+from ai_robot.ports.identity import Identity
 from ai_robot.ports.image import Color, Image
 from ai_robot.ports.screen import Screen, ScreenState, Touch
 
@@ -57,6 +58,7 @@ PORT_TYPES: dict[str, type[Port]] = {
     "camera": Camera,
     "screen": Screen,
     "cloud": Cloud,
+    "identity": Identity,
     "daylight": Daylight,
     "drive": DriveBase,
     "joints": Joints,
@@ -83,6 +85,7 @@ __all__ = [
     "DriveBase",
     "EventKind",
     "Frame",
+    "Identity",
     "Image",
     "Interrupted",
     "JointInfo",

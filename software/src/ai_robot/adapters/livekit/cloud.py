@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MIT
 """The link to ai-robot-server through a LiveKit server (protocol/cloud/README.md).
 
-The robot joins its room (ADR-0009), holds a session with the cloud's agent there
-(``session.py``), and joins again after a loss. The session's messages travel as text
-streams. The user's speech goes out on the robot's ``speech`` track, during turns only,
-and the agent's voice comes back on its own track.
+The robot gets a token for its room (``tokens.py``), joins it (ADR-0009), holds a
+session with the cloud's agent there (``session.py``), and joins again after a loss. The
+session's messages travel as text streams. The user's speech goes out on the robot's
+``speech`` track, during turns only, and the agent's voice comes back on its own track.
 """
 
 from __future__ import annotations
@@ -14,16 +14,22 @@ import contextlib
 import itertools
 import json
 import logging
-import os
 import random
-import urllib.parse
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from livekit import api, rtc
+import aiohttp
+from livekit import rtc
 
 from ai_robot.adapters.livekit.session import MAX_MESSAGE, TOPIC, Session
+from ai_robot.adapters.livekit.tokens import (
+    Access,
+    NoToken,
+    check_url,
+    development_token,
+    server_access,
+)
 from ai_robot.core.checks import finite, positive
 from ai_robot.core.config import protocol_dir
 from ai_robot.core.data import Schema
@@ -42,60 +48,30 @@ from ai_robot.ports.cloud import (
     TurnStart,
     Voice,
 )
+from ai_robot.ports.identity import Identity
 
 log = logging.getLogger(__name__)
 
 # Fixed by the protocol (protocol/cloud/README.md): the names the cloud relies on.
-KEY_ENV = "AI_ROBOT_LIVEKIT_API_KEY"  # a development server's key, for development tokens
-SECRET_ENV = "AI_ROBOT_LIVEKIT_API_SECRET"
 SPEECH_TRACK = "speech"  # the robot's microphone track
-LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+TOKENS = ("server", "development")  # where the robot gets its tokens
 
 # How this implementation works, which nobody needs to tune.
 VOICE_FRAME_MS = 20  # the agent's voice is handed over in pieces this long
 PLAYOUT_MARGIN = 1.0  # seconds, past what is queued, to wait for the speech to go out
 
 
-class NoToken(Exception):
-    """The robot has no way to get a token for its room."""
-
-
-def development_token(room: str, identity: str) -> str:
-    """A token for ``room``, made with a development server's key from the environment
-    (protocol/cloud/README.md, Joining). It lets the robot publish only a microphone."""
-    key, secret = os.environ.get(KEY_ENV), os.environ.get(SECRET_ENV)
-    if not key or not secret:
-        raise NoToken(f"no token: set {KEY_ENV} and {SECRET_ENV} for a development server")
-    grants = api.VideoGrants(
-        room_join=True,
-        room=room,
-        can_publish=True,
-        can_subscribe=True,
-        can_publish_data=True,
-        can_publish_sources=["microphone"],
-    )
-    return api.AccessToken(key, secret).with_identity(identity).with_grants(grants).to_jwt()
-
-
-def _check_url(url: str) -> str:
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme not in ("wss", "ws") or not parts.hostname:
-        raise ValueError(f"url must be a wss:// address, got {url!r}")
-    if parts.scheme == "ws" and parts.hostname not in LOOPBACK:
-        raise ValueError(
-            "url: ws:// is allowed only to this computer (127.0.0.1, ::1, localhost); "
-            f"use wss://, got {url!r}"
-        )
-    return url
-
-
-def _load_schema(path: Path) -> Schema:
-    """The schema of the messages from the cloud, from protocol/cloud/schema.json."""
+def _load_schemas(path: Path) -> tuple[Schema, Schema]:
+    """From protocol/cloud/schema.json: the schema of the messages from the cloud, and
+    that of the token endpoint's answer."""
     try:
         schema = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise ValueError(f"cannot read the cloud protocol's schema: {error}") from None
-    return Schema("protocol/cloud/schema.json", {**schema, "$ref": "#/$defs/from_cloud"})
+    return (
+        Schema("protocol/cloud/schema.json", {**schema, "$ref": "#/$defs/from_cloud"}),
+        Schema("protocol/cloud/schema.json", {**schema, "$ref": "#/$defs/token_response"}),
+    )
 
 
 class TrackMicrophone:
@@ -169,21 +145,27 @@ class NoMicrophone:
 
 
 class LiveKitCloud(Cloud):
-    """The link to the cloud through the LiveKit server at ``url``: ``wss://``, or
-    ``ws://`` to this computer for development.
+    """The link to the cloud through a LiveKit server (protocol/cloud/README.md, Joining).
 
-    The robot gets its token from the environment, made with a development server's
-    key, for ``room`` and ``identity`` (protocol/cloud/README.md, Joining). The other
-    settings, in seconds unless they say, are explained in ``config/base.toml``
-    (``[ports.cloud.livekit]``).
+    ``tokens`` says where the robot gets the token to join its room:
+    - ``server``: from ``ai-robot-server`` at ``url`` (``https://``, or ``http://`` to
+      this computer), in exchange for an assertion signed by the robot's identity
+      (``identify``). The server says which LiveKit server to join;
+    - ``development``: made with the key of a development LiveKit server at ``url``
+      (``wss://``, or ``ws://`` to this computer), from the environment, for the room
+      ``room`` and the participant ``participant``.
+
+    The other settings, in seconds unless they say, are explained in
+    ``config/base.toml`` (``[ports.cloud.livekit]``).
     """
 
     def __init__(
         self,
         *,
+        tokens: str,
         url: str,
         room: str,
-        identity: str,
+        participant: str,
         connect_timeout: float,
         hello_timeout: float,
         reconnect_first: float,
@@ -193,11 +175,15 @@ class LiveKitCloud(Cloud):
         backlog: int,
         catalogue_ttl: float,
     ) -> None:
-        self.url = _check_url(url)
-        if not room or not identity:
-            raise ValueError("room and identity must not be empty")
+        if tokens not in TOKENS:
+            raise ValueError(f"tokens must be one of {', '.join(TOKENS)}, got {tokens!r}")
+        self.tokens = tokens
+        schemes = ("https", "http") if tokens == "server" else ("wss", "ws")
+        self.url = check_url("url", url, schemes)
+        if not room or not participant:
+            raise ValueError("room and participant must not be empty")
         self.room = room
-        self.identity = identity
+        self.participant = participant
         self.connect_timeout = positive("connect_timeout", connect_timeout)
         self.hello_timeout = positive("hello_timeout", hello_timeout)
         self.reconnect_first = positive("reconnect_first", reconnect_first)
@@ -218,7 +204,10 @@ class LiveKitCloud(Cloud):
         self.event_kinds: list[EventKind] = []
         self.audio: ConversationAudio | None = None  # offered for conversations, if any
         self.session: Session | None = None  # the session whose hello succeeded
+        self.identity: Identity | None = None
         self.schema: Schema | None = None
+        self._token_schema: Schema | None = None
+        self._http: aiohttp.ClientSession | None = None
         self.numbers = itertools.count(1)
         self._offered = asyncio.Event()
         self._requests: asyncio.Queue[ToolCall | CallCancelled] = asyncio.Queue()
@@ -227,8 +216,11 @@ class LiveKitCloud(Cloud):
         self._task: asyncio.Task[None] | None = None
 
     async def open(self) -> None:
-        self.schema = await asyncio.to_thread(
-            _load_schema, protocol_dir() / "cloud" / "schema.json"
+        self.schema, self._token_schema = await asyncio.to_thread(
+            _load_schemas, protocol_dir() / "cloud" / "schema.json"
+        )
+        self._http = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=self.connect_timeout)
         )
         self._task = asyncio.create_task(self._run(), name="cloud link")
 
@@ -240,8 +232,13 @@ class LiveKitCloud(Cloud):
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+        if self._http is not None:
+            await self._http.close()
 
     # ---- the port ----
+
+    async def identify(self, identity: Identity) -> None:
+        self.identity = identity
 
     async def offer(
         self,
@@ -327,13 +324,12 @@ class LiveKitCloud(Cloud):
         while True:
             reached = False
             try:
-                token = development_token(self.room, self.identity)
-                reached = await self._stay(token)
+                reached = await self._stay(await self._access())
             except NoToken as error:
                 if not reported:
                     log.warning("cannot join the cloud's room: %s", error)
                     reported = True
-            except (rtc.ConnectError, OSError, TimeoutError) as error:
+            except (rtc.ConnectError, aiohttp.ClientError, OSError, TimeoutError) as error:
                 if not reported:
                     log.warning("cannot join the cloud's room: %s", error or type(error).__name__)
                     reported = True
@@ -345,13 +341,22 @@ class LiveKitCloud(Cloud):
             delay = random.uniform(0, min(self.reconnect_max, self.reconnect_first * 2**failures))
             await asyncio.sleep(delay)
 
-    async def _stay(self, token: str) -> bool:
+    async def _access(self) -> Access:
+        """Where to join the robot's room, and the token to join it with."""
+        if self.tokens == "development":
+            return Access(self.url, development_token(self.room, self.participant))
+        if self.identity is None:
+            raise NoToken("no identity to prove the robot's to the server")
+        assert self._http is not None and self._token_schema is not None
+        return await server_access(self._http, self.url, self.identity, self._token_schema)
+
+    async def _stay(self, access: Access) -> bool:
         """One stay in the room. Returns whether a session's hello exchange succeeded."""
         assert self.schema is not None
         room = rtc.Room()
         stay = Stay(self, room, self.schema)
         options = rtc.RoomOptions(auto_subscribe=False, connect_timeout=self.connect_timeout)
-        await room.connect(self.url, token, options)
+        await room.connect(access.url, access.token, options)
         try:
             return await stay.run()
         finally:

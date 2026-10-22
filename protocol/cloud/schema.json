@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Robot-cloud link, version 2.0",
+  "title": "Robot-cloud link, version 2.1",
   "description": "Every message of protocol/cloud/README.md, each sent as one text stream on the topic ai-robot. Validate a message from the robot against #/$defs/from_robot, one from the cloud against #/$defs/from_cloud. Unknown message types and fields are allowed, so that newer minor versions can add them.",
   "$defs": {
     "id": {"type": "string", "minLength": 1, "maxLength": 64},
@@ -128,6 +128,25 @@
     "bye": {
       "required": ["reason"],
       "properties": {"reason": {"$ref": "#/$defs/short_text"}}
+    },
+
+    "token_response": {
+      "description": "What the token endpoint answers to a robot it knows (README, Tokens from the server)",
+      "type": "object",
+      "required": ["access_token", "token_type", "expires_in", "livekit"],
+      "properties": {
+        "access_token": {"type": "string", "minLength": 1, "maxLength": 8192},
+        "token_type": {"type": "string", "minLength": 1, "maxLength": 32},
+        "expires_in": {"type": "integer", "minimum": 1},
+        "livekit": {
+          "type": "object",
+          "required": ["url", "token"],
+          "properties": {
+            "url": {"type": "string", "pattern": "^wss?://", "maxLength": 2048},
+            "token": {"type": "string", "minLength": 1, "maxLength": 8192}
+          }
+        }
+      }
     },
 
     "from_robot": {

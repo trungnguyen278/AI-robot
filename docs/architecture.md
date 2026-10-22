@@ -42,7 +42,7 @@ Proposed in [ADR-0005](decisions/0005-pi-software-platform.md): one Python proce
 modules    system · motion · voice · vision · screen · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · cloud · daylight
+ports      audio_in · audio_out · camera · screen · cloud · identity · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -64,6 +64,6 @@ The `cloud` module links the robot to `ai-robot-server` over the [cloud protocol
 - [ ] Which microcontroller becomes the body controller ([ADR-0004](decisions/0004-pi-software-first.md)).
 - [ ] Pi ⇄ body link (concept v0 shows UART/I2C) and the packet format.
 - [ ] Does the body controller or the Pi drive the motor driver?
-- [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md). The transport is WebRTC through LiveKit ([ADR-0009](decisions/0009-cloud-link-webrtc.md)), the robot proves its identity with a key in a TPM ([ADR-0010](decisions/0010-device-identity.md)), and the messages are proposed in [ADR-0008](decisions/0008-cloud-link-messages.md). Version 2.0 of the protocol is implemented on the robot, with tokens it makes for a development server; the token endpoint comes with the robot's identity. Updates and where moods live come next.
+- [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md). The transport is WebRTC through LiveKit ([ADR-0009](decisions/0009-cloud-link-webrtc.md)), the robot proves its identity with a key in a TPM ([ADR-0010](decisions/0010-device-identity.md)), and the messages are proposed in [ADR-0008](decisions/0008-cloud-link-messages.md). Version 2.1 of the protocol is implemented on the robot, its key kept in a file until the TPM is fitted. Updates and where moods live come next.
 - [ ] Audio: ReSpeaker HAT or MAX98357A — they cannot share the I2S pins; see [hardware/README.md](../hardware/README.md).
 - [ ] How the robot draws its screen — proposed in [ADR-0006](decisions/0006-screen-renderer.md): a renderer in a full-screen browser ([ui/](../ui/README.md)), driven by the Pi software over the [screen protocol](../protocol/screen/README.md).

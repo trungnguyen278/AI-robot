@@ -37,6 +37,7 @@ from ai_robot.ports.cloud import (
     ToolCall,
     TurnStart,
 )
+from ai_robot.ports.identity import Identity
 
 M = TypeVar("M", bound=Message)
 
@@ -72,9 +73,11 @@ class CloudModule(Module):
       each turn, and the cloud's part back (``ConversationFromCloud``).
     - ``CloudStatus`` tells the other modules when a session opens and closes, and
       whether it has conversations.
+    - The robot's ``identity`` proves who it is when the link asks the server for its
+      tokens (docs/decisions/0010-device-identity.md).
     """
 
-    owns = ("cloud",)
+    owns = ("cloud", "identity")
 
     def __init__(
         self, ctx: ModuleContext, *, allowed_classes: list[str], call_timeout: float
@@ -89,6 +92,7 @@ class CloudModule(Module):
         self.allowed = frozenset(SafetyClass(name) for name in allowed_classes)
         self.call_timeout = positive("call_timeout", call_timeout)
         self.link = self.port("cloud", Cloud)
+        self.identity = self.port("identity", Identity)
         self.capabilities: dict[str, Offer] = {}  # by name
         self.events: dict[str, tuple[EventKind, Schema]] = {}
         self.conversing: ConversationOffered | None = None  # the module that holds them
@@ -111,6 +115,9 @@ class CloudModule(Module):
         subscription = self.bus.subscribe(kind, maxsize=maxsize)
         self.subscriptions.append(subscription)
         return subscription
+
+    async def start(self) -> None:
+        await self.link.identify(self.identity)
 
     async def run(self) -> None:
         # Take what the modules offered while they started, so that the first session

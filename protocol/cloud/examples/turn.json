@@ -2,12 +2,12 @@
   "description": "Turns and responses in a session with conversations: a turn and its answer with an expression, then a reminder the user speaks over. An audio step tells what plays on a track at that point; it is not a message.",
   "messages": [
     {"from": "robot", "message": {
-      "type": "hello", "id": "r1", "protocol": "2.0", "software": "0.2.0",
+      "type": "hello", "id": "r1", "protocol": "2.1", "software": "0.2.0",
       "time": 1792130400.25, "utc_offset": 420, "conversations": true,
       "events": []
     }},
     {"from": "cloud", "message": {
-      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.0",
+      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.1",
       "session": {"id": "s-77d0"},
       "time": 1792130400.29, "conversations": true,
       "events": []

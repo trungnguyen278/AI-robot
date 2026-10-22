@@ -48,7 +48,7 @@ log = logging.getLogger(__name__)
 
 # Fixed by the protocol (protocol/cloud/README.md and schema.json), not settings: the
 # cloud relies on them.
-PROTOCOL = "2.0"
+PROTOCOL = "2.1"
 MCP_VERSION = "2026-07-28"
 TOPIC = "ai-robot"  # the text streams that carry the messages
 MAX_MESSAGE = 1 << 20  # bytes in a message

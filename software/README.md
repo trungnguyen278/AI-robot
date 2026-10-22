@@ -5,7 +5,8 @@
 Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependencies:
 - [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen;
 - [jsonschema](https://python-jsonschema.readthedocs.io/), to check data against the protocols' JSON Schemas;
-- [LiveKit's Python SDK](https://docs.livekit.io/reference/python/) (`livekit`, `livekit-api`), for the link to the cloud over WebRTC.
+- [LiveKit's Python SDK](https://docs.livekit.io/reference/python/) (`livekit`, `livekit-api`), for the link to the cloud over WebRTC;
+- [cryptography](https://cryptography.io/), for the robot's key kept in software on a development computer.
 
 ## How it fits together
 
@@ -13,7 +14,7 @@ Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependen
 modules    system · motion · voice · vision · screen · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · cloud · daylight
+ports      audio_in · audio_out · camera · screen · cloud · identity · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -26,7 +27,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `voice` | `audio_in`, `audio_out` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
-| `cloud` | `cloud` | The link to `ai-robot-server`: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)) |
+| `cloud` | `cloud`, `identity` | The link to `ai-robot-server`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)) |
 | `behavior` | `daylight` | Decides what the robot does: the interaction state; for now, reactions to taps, the clock when idle, a sleepy face from sunset to sunrise |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.
@@ -53,7 +54,7 @@ software/
 │   ├── native.py           C++ functions, with pure-Python fallbacks
 │   ├── core/               Configuration, bus, module base class, factory
 │   ├── ports/              Port interfaces
-│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (aiohttp: the screen served to a browser), livekit/ (the cloud link), sun/ (sunrise and sunset)
+│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (aiohttp: the screen served to a browser), livekit/ (the cloud link), keys/ (keys kept in software), sun/ (sunrise and sunset)
 │   └── modules/            Module registry and the modules
 ├── native/                 Optional C++ extension (pybind11 + scikit-build-core)
 └── tests/
@@ -89,12 +90,14 @@ While the robot runs, its screen is at <http://127.0.0.1:8770/>: open it in a br
 
 By default the robot talks to a simulated cloud (the `sim` adapter of the `cloud` port). It opens a session at once and asks for nothing, so the robot runs without a server.
 
-The real link goes through a LiveKit server (the `livekit` adapter, [ADR-0009](../docs/decisions/0009-cloud-link-webrtc.md)). To try it with a development server on this computer:
-1. Run [LiveKit's server](https://github.com/livekit/livekit) in development mode: `livekit-server --dev`. Its key is `devkey` and its secret `secret`.
-2. Give the robot that key and secret, with which it makes its own token: `AI_ROBOT_LIVEKIT_API_KEY=devkey` and `AI_ROBOT_LIVEKIT_API_SECRET=secret`, in the environment.
-3. In `config/local.toml`, select the `livekit` adapter with the server's address, `ws://127.0.0.1:7880` (see `local.example.toml`).
+The real link goes through a LiveKit server (the `livekit` adapter, [ADR-0009](../docs/decisions/0009-cloud-link-webrtc.md)). The robot asks `ai-robot-server` for the token that lets it join its room, and proves who it is with its `identity` port: an identifier, and a key that signs for it ([ADR-0010](../docs/decisions/0010-device-identity.md)).
+- **Its key.** On the robot, the key lives in a TPM, which never lets it out; that adapter comes with the TPM's hardware. On a development computer, the `file` adapter keeps it in a file of your choosing, made on first use and readable only by you; like SSH, it refuses a key file that others can open. The `sim` adapter, the default, makes a new key at each start, which no server knows.
+- **A server.** `ai-robot-server` does not exist yet. To try the link without it, use a development LiveKit server on this computer:
+  1. Run [LiveKit's server](https://github.com/livekit/livekit) in development mode: `livekit-server --dev`. Its key is `devkey` and its secret `secret`.
+  2. Give the robot that key and secret, with which it makes its own token: `AI_ROBOT_LIVEKIT_API_KEY=devkey` and `AI_ROBOT_LIVEKIT_API_SECRET=secret`, in the environment.
+  3. In `config/local.toml`, select the `livekit` adapter, with `tokens = "development"` and the server's address, `ws://127.0.0.1:7880` (see `local.example.toml`).
 
-The cloud's agent then joins the same room. A robot in a home gets its tokens from `ai-robot-server` instead, with its own key ([ADR-0010](../docs/decisions/0010-device-identity.md)), once that part of the link is written.
+  The cloud's agent then joins the same room.
 
 The link follows the [cloud protocol](../protocol/cloud/README.md). The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of the link run against a real LiveKit server when one is found: the path to `livekit-server` in `LIVEKIT_SERVER`, or the program on the `PATH`.
 
