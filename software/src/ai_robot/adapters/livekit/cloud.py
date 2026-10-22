@@ -59,6 +59,7 @@ TOKENS = ("server", "development")  # where the robot gets its tokens
 # How this implementation works, which nobody needs to tune.
 VOICE_FRAME_MS = 20  # the agent's voice is handed over in pieces this long
 PLAYOUT_MARGIN = 1.0  # seconds, past what is queued, to wait for the speech to go out
+PERMISSIONS_AGAIN = 0.5  # seconds after a change of permissions to send them once more
 
 
 def _load_schemas(path: Path) -> tuple[Schema, Schema]:
@@ -380,6 +381,8 @@ class Stay:
         self._streams: asyncio.Queue[tuple[rtc.TextStreamReader, str]] = asyncio.Queue()
         self._voices: dict[str, asyncio.Task[None]] = {}  # track sid -> its reader
         self._running: asyncio.Task[bool] | None = None  # the session's run()
+        self._allowed: str | None = None  # the agent that may subscribe to the microphone
+        self._again: asyncio.TimerHandle | None = None  # sends the permissions once more
         self._warned: set[str] = set()
         self._lost = asyncio.Event()
         room.register_text_stream_handler(TOPIC, self._on_stream)
@@ -393,8 +396,8 @@ class Stay:
     async def run(self) -> bool:
         if self.offered is not None:
             self.microphone = TrackMicrophone(self.offered.speech)
+            self._allow(None)  # before the track exists, so that nobody may ever take it
             await self.microphone.publish(self.room.local_participant)
-            self._allow(None)
         for participant in list(self.room.remote_participants.values()):
             self._on_joined(participant)
         reader = asyncio.create_task(self._read_streams(), name="cloud messages")
@@ -411,6 +414,8 @@ class Stay:
         return self.reached
 
     async def leave(self) -> None:
+        if self._again is not None:
+            self._again.cancel()
         for task in list(self._voices.values()):
             task.cancel()
         if self.microphone is not None:
@@ -483,17 +488,35 @@ class Stay:
         return send
 
     def _allow(self, agent: str | None) -> None:
-        """Let only ``agent``, if any, subscribe to the robot's microphone."""
+        """Let only ``agent``, if any, subscribe to the robot's microphone.
+
+        The SDK sends each change from a task of its own (livekit-ffi's
+        ``set_track_subscription_permissions``), so two changes close together may reach
+        the server in either order. The latest is sent once more after them, to be the
+        last word.
+        """
         if self.microphone is None:
             return
+        self._allowed = agent
+        self._send_permissions()
+        if self._again is not None:
+            self._again.cancel()
+        loop = asyncio.get_running_loop()
+        self._again = loop.call_later(PERMISSIONS_AGAIN, self._send_permissions)
+
+    def _send_permissions(self) -> None:
+        agent = self._allowed
         permissions = (
             []
             if agent is None
             else [rtc.ParticipantTrackPermission(participant_identity=agent, allow_all=True)]
         )
-        self.room.local_participant.set_track_subscription_permissions(
-            allow_all_participants=False, participant_permissions=permissions
-        )
+        try:
+            self.room.local_participant.set_track_subscription_permissions(
+                allow_all_participants=False, participant_permissions=permissions
+            )
+        except Exception as error:  # the room is going away
+            log.warning("cannot set who may hear the robot: %s", error or type(error).__name__)
 
     # ---- participants ----
 

@@ -36,7 +36,7 @@ The robot and the cloud meet in a LiveKit room, one for each robot. LiveKit carr
 | Later: the owner's app | For remote control and the camera, with permissions of its own. |
 
 - **The robot listens only to agents.** It takes messages and audio only from participants of kind `agent`; it ignores, and logs, the rest (SEC-7).
-- **Only agents may subscribe to the robot's microphone.** The robot grants the subscription to the agent it holds a session with, and to no one else (PRIV-1).
+- **Only agents may subscribe to the robot's microphone.** The robot grants the subscription to the agent it holds a session with, and to no one else, from before it publishes the track (PRIV-1).
 - **One session at a time.** The robot holds a session with one agent. If another agent joins, the robot keeps the session it has.
 
 ## Joining

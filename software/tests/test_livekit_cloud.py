@@ -20,9 +20,10 @@ import struct
 import subprocess
 import time
 import uuid
-from collections.abc import AsyncIterator, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from livekit import api, rtc
@@ -63,7 +64,7 @@ def free_port() -> int:
 
 
 @pytest.fixture(scope="module")
-def server() -> Iterator[str]:
+def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     """A LiveKit server on this computer, for these tests only; its address."""
     program = os.environ.get("LIVEKIT_SERVER") or shutil.which("livekit-server")
     if not program:
@@ -73,11 +74,13 @@ def server() -> Iterator[str]:
         f"port: {port}\n"
         f"rtc:\n  udp_port: {free_port()}\n  tcp_port: {free_port()}\n  use_external_ip: false\n"
     )
-    process = subprocess.Popen(
-        [program, "--bind", "127.0.0.1", "--keys", f"{KEY}: {SECRET}", "--config-body", config],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    log = tmp_path_factory.mktemp("livekit") / "server.log"
+    with log.open("wb") as output:
+        process = subprocess.Popen(
+            [program, "--bind", "127.0.0.1", "--keys", f"{KEY}: {SECRET}", "--config-body", config],
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
     try:
         deadline = time.monotonic() + TIMEOUT
         while True:
@@ -85,8 +88,10 @@ def server() -> Iterator[str]:
                 socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
                 break
             except OSError:
-                if time.monotonic() > deadline:
-                    raise RuntimeError("the LiveKit server did not start") from None
+                if process.poll() is not None or time.monotonic() > deadline:
+                    said = log.read_text(encoding="utf-8", errors="replace")[-2000:]
+                    message = f"the LiveKit server did not start:\n{config}{said}"
+                    raise RuntimeError(message) from None
                 time.sleep(0.1)
         yield f"ws://127.0.0.1:{port}"
     finally:
@@ -369,6 +374,104 @@ def test_a_new_agent_opens_a_new_session_when_the_first_leaves(
 
 
 # ---- without a server ----
+
+
+class FakeLocal:
+    """The robot in a room without a server: it records what the robot asks."""
+
+    def __init__(self, asked: list[tuple[str, ...]]) -> None:
+        self.asked = asked
+
+    def set_track_subscription_permissions(
+        self,
+        *,
+        allow_all_participants: bool,
+        participant_permissions: list[rtc.ParticipantTrackPermission],
+    ) -> None:
+        assert not allow_all_participants
+        allowed = (permission.participant_identity for permission in participant_permissions)
+        self.asked.append(("allow", *allowed))
+
+    async def publish_track(self, track: rtc.LocalTrack, options: rtc.TrackPublishOptions) -> None:
+        self.asked.append(("publish", track.name))
+
+
+class FakeRoom:
+    """A room without a server, which the robot can only be dropped from."""
+
+    def __init__(self) -> None:
+        self.asked: list[tuple[str, ...]] = []
+        self.local_participant = FakeLocal(self.asked)
+        self.remote_participants: dict[str, rtc.RemoteParticipant] = {}
+        self.handlers: dict[str, Callable[..., Any]] = {}
+
+    def register_text_stream_handler(self, topic: str, handler: Callable[..., Any]) -> None:
+        pass
+
+    def on(self, event: str, handler: Callable[..., Any]) -> None:
+        self.handlers[event] = handler
+
+    async def disconnect(self) -> None:
+        pass
+
+
+def stay_in(room: FakeRoom) -> cloud.Stay:
+    """The robot's stay in ``room``, holding conversations."""
+    return cloud.Stay(cast(Any, SimpleNamespace(audio=AUDIO)), cast(Any, room), cast(Any, None))
+
+
+def test_nobody_may_take_the_microphone_before_an_agent_is_allowed() -> None:
+    async def main() -> None:
+        room = FakeRoom()
+        stay = stay_in(room)
+        running = asyncio.create_task(stay.run())
+        await until(lambda: ("publish", cloud.SPEECH_TRACK) in room.asked)
+        room.handlers["disconnected"]("lost")
+        await running
+        await stay.leave()
+        # LiveKit lets everyone subscribe until told otherwise: the robot tells it first.
+        assert room.asked[:2] == [("allow",), ("publish", cloud.SPEECH_TRACK)]
+
+    asyncio.run(main())
+
+
+def test_the_latest_permissions_are_sent_again_after_the_others(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The SDK sends each change of permissions from a task of its own, so a change may
+    overtake the one before it: the robot sends the latest once more, after them."""
+    again = 0.05
+    monkeypatch.setattr(cloud, "PERMISSIONS_AGAIN", again)
+
+    async def main() -> None:
+        room = FakeRoom()
+        stay = stay_in(room)
+        running = asyncio.create_task(stay.run())
+        await until(lambda: room.asked.count(("allow",)) == 2)
+        # A session with agent-1, then one with agent-2 at once: only the latest is repeated.
+        stay._allow("agent-1")
+        stay._allow(None)
+        stay._allow("agent-2")
+        await until(lambda: room.asked.count(("allow", "agent-2")) == 2)
+        await asyncio.sleep(2 * again)
+        assert room.asked == [
+            ("allow",),
+            ("publish", cloud.SPEECH_TRACK),
+            ("allow",),
+            ("allow", "agent-1"),
+            ("allow",),
+            ("allow", "agent-2"),
+            ("allow", "agent-2"),
+        ]
+        # Once the robot has left the room, nothing is sent again.
+        stay._allow(None)
+        room.handlers["disconnected"]("lost")
+        await running
+        await stay.leave()
+        await asyncio.sleep(2 * again)
+        assert room.asked[7:] == [("allow",)]
+
+    asyncio.run(main())
 
 
 def test_the_speech_track_never_raises_once_the_room_is_left(
