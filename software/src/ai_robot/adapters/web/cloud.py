@@ -4,8 +4,9 @@
 The robot opens the connection (ADR-0007), keeps a session with the cloud, and
 reconnects after a loss. On the session the robot is an MCP server (ADR-0008): the cloud
 lists and calls the capabilities the robot offers, and receives the events it
-subscribed to. Turns and audio frames are not handled yet: the robot offers no audio
-formats.
+subscribed to. Conversations go over the same session: turn and response messages, and
+their audio in binary frames. The robot offers only the protocol's baseline format,
+16-bit PCM, until it has a codec (decision 3 of the requirements).
 """
 
 from __future__ import annotations
@@ -17,10 +18,12 @@ import json
 import logging
 import os
 import random
+import struct
 import time
 import urllib.parse
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -33,12 +36,27 @@ from ai_robot.core.checks import finite, positive
 from ai_robot.core.config import protocol_dir
 from ai_robot.core.data import Schema, encode, plain
 from ai_robot.ports.cloud import (
+    BASELINE,
+    MAX_ID,
     CallCancelled,
     Capability,
     Cloud,
+    CloudPart,
     EventKind,
+    Interrupted,
     LinkStatus,
+    MediaFormat,
+    ResponseEnd,
+    ResponseStart,
+    ResponseStop,
+    ResponseText,
+    RobotPart,
+    Speech,
+    SpeechEnd,
     ToolCall,
+    TurnCancel,
+    TurnStart,
+    Voice,
 )
 
 log = logging.getLogger(__name__)
@@ -50,10 +68,22 @@ MCP_VERSION = "2026-07-28"
 TOKEN_ENV = "AI_ROBOT_CLOUD_TOKEN"  # the robot's credentials, provisional (decision 5)
 MAX_TEXT = 1 << 20  # bytes in a text frame
 MAX_BINARY = 64 << 10  # bytes in a binary frame
-MAX_ID = 64  # characters in a message id ($defs/id in schema.json)
 MAX_ERROR = 1024  # characters in an error's message ($defs/error in schema.json)
+MAX_REASON = 256  # characters in a reason ($defs/short_text in schema.json)
 CLOSE_REASON_BYTES = 123  # the longest reason a close frame carries (RFC 6455, 5.5)
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+# Audio frames (protocol/cloud/README.md, Audio frames): a header, then the audio.
+HEADER = struct.Struct(">BBBBII")  # version, stream, format, flags, sequence, timestamp
+HEADER_VERSION = 1
+SPEECH = 1  # the stream of the user's speech, from the robot
+VOICE = 2  # the stream of the robot's voice, from the cloud
+LAST = 0x01  # flag: the last frame of a turn's speech or of a response's voice
+WRAP = 1 << 32  # sequence numbers and timestamps wrap after 2**32 - 1
+
+# What the robot offers for each stream, in its order of preference: the baseline only,
+# until it has a codec.
+MEDIA: tuple[MediaFormat, ...] = (BASELINE,)
 
 # How this implementation works, which nobody needs to tune.
 SEEN = 1000  # message ids remembered, so that a resent message never acts twice
@@ -164,6 +194,37 @@ def _tool(capability: Capability) -> dict[str, Any]:
     return tool
 
 
+def _offer(formats: Sequence[MediaFormat]) -> list[dict[str, Any]]:
+    """The offer for one stream: ``formats``, numbered in their order of preference."""
+    return [
+        {
+            "id": number,
+            "codec": form.codec,
+            "rate": form.rate,
+            "channels": form.channels,
+            "frame_ms": form.frame_ms,
+        }
+        for number, form in enumerate(formats)
+    ]
+
+
+def _frame_bytes(form: MediaFormat) -> int:
+    """The bytes of PCM in one whole frame of ``form``."""
+    return round(form.rate * form.frame_ms / 1000) * form.pcm.frame_bytes
+
+
+@dataclass
+class Turn:
+    """A turn in progress on the robot's side, and its speech not sent yet."""
+
+    id: str
+    streaming: bool = True  # the user's speech still goes out
+    answered: bool = False  # a response to it has started
+    timestamp: int = 0  # samples of speech sent so far
+    pending: bytearray = field(default_factory=bytearray)  # less than a frame of speech
+    held: bytes | None = None  # the newest whole frame: sent with the next, or marked last
+
+
 class WebSocketCloud(Cloud):
     """The link to the cloud at ``url``: ``wss://``, or ``ws://`` to this computer for
     development. The robot's credentials come from the environment variable
@@ -208,11 +269,13 @@ class WebSocketCloud(Cloud):
             raise ValueError(f"catalogue_ttl must not be negative, got {catalogue_ttl}")
         self.capabilities: dict[str, Capability] = {}
         self.event_kinds: list[EventKind] = []
+        self.media: tuple[MediaFormat, ...] = ()  # offered for each stream, in order
         self.session: Session | None = None
         self._schema: Schema | None = None
         self._offered = asyncio.Event()
         self._requests: asyncio.Queue[ToolCall | CallCancelled] = asyncio.Queue()
         self._statuses: asyncio.Queue[LinkStatus] = asyncio.Queue()
+        self._heard: asyncio.Queue[CloudPart] = asyncio.Queue()
         self._resume: tuple[str, float] | None = None  # the token and when it expires
         self._numbers = itertools.count(1)
         self._http: aiohttp.ClientSession | None = None
@@ -240,11 +303,18 @@ class WebSocketCloud(Cloud):
         if self._http is not None:
             await self._http.close()
 
-    async def offer(self, capabilities: Sequence[Capability], events: Sequence[EventKind]) -> None:
+    async def offer(
+        self,
+        capabilities: Sequence[Capability],
+        events: Sequence[EventKind],
+        *,
+        conversation: bool = False,
+    ) -> None:
         offered = {capability.name: capability for capability in capabilities}
         changed = offered != self.capabilities
         self.capabilities = offered
         self.event_kinds = list(events)
+        self.media = MEDIA if conversation else ()
         self._offered.set()
         if changed and self.session is not None:
             await self.session.catalogue_changed()
@@ -269,15 +339,25 @@ class WebSocketCloud(Cloud):
     async def status(self) -> LinkStatus:
         return await self._statuses.get()
 
-    def hello(self) -> dict[str, Any]:
-        """The robot's ``hello``, without its ``id``."""
+    async def converse(self, part: RobotPart) -> None:
+        if self.session is not None:
+            await self.session.converse(part)
+        elif isinstance(part, TurnStart):
+            self._heard.put_nowait(TurnCancel(part.turn, "offline"))
+
+    async def conversation(self) -> CloudPart:
+        return await self._heard.get()
+
+    def hello(self, media: Sequence[MediaFormat]) -> dict[str, Any]:
+        """The robot's ``hello``, without its ``id``, offering ``media`` for each stream."""
+        offer = _offer(media)
         message: dict[str, Any] = {
             "type": "hello",
             "protocol": PROTOCOL,
             "software": software_version(),
             "time": time.time(),
             "utc_offset": _utc_offset(),
-            "media": {"speech": [], "voice": []},  # no audio streams yet
+            "media": {"speech": offer, "voice": offer},
             "events": [
                 {"name": kind.name, "description": kind.description, "schema": plain(kind.schema)}
                 for kind in self.event_kinds
@@ -293,15 +373,26 @@ class WebSocketCloud(Cloud):
         resume = hello["session"].get("resume")
         within = hello["session"].get("resume_within", 0)
         self._resume = None if resume is None else (resume, time.monotonic() + within)
-        self._statuses.put_nowait(LinkStatus(True, session.id, session.events))
+        self._statuses.put_nowait(
+            LinkStatus(
+                True,
+                session.id,
+                session.events,
+                speech=session.format(SPEECH),
+                voice=session.format(VOICE),
+            )
+        )
 
     def closed(self, session: Session) -> None:
-        """Called when ``session`` ends; its calls in progress are cancelled."""
+        """Called when ``session`` ends: its calls in progress are cancelled, and its
+        turn and response end."""
         if self.session is session:
             self.session = None
             self._statuses.put_nowait(LinkStatus(False))
         for call in session.cancel_calls():
             self._requests.put_nowait(CallCancelled(call))
+        for part in session.abandon():
+            self._heard.put_nowait(part)
 
     async def _run(self) -> None:
         """Connect, keep the session, and reconnect after a loss, for ever."""
@@ -372,11 +463,20 @@ class Session:
         self.events: frozenset[str] = frozenset()
         self.subscriptions: dict[str, Any] = {}  # subscriptions/listen: key -> request id
         self.calls: dict[str, tuple[Any, str]] = {}  # call id -> request id, its message
+        self.offered = link.media  # the formats this session's hello offers
+        self.formats: dict[int, tuple[int, MediaFormat]] = {}  # stream -> its chosen format
+        self.sequences = {SPEECH: 0, VOICE: 0}  # each stream's last frame
+        self.turn: Turn | None = None
+        self.response: str | None = None  # the response whose voice is arriving
+        self.ended_turns: deque[str] = deque(maxlen=SEEN)
+        self.ended_responses: deque[str] = deque(maxlen=SEEN)
         self._ids = itertools.count(1)
         self._seen: deque[str] = deque(maxlen=SEEN)
         self._bucket = Bucket(link.rate, link.burst)
         self._dropped = 0  # messages dropped since the last report
         self._reported = -DROP_REPORT  # when dropped messages were last reported
+        self._bad_frames = 0  # frames dropped since the last report
+        self._frames_reported = -DROP_REPORT
         self._warned: set[str] = set()
 
     # ---- the session's life ----
@@ -384,7 +484,7 @@ class Session:
     async def run(self) -> bool:
         """Exchange hellos, then handle the cloud's messages until the connection
         closes. Returns whether the hello exchange succeeded."""
-        hello = self.link.hello()
+        hello = self.link.hello(self.offered)
         await self.send(hello)
         try:
             answer = await asyncio.wait_for(self._hello(), self.link.hello_timeout)
@@ -431,6 +531,16 @@ class Session:
             raise SessionEnded(
                 f"the cloud speaks protocol {message['protocol']}", UNSUPPORTED_PROTOCOL
             )
+        for stream, name in ((SPEECH, "speech"), (VOICE, "voice")):
+            chosen = message["media"][name]
+            if chosen is None:
+                continue  # declined
+            if chosen >= len(self.offered):
+                raise SessionEnded(
+                    f"the cloud chose {name} format {chosen}, which the robot did not offer",
+                    NO_HELLO,
+                )
+            self.formats[stream] = (chosen, self.offered[chosen])
         self._seen.append(message["id"])
         return message
 
@@ -458,19 +568,41 @@ class Session:
         self.calls.clear()
         return calls
 
+    def abandon(self) -> list[CloudPart]:
+        """What ends with the session: the turn and the response in progress."""
+        parts: list[CloudPart] = []
+        if self.turn is not None:
+            self.turn.streaming = False
+            if not self.turn.answered:
+                parts.append(TurnCancel(self.turn.id, "connection lost"))
+            self.turn = None
+        if self.response is not None:
+            parts.append(ResponseEnd(self.response, follow_up=False))
+            self.response = None
+        return parts
+
+    def format(self, stream: int) -> MediaFormat | None:
+        """The format the cloud chose for ``stream``, or ``None`` if it has none."""
+        chosen = self.formats.get(stream)
+        return None if chosen is None else chosen[1]
+
     # ---- sending ----
 
     async def send(self, message: dict[str, Any]) -> str:
         """Send ``message`` with a new ``id``, and return the id."""
         message = {"type": message["type"], "id": f"r{next(self._ids)}", **message}
-        text = encode(message)
+        await self._transmit(self.socket.send_str(encode(message)))
+        return message["id"]
+
+    async def _transmit(self, sending: Awaitable[None]) -> None:
+        """Wait for ``sending`` to hand a frame over; a connection too slow to take it
+        is closed."""
         try:
             async with asyncio.timeout(self.link.send_timeout):
-                await self.socket.send_str(text)
+                await sending
         except (TimeoutError, ConnectionError) as error:
             log.warning("cannot send to the cloud: %s", error or type(error).__name__)
             await self._close(WSCloseCode.GOING_AWAY, "too slow")
-        return message["id"]
 
     async def _mcp(self, payload: dict[str, Any], reply_to: str | None = None) -> None:
         message: dict[str, Any] = {"type": "mcp", "payload": payload}
@@ -511,23 +643,75 @@ class Session:
             return  # a resent message acts only once (SES-6)
         self._seen.append(message["id"])
         kind = message["type"]
-        if kind == "mcp":
-            await self._on_mcp(message)
-        elif kind == "bye":
-            log.info("the cloud ends the session: %s", message["reason"])
-            await self._close(WSCloseCode.OK, "bye")
-        elif kind == "error":
-            log.warning("the cloud reports %s: %s", message["code"], message["message"])
-        elif kind.startswith(("turn.", "response.")):
-            self._once(kind, "the robot does not handle turns and responses yet (%s)", kind)
-        else:
+        handler = {
+            "mcp": self._on_mcp,
+            "bye": self._on_bye,
+            "error": self._on_error,
+            "turn.speech_end": self._on_speech_end,
+            "turn.cancel": self._on_turn_cancel,
+            "response.start": self._on_response_start,
+            "response.text": self._on_response_text,
+            "response.end": self._on_response_end,
+            "response.stop": self._on_response_stop,
+        }.get(kind)
+        if handler is None:
             self._once(kind, "ignoring a %s message from the cloud", kind)
+        else:
+            await handler(message)
+
+    async def _on_bye(self, message: Mapping[str, Any]) -> None:
+        log.info("the cloud ends the session: %s", message["reason"])
+        await self._close(WSCloseCode.OK, "bye")
+
+    async def _on_error(self, message: Mapping[str, Any]) -> None:
+        log.warning("the cloud reports %s: %s", message["code"], message["message"])
 
     async def _binary(self, data: bytes) -> None:
         if len(data) > MAX_BINARY:
             await self._close(WSCloseCode.MESSAGE_TOO_BIG, "frame too large")
             return
-        self._once("binary", "ignoring audio from the cloud: no stream was negotiated")
+        problem = self._voice_problem(data)
+        if problem is not None:
+            await self._bad_frame(problem)
+            return
+        _, _, _, flags, sequence, _ = HEADER.unpack_from(data)
+        previous, self.sequences[VOICE] = self.sequences[VOICE], sequence
+        if sequence != (previous + 1) % WRAP:
+            self._once(
+                "sequence", "the cloud's voice jumps from frame %d to %d", previous, sequence
+            )
+        if self.response is None:
+            self._once("voice", "ignoring voice from the cloud outside a response")
+            return
+        self._hear(Voice(self.response, data[HEADER.size :], last=bool(flags & LAST)))
+
+    def _voice_problem(self, data: bytes) -> str | None:
+        """What makes a frame from the cloud unplayable, if anything (NEG-5)."""
+        if len(data) < HEADER.size:
+            return f"{len(data)} bytes, less than a header"
+        version, stream, number, _, _, _ = HEADER.unpack_from(data)
+        if version != HEADER_VERSION:
+            return f"header version {version}, not {HEADER_VERSION}"
+        if stream != VOICE:
+            return f"stream {stream}: the cloud sends only voice, stream {VOICE}"
+        chosen = self.formats.get(VOICE)
+        if chosen is None or number != chosen[0]:
+            return f"format {number}, which was not negotiated for voice"
+        form = chosen[1]
+        audio = len(data) - HEADER.size
+        if audio % form.pcm.frame_bytes or audio > _frame_bytes(form):
+            return f"{audio} bytes of audio, which is not a {form.frame_ms:g} ms frame"
+        return None
+
+    async def _bad_frame(self, problem: str) -> None:
+        """Drop a frame the robot cannot play, and say so now and then."""
+        self._bad_frames += 1
+        now = time.monotonic()
+        if now - self._frames_reported >= DROP_REPORT:
+            self._frames_reported = now
+            log.warning("dropping audio from the cloud: %s (%d frames)", problem, self._bad_frames)
+            self._bad_frames = 0
+            await self._error("invalid_message", f"audio frame dropped: {problem}")
 
     def _once(self, key: str, text: str, *args: object) -> None:
         if key not in self._warned:
@@ -671,6 +855,177 @@ class Session:
     async def emit(self, name: str, data: Mapping[str, Any]) -> None:
         if name in self.events:
             await self.send({"type": "event", "name": name, "time": time.time(), "data": data})
+
+    # ---- conversations: the robot's part ----
+
+    async def converse(self, part: RobotPart) -> None:
+        if isinstance(part, TurnStart):
+            await self._start_turn(part)
+        elif isinstance(part, Speech):
+            await self._speech(part)
+        elif isinstance(part, SpeechEnd):
+            turn = self._current(part.turn)
+            if turn is not None and turn.streaming:
+                await self._end_speech(turn)
+                await self.send({"type": "turn.speech_end", "turn": turn.id})
+        elif isinstance(part, TurnCancel):
+            if self._current(part.turn) is not None:
+                self._end_turn()
+                message = {"type": "turn.cancel", "turn": part.turn}
+                if part.reason:
+                    message["reason"] = part.reason[:MAX_REASON]
+                await self.send(message)
+        elif isinstance(part, Interrupted):
+            if part.response == self.response:
+                self._end_response()  # what still comes of it is no longer wanted
+            elif part.response not in self.ended_responses:
+                return
+            await self.send(
+                {
+                    "type": "response.interrupted",
+                    "response": part.response,
+                    "played_ms": part.played_ms,
+                }
+            )
+
+    async def _start_turn(self, part: TurnStart) -> None:
+        if SPEECH not in self.formats:
+            self._hear(TurnCancel(part.turn, "the cloud takes no speech"))
+            return
+        self._end_turn()  # a new turn ends the one in progress (SES-8)
+        self.turn = Turn(part.turn)
+        await self.send(
+            {
+                "type": "turn.start",
+                "turn": part.turn,
+                "trigger": str(part.trigger),
+                "context": part.context,
+            }
+        )
+
+    async def _speech(self, part: Speech) -> None:
+        """Stream speech in whole frames, keeping the newest back so that the last frame
+        of the turn can carry the end flag."""
+        turn = self._current(part.turn)
+        if turn is None or not turn.streaming:
+            return  # the speech has ended: what was still on its way is not wanted
+        _, form = self.formats[SPEECH]
+        if len(part.pcm) % form.pcm.frame_bytes:
+            self._once("samples", "dropping speech that is not made of whole samples")
+            return
+        turn.pending += part.pcm
+        size = _frame_bytes(form)
+        while turn.streaming and len(turn.pending) >= size:
+            frame = bytes(turn.pending[:size])
+            del turn.pending[:size]
+            previous, turn.held = turn.held, frame
+            if previous is not None:
+                await self._send_speech(turn, previous, last=False)
+
+    async def _end_speech(self, turn: Turn) -> None:
+        """Send what is left of the turn's speech, the last frame marked as such."""
+        turn.streaming = False
+        frames = [frame for frame in (turn.held, bytes(turn.pending)) if frame]
+        turn.held = None
+        turn.pending.clear()
+        for count, frame in enumerate(frames, 1):
+            await self._send_speech(turn, frame, last=count == len(frames))
+
+    async def _send_speech(self, turn: Turn, audio: bytes, *, last: bool) -> None:
+        number, form = self.formats[SPEECH]
+        sequence = self.sequences[SPEECH] = (self.sequences[SPEECH] + 1) % WRAP
+        header = HEADER.pack(
+            HEADER_VERSION, SPEECH, number, LAST if last else 0, sequence, turn.timestamp % WRAP
+        )
+        turn.timestamp += len(audio) // form.pcm.frame_bytes
+        await self._transmit(self.socket.send_bytes(header + audio))
+
+    # ---- conversations: the cloud's part ----
+
+    async def _on_speech_end(self, message: Mapping[str, Any]) -> None:
+        turn = await self._named_turn(message)
+        if turn is not None and turn.streaming:
+            await self._end_speech(turn)
+            self._hear(SpeechEnd(turn.id))
+
+    async def _on_turn_cancel(self, message: Mapping[str, Any]) -> None:
+        turn = await self._named_turn(message)
+        if turn is not None:
+            self._end_turn()
+            self._hear(TurnCancel(turn.id, message.get("reason")))
+
+    async def _on_response_start(self, message: Mapping[str, Any]) -> None:
+        response, turn = message["response"], message["turn"]
+        if self.response is not None:  # one at a time: the frames that follow are the new one's
+            self._hear(ResponseEnd(self.response, follow_up=False))
+            self._end_response()
+        if turn is not None:
+            current = await self._named_turn(message)
+            if current is None:  # an answer to a turn that is over: not wanted
+                self.ended_responses.append(response)
+                return
+            current.answered = True
+        self.response = response
+        self._hear(ResponseStart(response, turn))
+
+    async def _on_response_text(self, message: Mapping[str, Any]) -> None:
+        if await self._named_response(message):
+            self._hear(ResponseText(message["response"], message["delta"]))
+
+    async def _on_response_end(self, message: Mapping[str, Any]) -> None:
+        if await self._named_response(message):
+            self._end_response()
+            self._hear(ResponseEnd(message["response"], message["follow_up"]))
+
+    async def _on_response_stop(self, message: Mapping[str, Any]) -> None:
+        response = message["response"]
+        if response == self.response:
+            self._end_response()
+        elif response not in self.ended_responses:
+            await self._unknown("response", response, message)
+            return
+        self._hear(ResponseStop(response))  # its speech may still be playing
+
+    # ---- conversations: bookkeeping ----
+
+    def _current(self, turn: str) -> Turn | None:
+        """The turn in progress, if it is ``turn``."""
+        return self.turn if self.turn is not None and self.turn.id == turn else None
+
+    async def _named_turn(self, message: Mapping[str, Any]) -> Turn | None:
+        """The turn in progress, if ``message`` names it. The cloud hears of a turn it
+        names that the robot never had; one that just ended, it may not know yet."""
+        turn = self._current(message["turn"])
+        if turn is None and message["turn"] not in self.ended_turns:
+            await self._unknown("turn", message["turn"], message)
+        return turn
+
+    async def _named_response(self, message: Mapping[str, Any]) -> bool:
+        """Whether ``message`` names the response in progress, as ``_named_turn``."""
+        response = message["response"]
+        if response == self.response:
+            return True
+        if response not in self.ended_responses:
+            await self._unknown("response", response, message)
+        return False
+
+    async def _unknown(self, kind: str, name: str, message: Mapping[str, Any]) -> None:
+        await self._error(f"unknown_{kind}", f"{kind} {name} is not active", message["id"])
+
+    def _end_turn(self) -> None:
+        if self.turn is not None:
+            self.turn.streaming = False
+            self.ended_turns.append(self.turn.id)
+            self.turn = None
+
+    def _end_response(self) -> None:
+        if self.response is not None:
+            self.ended_responses.append(self.response)
+            self.response = None
+
+    def _hear(self, part: CloudPart) -> None:
+        """Hand the cloud's part of the conversation to the robot."""
+        self.link._heard.put_nowait(part)
 
 
 def _check_meta(params: Any) -> None:

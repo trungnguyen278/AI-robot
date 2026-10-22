@@ -25,7 +25,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `voice` | `audio_in`, `audio_out`, `ai_backend` | Wake word, voice activity detection, echo cancellation, conversation |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
-| `cloud` | `cloud` | The link to `ai-robot-server`: the cloud calls the capabilities the modules offer, and hears the events they declare ([protocol/cloud](../protocol/cloud/README.md)) |
+| `cloud` | `cloud` | The link to `ai-robot-server`: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)) |
 | `behavior` | `daylight` | Decides what the robot does: the interaction state; for now, reactions to taps, the clock when idle, a sleepy face from sunset to sunrise |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.

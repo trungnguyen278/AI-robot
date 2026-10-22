@@ -15,9 +15,9 @@ Version **1.0**:
 - [`schema.json`](schema.json) defines every message, in JSON Schema 2020-12.
 - [`examples/`](examples/) holds whole sessions. The robot's tests check them, and the robot's own messages, against the schema (`software/tests/test_cloud_protocol.py`, `test_web_cloud.py`).
 
-> **Implemented by the robot so far:** the connection, the session, capabilities and events. Turns, responses and audio frames are specified below, but they wait for the voice pipeline (wake word, voice activity detection). Until then:
-> - the robot offers no audio formats, so the cloud declines both streams;
-> - it ignores turn and response messages.
+> **Implemented by the robot so far:** the whole link: the connection, the session, capabilities and events, turns, responses and audio frames. Two limits:
+> - the robot offers only the baseline format, until it has a codec (decision 3 of the requirements);
+> - it offers audio only when a module holds conversations, and its voice module does not yet: it waits for a wake word and voice activity detection. Until then the robot offers no audio formats, so the cloud declines both streams, and nothing on the robot starts turns or plays answers.
 
 ## Connection
 
@@ -266,6 +266,7 @@ sequenceDiagram
   - `follow_up: true` asks the robot to listen again once it has played the answer. It does so with a turn whose trigger is `follow_up`.
   - The cloud may call capabilities during an answer, such as an expression while it speaks.
 - **Playback.** The cloud may send speech faster than real time. The robot buffers it and plays it in order (PERF-5).
+- **One response at a time.** Voice frames do not name their response: they belong to the latest `response.start`. A `response.start` that comes before the previous response's `response.end` ends that response, as `response.end` would.
 - **Stopping.** `response.stop` `{"response": "a1"}` stops playback at once, and the robot drops what is left.
 - **Barge-in.** When the user speaks over an answer, the robot stops playing at once, on its own (PERF-3), and sends `response.interrupted` `{"response": "a1", "played_ms": 1840}`. The cloud then forgets the part that was not heard. A new turn follows, with the trigger `barge_in`.
 
@@ -287,7 +288,7 @@ Example: the third 20 ms PCM frame of a turn at 16 kHz, header `01 01 01 00 00 0
 These fields mirror RTP's (RFC 3550, §5.1):
 - The format plays the part of RTP's payload type, as SDP binds it.
 - A receiver detects lost or reordered frames from the sequence, and gaps from the timestamp.
-- A frame whose format was not negotiated for its stream is a protocol error, not noise to play (NEG-5).
+- A frame whose format was not negotiated for its stream is a protocol error, not noise to play (NEG-5). So is a frame for the wrong stream, or one whose audio does not fit its format. The receiver drops such frames, and reports them with an `invalid_message` error, though not necessarily one for each frame.
 
 ## Errors
 
@@ -298,8 +299,10 @@ These fields mirror RTP's (RFC 3550, §5.1):
 
 | Code | Meaning |
 |---|---|
-| `invalid_message` | The message failed `schema.json` |
-| `unknown_turn`, `unknown_response` | The message names a turn or a response that is not active |
+| `invalid_message` | The message failed `schema.json`, or an audio frame broke the rules of [Audio frames](#audio-frames) |
+| `unknown_turn`, `unknown_response` | The message names a turn or a response the receiver does not know |
+
+A message about a turn or a response that has ended is ignored, not refused: it may have crossed the end on its way.
 | `rate_limited` | The sender sent too many messages; some were dropped |
 | `internal` | The receiver failed to handle a valid message |
 

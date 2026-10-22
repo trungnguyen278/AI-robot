@@ -11,10 +11,12 @@ from enum import StrEnum
 from typing import Any
 
 from ai_robot.core.data import Schema, frozen
+from ai_robot.ports.audio import AudioFormat
 from ai_robot.ports.base import Port
 
 # Names of capabilities and events, as MCP allows for tool names.
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
+MAX_ID = 64  # characters in the identifier of a turn or a response ($defs/id in schema.json)
 
 
 class SafetyClass(StrEnum):
@@ -106,18 +108,164 @@ class CallCancelled:
     id: str
 
 
+# ---- Conversations: turns, responses and their audio ----
+
+
+@dataclass(frozen=True, slots=True)
+class MediaFormat:
+    """An audio format of the link: a codec, its sample rate and channels, and the
+    duration of one frame, which is one binary message (protocol/cloud/README.md, Media)."""
+
+    codec: str
+    rate: int  # samples per second
+    channels: int
+    frame_ms: float
+
+    @property
+    def pcm(self) -> AudioFormat:
+        """The PCM the robot exchanges with the link in this format."""
+        return AudioFormat(self.rate, self.channels)
+
+
+# The format every robot that streams audio offers and every cloud accepts, the
+# protocol's baseline (NEG-3): 16-bit PCM at 16 kHz, mono, in 20 ms frames.
+BASELINE = MediaFormat("pcm_s16le", 16000, 1, 20)
+
+
+class Trigger(StrEnum):
+    """What started a turn."""
+
+    WAKE_WORD = "wake_word"
+    TAP = "tap"
+    BUTTON = "button"
+    FOLLOW_UP = "follow_up"  # the cloud asked the robot to listen again
+    BARGE_IN = "barge_in"  # the user spoke over the robot
+
+
+@dataclass(frozen=True, slots=True)
+class TurnStart:
+    """Someone speaks to the robot: a turn begins. ``turn`` identifies it, uniquely in
+    the session; ``context`` is a snapshot of the robot's situation (IO-4), which the
+    cloud module fills in."""
+
+    turn: str
+    trigger: Trigger
+    context: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not (isinstance(self.turn, str) and 0 < len(self.turn) <= MAX_ID):
+            raise ValueError(f"turn must be 1 to {MAX_ID} characters, got {self.turn!r}")
+        object.__setattr__(self, "trigger", Trigger(self.trigger))
+        object.__setattr__(self, "context", frozen("context", self.context))
+
+
+@dataclass(frozen=True, slots=True)
+class Speech:
+    """What the user says during a turn: PCM in the format of the speech stream."""
+
+    turn: str
+    pcm: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechEnd:
+    """The user has finished speaking, as the robot or the cloud decided: the robot
+    stops streaming."""
+
+    turn: str
+
+
+@dataclass(frozen=True, slots=True)
+class TurnCancel:
+    """The turn is abandoned: by the robot, by the cloud, or with the session."""
+
+    turn: str
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Interrupted:
+    """The user spoke over a response, once ``played_ms`` of it had been played."""
+
+    response: str
+    played_ms: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.played_ms, bool) or not (
+            isinstance(self.played_ms, int) and self.played_ms >= 0
+        ):
+            raise ValueError(f"played_ms must be a whole number from 0, got {self.played_ms!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseStart:
+    """An answer begins. ``turn`` is the turn it answers, or ``None`` for an answer no
+    turn asked for, such as a reminder."""
+
+    response: str
+    turn: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseText:
+    """A piece of the text of an answer's speech."""
+
+    response: str
+    delta: str
+
+
+@dataclass(frozen=True, slots=True)
+class Voice:
+    """A piece of an answer's speech: PCM in the format of the voice stream. ``last``
+    marks the end of the answer's speech."""
+
+    response: str
+    pcm: bytes
+    last: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseEnd:
+    """The answer is complete: no more of it will come. ``follow_up`` asks the robot to
+    listen again once it has played the answer."""
+
+    response: str
+    follow_up: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseStop:
+    """Stop playing an answer at once, and drop what is left of it."""
+
+    response: str
+
+
+# The robot's part of a conversation, and the cloud's, each in the order it happens.
+RobotPart = TurnStart | Speech | SpeechEnd | TurnCancel | Interrupted
+CloudPart = (
+    SpeechEnd | TurnCancel | ResponseStart | ResponseText | Voice | ResponseEnd | ResponseStop
+)
+
+
 @dataclass(frozen=True, slots=True)
 class LinkStatus:
-    """Whether a session with the cloud is open, and which events it subscribed to."""
+    """Whether a session with the cloud is open, which events it subscribed to, and the
+    formats of the audio streams the cloud accepted: ``speech``, what the user says,
+    and ``voice``, what the robot says. A stream is ``None`` if the cloud declined it
+    or the robot did not offer it."""
 
     online: bool
     session: str | None = None
     events: frozenset[str] = frozenset()
+    speech: MediaFormat | None = None
+    voice: MediaFormat | None = None
 
 
 class Cloud(Port):
     """The link to the cloud. The cloud drives the robot through the capabilities the
-    robot offers, and receives the events it subscribed to.
+    robot offers, receives the events it subscribed to, and holds conversations with
+    it: in a turn the robot streams what the user says, and in a response the cloud
+    streams what the robot says.
 
     Like every port, it inherits ``open`` and ``close`` from ``Port``, and the
     application calls them:
@@ -132,9 +280,17 @@ class Cloud(Port):
     """
 
     @abstractmethod
-    async def offer(self, capabilities: Sequence[Capability], events: Sequence[EventKind]) -> None:
-        """Set what the robot offers. A change of ``capabilities`` reaches the cloud at
-        once; a change of ``events``, at the next session."""
+    async def offer(
+        self,
+        capabilities: Sequence[Capability],
+        events: Sequence[EventKind],
+        *,
+        conversation: bool = False,
+    ) -> None:
+        """Set what the robot offers. ``conversation`` offers the audio streams: a
+        module takes turns and plays the answers. A change of ``capabilities`` reaches
+        the cloud at once; a change of ``events`` or ``conversation``, at the next
+        session."""
 
     @abstractmethod
     async def request(self) -> ToolCall | CallCancelled:
@@ -158,3 +314,15 @@ class Cloud(Port):
     @abstractmethod
     async def status(self) -> LinkStatus:
         """Wait for the next change of the link's status."""
+
+    @abstractmethod
+    async def converse(self, part: RobotPart) -> None:
+        """Send the robot's next part of a conversation. A turn that cannot start, with
+        no session or no speech stream, comes back at once from ``conversation`` as a
+        ``TurnCancel``; speech for a turn that is over is dropped."""
+
+    @abstractmethod
+    async def conversation(self) -> CloudPart:
+        """Wait for the cloud's next part of a conversation. When the session ends, the
+        turn and the response in progress end with it: a ``TurnCancel`` and a
+        ``ResponseEnd`` follow."""

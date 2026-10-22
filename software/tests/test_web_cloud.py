@@ -8,6 +8,7 @@ import contextlib
 import itertools
 import json
 import logging
+import struct
 import time
 from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
@@ -19,7 +20,27 @@ from aiohttp import WSMsgType, web
 from ai_robot.adapters.web import cloud as adapter
 from ai_robot.adapters.web.cloud import WebSocketCloud
 from ai_robot.core.data import Schema
-from ai_robot.ports import CallCancelled, Capability, EventKind, LinkStatus, SafetyClass, ToolCall
+from ai_robot.ports import (
+    CallCancelled,
+    Capability,
+    CloudPart,
+    EventKind,
+    Interrupted,
+    LinkStatus,
+    ResponseEnd,
+    ResponseStart,
+    ResponseStop,
+    ResponseText,
+    SafetyClass,
+    Speech,
+    SpeechEnd,
+    ToolCall,
+    Trigger,
+    TurnCancel,
+    TurnStart,
+    Voice,
+)
+from ai_robot.ports.cloud import BASELINE
 
 SCHEMA = Path(__file__).resolve().parents[2] / "protocol" / "cloud" / "schema.json"
 MCP_META = {
@@ -216,15 +237,16 @@ SETTINGS = {
 
 @contextlib.asynccontextmanager
 async def linked(
-    cloud: FakeCloud | None = None, **settings: Any
+    cloud: FakeCloud | None = None, *, conversation: bool = False, **settings: Any
 ) -> AsyncIterator[tuple[WebSocketCloud, Any]]:
-    """A fake cloud and an open link to it that offered ``LAMP`` and ``CHANGED``."""
+    """A fake cloud and an open link to it that offered ``LAMP`` and ``CHANGED``, and to
+    converse if ``conversation``."""
     cloud = cloud or FakeCloud()
     await cloud.start()
     link = WebSocketCloud(url=cloud.url, **{**SETTINGS, **settings})
     await link.open()
     try:
-        await link.offer([LAMP], [CHANGED])
+        await link.offer([LAMP], [CHANGED], conversation=conversation)
         yield link, cloud
     finally:
         await link.close()
@@ -238,6 +260,47 @@ async def online(link: WebSocketCloud, cloud: FakeCloud) -> Connection:
     status = await asyncio.wait_for(link.status(), TIMEOUT)
     assert status.online
     return connection
+
+
+@contextlib.asynccontextmanager
+async def talking() -> AsyncIterator[tuple[WebSocketCloud, Connection]]:
+    """An open session whose cloud took both audio streams in the baseline format."""
+    cloud = FakeCloud(hello={"media": {"speech": 0, "voice": 0}})
+    async with linked(cloud, conversation=True) as (link, cloud):
+        yield link, await online(link, cloud)
+
+
+async def heard(link: WebSocketCloud) -> CloudPart:
+    """The cloud's next part of the conversation, as the link hands it to the robot."""
+    return await asyncio.wait_for(link.conversation(), TIMEOUT)
+
+
+async def silent(link: WebSocketCloud, wait: float = 0.1) -> bool:
+    """Whether the link hands the robot nothing of the conversation for ``wait`` seconds."""
+    try:
+        await asyncio.wait_for(link.conversation(), wait)
+    except TimeoutError:
+        return True
+    return False
+
+
+def frame(
+    audio: bytes,
+    *,
+    stream: int = 2,
+    form: int = 0,
+    flags: int = 0,
+    sequence: int = 1,
+    timestamp: int = 0,
+    version: int = 1,
+) -> bytes:
+    """An audio frame: its header, then ``audio``. By default, the cloud's first."""
+    return struct.pack(">BBBBII", version, stream, form, flags, sequence, timestamp) + audio
+
+
+def header(data: bytes) -> tuple[int, ...]:
+    """The fields of a frame's header: version, stream, format, flags, sequence, timestamp."""
+    return struct.unpack(">BBBBII", data[:12])
 
 
 def test_the_session_opens_with_a_hello_exchange() -> None:
@@ -445,8 +508,7 @@ def test_bad_messages_get_an_error_and_the_session_goes_on() -> None:
                 "invalid_message",
                 sent,
             )
-            # Turns, responses and unknown types are ignored, not refused.
-            await connection.send({"type": "response.start", "response": "a1", "turn": None})
+            # A type the robot does not know is ignored, not refused.
             await connection.send({"type": "mood.changed", "mood": "calm"})
             assert await connection.nothing()
             assert "result" in await connection.mcp("tools/list")
@@ -600,15 +662,250 @@ def test_credentials_go_in_the_authorization_header(
     assert "the cloud refused the robot's credentials (401)" in caplog.text
 
 
-def test_audio_frames_are_ignored_and_oversized_ones_end_the_session() -> None:
+def test_an_oversized_frame_ends_the_session() -> None:
     async def main() -> None:
         async with linked() as (link, cloud):
             connection = await online(link, cloud)
-            await connection.socket.send_bytes(bytes(12))
-            assert await connection.nothing()
             await connection.socket.send_bytes(bytes(adapter.MAX_BINARY + 1))
             await asyncio.wait_for(connection.closed.wait(), TIMEOUT)
             assert connection.close_code == 1009
+
+    asyncio.run(main())
+
+
+# ---- conversations ----
+
+BASELINE_OFFER = {"id": 0, "codec": "pcm_s16le", "rate": 16000, "channels": 1, "frame_ms": 20}
+
+
+def test_a_robot_that_converses_offers_the_baseline_for_each_stream() -> None:
+    async def main() -> None:
+        cloud = FakeCloud(hello={"media": {"speech": 0, "voice": None}})
+        async with linked(cloud, conversation=True) as (link, cloud):
+            connection = await cloud.next_connection()
+            status = await asyncio.wait_for(link.status(), TIMEOUT)
+            assert connection.hello["media"] == {
+                "speech": [BASELINE_OFFER],
+                "voice": [BASELINE_OFFER],
+            }
+            assert (status.speech, status.voice) == (BASELINE, None)  # voice was declined
+
+    asyncio.run(main())
+
+
+def test_a_format_the_robot_did_not_offer_ends_the_session() -> None:
+    async def main() -> None:
+        cloud = FakeCloud(hello={"media": {"speech": 1, "voice": None}})
+        async with linked(cloud, conversation=True) as (link, cloud):
+            connection = await cloud.next_connection()
+            await asyncio.wait_for(connection.closed.wait(), TIMEOUT)
+            assert connection.close_code == 4001
+            assert link.session is None
+
+    asyncio.run(main())
+
+
+def test_speech_goes_out_in_frames_and_the_last_one_is_marked() -> None:
+    async def main() -> None:
+        async with talking() as (link, connection):
+            context = {"battery": 80.0, "charging": False}
+            await link.converse(TurnStart("t1", Trigger.WAKE_WORD, context))
+            start = await connection.receive()
+            assert {key: start[key] for key in ("type", "turn", "trigger", "context")} == {
+                "type": "turn.start",
+                "turn": "t1",
+                "trigger": "wake_word",
+                "context": context,
+            }
+            speech = bytes(range(256)) * 6  # 1536 bytes: two 640-byte frames, and 256 more
+            for piece in (speech[:500], speech[500:1000], speech[1000:]):
+                await link.converse(Speech("t1", piece))
+            first = await connection.receive()
+            assert header(first) == (1, 1, 0, 0, 1, 0) and first[12:] == speech[:640]
+            assert await connection.nothing()  # the second waits: it may be the last
+            await link.converse(SpeechEnd("t1"))
+            second, last, end = [await connection.receive() for _ in range(3)]
+            assert header(second) == (1, 1, 0, 0, 2, 320) and second[12:] == speech[640:1280]
+            assert header(last) == (1, 1, 0, 1, 3, 640) and last[12:] == speech[1280:]
+            assert (end["type"], end["turn"]) == ("turn.speech_end", "t1")
+            await link.converse(Speech("t1", bytes(640)))  # after the end: dropped
+            await link.converse(SpeechEnd("t1"))
+            assert await connection.nothing()
+
+    asyncio.run(main())
+
+
+def test_the_cloud_can_end_the_speech_or_cancel_the_turn() -> None:
+    async def main() -> None:
+        async with talking() as (link, connection):
+            await link.converse(TurnStart("t1", Trigger.TAP))
+            await connection.receive()  # turn.start
+            await link.converse(Speech("t1", bytes(700)))  # one frame, and 60 bytes
+            await connection.send({"type": "turn.speech_end", "turn": "t1"})
+            assert await heard(link) == SpeechEnd("t1")
+            held, rest = await connection.receive(), await connection.receive()
+            assert (header(held)[3:5], len(held)) == ((0, 1), 12 + 640)
+            assert (header(rest)[3:5], len(rest)) == ((1, 2), 12 + 60)  # marked last
+            await link.converse(Speech("t1", bytes(640)))
+            assert await connection.nothing()
+
+            await link.converse(TurnStart("t2", Trigger.WAKE_WORD))
+            await connection.receive()
+            await connection.send({"type": "turn.cancel", "turn": "t2", "reason": "nothing heard"})
+            assert await heard(link) == TurnCancel("t2", "nothing heard")
+            await link.converse(Speech("t2", bytes(1280)))
+            await link.converse(TurnCancel("t2", "too late"))  # over already: nothing to send
+            assert await connection.nothing()
+            sent = await connection.send({"type": "turn.cancel", "turn": "t9"})
+            error = await connection.receive()
+            assert (error["type"], error["code"], error["reply_to"]) == (
+                "error",
+                "unknown_turn",
+                sent,
+            )
+            # A turn that has just ended is not reported: the cloud may not know yet.
+            await connection.send({"type": "turn.speech_end", "turn": "t2"})
+            assert await connection.nothing()
+
+    asyncio.run(main())
+
+
+def test_an_answer_comes_with_its_text_and_its_voice() -> None:
+    async def main() -> None:
+        async with talking() as (link, connection):
+            await link.converse(TurnStart("t1", Trigger.WAKE_WORD))
+            await link.converse(SpeechEnd("t1"))
+            await connection.receive()  # turn.start
+            await connection.receive()  # turn.speech_end
+            await connection.send({"type": "response.start", "response": "a1", "turn": "t1"})
+            await connection.send({"type": "response.text", "response": "a1", "delta": "Sunny"})
+            await connection.socket.send_bytes(frame(bytes(640)))
+            await connection.socket.send_bytes(
+                frame(bytes(100), flags=1, sequence=2, timestamp=320)
+            )
+            await connection.send({"type": "response.end", "response": "a1", "follow_up": True})
+            assert [await heard(link) for _ in range(5)] == [
+                ResponseStart("a1", "t1"),
+                ResponseText("a1", "Sunny"),
+                Voice("a1", bytes(640)),
+                Voice("a1", bytes(100), last=True),
+                ResponseEnd("a1", follow_up=True),
+            ]
+            # Once complete, it may still be playing: the cloud can stop it.
+            await connection.send({"type": "response.stop", "response": "a1"})
+            assert await heard(link) == ResponseStop("a1")
+            assert await connection.nothing()
+
+    asyncio.run(main())
+
+
+def test_answers_come_one_at_a_time() -> None:
+    async def main() -> None:
+        async with talking() as (link, connection):
+            await connection.socket.send_bytes(frame(bytes(640)))  # outside an answer: ignored
+            await connection.send({"type": "response.start", "response": "a1", "turn": None})
+            await connection.send({"type": "response.start", "response": "a2", "turn": None})
+            await connection.socket.send_bytes(frame(bytes(640), sequence=2))
+            assert [await heard(link) for _ in range(4)] == [
+                ResponseStart("a1", None),
+                ResponseEnd("a1", follow_up=False),  # the frames that follow are a2's
+                ResponseStart("a2", None),
+                Voice("a2", bytes(640)),
+            ]
+            await connection.send({"type": "response.text", "response": "a1", "delta": "Hi"})
+            assert await silent(link)  # a1 is over
+            sent = await connection.send(
+                {"type": "response.end", "response": "a9", "follow_up": False}
+            )
+            error = await connection.receive()
+            assert (error["code"], error["reply_to"]) == ("unknown_response", sent)
+            # An answer to a turn the robot never had is refused, and ends a2 all the same.
+            sent = await connection.send({"type": "response.start", "response": "a3", "turn": "t7"})
+            error = await connection.receive()
+            assert (error["code"], error["reply_to"]) == ("unknown_turn", sent)
+            assert await heard(link) == ResponseEnd("a2", follow_up=False)
+            await connection.send({"type": "response.text", "response": "a3", "delta": "Hi"})
+            await connection.socket.send_bytes(frame(bytes(640), sequence=3))
+            assert await silent(link)
+            assert await connection.nothing()
+
+    asyncio.run(main())
+
+
+def test_the_cloud_hears_how_much_of_an_interrupted_answer_was_played() -> None:
+    async def main() -> None:
+        async with talking() as (link, connection):
+            await connection.send({"type": "response.start", "response": "a1", "turn": None})
+            assert await heard(link) == ResponseStart("a1", None)
+            await link.converse(Interrupted("a1", 1840))
+            message = await connection.receive()
+            assert (message["type"], message["response"], message["played_ms"]) == (
+                "response.interrupted",
+                "a1",
+                1840,
+            )
+            # What was still on its way is no longer wanted, and needs no answer.
+            await connection.socket.send_bytes(frame(bytes(640)))
+            await connection.send({"type": "response.end", "response": "a1", "follow_up": False})
+            await link.converse(Interrupted("a9", 10))  # never heard of: not sent
+            assert await silent(link)
+            assert await connection.nothing()
+
+    asyncio.run(main())
+
+
+def test_audio_the_robot_cannot_play_is_dropped_and_reported() -> None:
+    async def main() -> None:
+        async with talking() as (link, connection):
+            await connection.send({"type": "response.start", "response": "a1", "turn": None})
+            assert await heard(link) == ResponseStart("a1", None)
+            for bad in (
+                bytes(5),  # less than a header
+                frame(bytes(640), version=2),
+                frame(bytes(640), stream=1),  # the robot's stream
+                frame(bytes(640), form=3),  # not negotiated
+                frame(bytes(641)),  # half a sample
+                frame(bytes(642)),  # more than 20 ms
+            ):
+                await connection.socket.send_bytes(bad)
+            error = await connection.receive()
+            assert (error["type"], error["code"]) == ("error", "invalid_message")
+            assert error["message"] == "audio frame dropped: 5 bytes, less than a header"
+            assert await connection.nothing()  # reported now and then, not for every frame
+            assert await silent(link)
+            await connection.socket.send_bytes(frame(bytes(640)))
+            assert await heard(link) == Voice("a1", bytes(640))
+
+    asyncio.run(main())
+
+
+def test_a_turn_that_cannot_start_is_cancelled_at_once() -> None:
+    async def main() -> None:
+        offline = WebSocketCloud(url="ws://127.0.0.1:9/robot", **SETTINGS)  # never opened
+        await offline.converse(TurnStart("t1", Trigger.WAKE_WORD))
+        assert await heard(offline) == TurnCancel("t1", "offline")
+        cloud = FakeCloud(hello={"media": {"speech": None, "voice": 0}})
+        async with linked(cloud, conversation=True) as (link, cloud):
+            connection = await online(link, cloud)
+            await link.converse(TurnStart("t2", Trigger.WAKE_WORD))
+            assert await heard(link) == TurnCancel("t2", "the cloud takes no speech")
+            assert await connection.nothing()
+
+    asyncio.run(main())
+
+
+def test_the_turn_and_the_answer_end_with_their_session() -> None:
+    async def main() -> None:
+        async with talking() as (link, connection):
+            await link.converse(TurnStart("t1", Trigger.WAKE_WORD))
+            await connection.receive()
+            await connection.send({"type": "response.start", "response": "a1", "turn": None})
+            assert await heard(link) == ResponseStart("a1", None)
+            await connection.socket.close()
+            assert [await heard(link), await heard(link)] == [
+                TurnCancel("t1", "connection lost"),
+                ResponseEnd("a1", follow_up=False),
+            ]
 
     asyncio.run(main())
 

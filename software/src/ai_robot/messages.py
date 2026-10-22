@@ -16,7 +16,7 @@ from ai_robot.core.bus import Message
 from ai_robot.core.checks import finite, positive
 from ai_robot.core.data import frozen
 from ai_robot.ports.body import BatteryStatus
-from ai_robot.ports.cloud import Capability, EventKind
+from ai_robot.ports.cloud import Capability, CloudPart, EventKind, MediaFormat, RobotPart
 from ai_robot.ports.screen import scene_data
 
 
@@ -214,6 +214,44 @@ class RobotEvent(Message):
 
 @dataclass(frozen=True, slots=True)
 class CloudStatus(Message):
-    """Whether a session with the cloud is open. Published by cloud on every change."""
+    """Whether a session with the cloud is open. Published by cloud on every change.
+
+    ``speech`` and ``voice`` are the formats of the audio streams the cloud accepted,
+    or ``None``: a turn needs ``speech``, and playing an answer needs ``voice``.
+    """
 
     online: bool
+    speech: MediaFormat | None = None
+    voice: MediaFormat | None = None
+
+
+# ---- Conversations: turns and responses (protocol/cloud/README.md) ----
+# The voice module holds conversations, and the cloud module carries them over the link.
+# Each direction is one topic, so that its parts arrive in order: a turn's start, its
+# speech and its end; an answer's start, text, voice and end.
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationOffered(Message):
+    """A module holds conversations with the cloud: it starts turns and plays the
+    answers, so the link offers the audio streams. Published by voice, read by cloud."""
+
+    owner: str
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationToCloud(Message):
+    """The robot's next part of a conversation: a turn starts, the user's speech, its
+    end, a cancelled turn, an interrupted answer. Published by voice, read by cloud,
+    which adds the robot's context to a turn's start."""
+
+    part: RobotPart
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationFromCloud(Message):
+    """The cloud's next part of a conversation: the end of the user's speech, a
+    cancelled turn, and the answers, with their text and their voice. Published by
+    cloud, read by voice."""
+
+    part: CloudPart
