@@ -23,14 +23,16 @@
 # latitude = 0.0
 # longitude = 0.0
 
-# Connect to a cloud server instead of the simulated one. wss:// in general; ws:// only
-# to this computer, for development. The robot's credentials go in the environment
-# variable AI_ROBOT_CLOUD_TOKEN, never in a file.
+# Connect to a cloud server instead of the simulated one, through its LiveKit server.
+# wss:// in general; ws:// only to this computer, for development. For a development
+# server, the robot makes its own token with the server's key and secret, from the
+# environment variables AI_ROBOT_LIVEKIT_API_KEY and AI_ROBOT_LIVEKIT_API_SECRET, never
+# from a file.
 # [ports.cloud]
-# adapter = "websocket"
-# [ports.cloud.websocket]
-# url = "wss://cloud.example/robot"
-# ping_after = 5.0  # ping sooner on a network that drops idle connections
+# adapter = "livekit"
+# [ports.cloud.livekit]
+# url = "ws://127.0.0.1:7880"
+# room = "robot-desk"  # a room of its own on a server several people share
 
 # Tune how the robot behaves, for example a longer smile after a tap:
 # [modules.behavior]

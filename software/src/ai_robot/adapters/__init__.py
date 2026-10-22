@@ -2,9 +2,9 @@
 """Adapters: the implementations of the ports.
 
 The configuration selects one adapter per port (``adapter = "sim"``). Adapters are
-grouped by technology (``sim/``; ``web/``, with aiohttp: the screen served to a browser and
-the cloud link; ``sun/``; ALSA, Picamera2 or the body link later), so the libraries of a
-technology are imported only when one of its adapters is selected.
+grouped by technology (``sim/``; ``web/``, with aiohttp: the screen served to a browser;
+``livekit/``: the link to the cloud; ``sun/``; ALSA, Picamera2 or the body link later),
+so the libraries of a technology are imported only when one of its adapters is selected.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ ADAPTERS: dict[str, dict[str, str]] = {
     },
     "cloud": {
         "sim": "ai_robot.adapters.sim.cloud:SimCloud",
-        "websocket": "ai_robot.adapters.web.cloud:WebSocketCloud",
+        "livekit": "ai_robot.adapters.livekit.cloud:LiveKitCloud",
     },
     "daylight": {
         "fixed": "ai_robot.adapters.sun.daylight:FixedDaylight",

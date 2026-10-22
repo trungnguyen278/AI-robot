@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import math
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
@@ -20,16 +21,34 @@ from ai_robot.core.config import ConfigError
 from ai_robot.core.factory import create
 from ai_robot.core.module import Module, ModuleContext, RobotInfo
 from ai_robot.messages import (
+    BatteryReport,
     CapabilityCall,
     CapabilityCancelled,
     CapabilityOffered,
     CapabilityWithdrawn,
     CloudStatus,
+    ConversationFromCloud,
+    ConversationOffered,
+    ConversationToCloud,
     RobotEvent,
 )
 from ai_robot.modules.cloud import CloudModule
 from ai_robot.modules.screen import ScreenModule, capabilities, load_vocabulary
-from ai_robot.ports import Capability, EventKind, SafetyClass
+from ai_robot.ports import (
+    AudioFormat,
+    BatteryStatus,
+    Capability,
+    ConversationAudio,
+    EventKind,
+    ResponseEnd,
+    ResponseStart,
+    SafetyClass,
+    Speech,
+    SpeechEnd,
+    Trigger,
+    TurnStart,
+    Voice,
+)
 
 TIMEOUT = 2.0
 
@@ -295,6 +314,110 @@ def test_capabilities_are_checked() -> None:
         )
     with pytest.raises(ValueError, match="'flying' is not a valid SafetyClass"):
         Capability("lamp.set", "Set", SWITCH, "flying")  # type: ignore[arg-type]
+
+
+# The audio of the module that holds conversations: 16 kHz mono, both ways.
+AUDIO = ConversationAudio(AudioFormat(16000, 1), AudioFormat(16000, 1))
+
+
+class Talker(Module):
+    """A module that holds conversations, as voice does."""
+
+    async def start(self) -> None:
+        self.bus.publish(ConversationOffered(self.name, AUDIO))
+
+
+def talking_robot() -> tuple[Bus, SimCloud, Talker, CloudModule]:
+    bus = Bus()
+    cloud = SimCloud()
+    return bus, cloud, Talker(context("voice", bus, {})), cloud_module(bus, cloud)
+
+
+def test_the_link_offers_conversations_once_a_module_holds_them(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def main() -> None:
+        bus, cloud, talker, module = talking_robot()
+        statuses = bus.subscribe(CloudStatus)
+        async with running(talker, module):
+            await until(lambda: cloud.online)
+            assert cloud.conversing
+            status = await asyncio.wait_for(statuses.get(), TIMEOUT)
+            assert status == CloudStatus(True, conversations=True)
+            bus.publish(ConversationOffered("rival", AUDIO))
+            await until(lambda: "rival offers to hold conversations" in caplog.text)
+            assert module.conversing is not None
+            assert module.conversing.owner == "voice"
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(main())
+
+
+def test_the_robots_part_reaches_the_cloud_in_order_with_its_context() -> None:
+    async def main() -> None:
+        bus, cloud, talker, module = talking_robot()
+        async with running(talker, module):
+            await until(lambda: cloud.online)
+            bus.publish(ConversationToCloud(TurnStart("t1", Trigger.WAKE_WORD)))
+            await until(lambda: cloud.heard)
+            assert cloud.heard[0].context == {"battery": None, "charging": None}  # type: ignore[union-attr]
+            bus.publish(BatteryReport(BatteryStatus(voltage=7.4, percent=63.0, charging=True)))
+            await until(lambda: module.battery is not None)
+            # Published at once, more than a bus queue holds by default: none is lost.
+            parts = [
+                TurnStart("t2", Trigger.TAP),
+                *(Speech("t2", bytes([n % 256]) * 640) for n in range(300)),
+                SpeechEnd("t2"),
+            ]
+            for part in parts:
+                bus.publish(ConversationToCloud(part))
+            await until(lambda: len(cloud.heard) == 1 + len(parts))
+            assert list(cloud.heard)[1:] == [
+                TurnStart("t2", Trigger.TAP, {"battery": 63.0, "charging": True}),
+                *parts[1:],
+            ]
+
+    asyncio.run(main())
+
+
+@pytest.mark.parametrize(
+    ("percent", "sent"),
+    [(63.0, 63.0), (104.0, 100.0), (-2.0, 0.0), (math.nan, None), (None, None)],
+)
+def test_the_battery_in_the_context_is_always_valid(
+    percent: float | None, sent: float | None
+) -> None:
+    _, _, _, module = talking_robot()
+    module.battery = BatteryStatus(voltage=7.4, percent=percent, charging=False)
+    assert module._context() == {"battery": sent, "charging": False}
+
+
+def test_the_clouds_part_reaches_the_robot_in_order() -> None:
+    async def main() -> None:
+        bus, cloud, talker, module = talking_robot()
+        heard = bus.subscribe(ConversationFromCloud, maxsize=10)
+        received: list[Any] = []
+
+        async def read() -> None:  # as the voice module reads them: one task, at once
+            async for message in heard:
+                received.append(message.part)
+
+        async with running(talker, module):
+            await until(lambda: cloud.online)
+            reader = asyncio.create_task(read())
+            # Many parts at once, far more than the queue holds: none is lost.
+            answer = [
+                ResponseStart("a1", None),
+                *(Voice(bytes([n % 256]) * 640) for n in range(500)),
+                ResponseEnd("a1", follow_up=False),
+            ]
+            cloud.say(*answer)
+            await until(lambda: len(received) == len(answer))
+            reader.cancel()
+            assert received == answer
+            assert heard.dropped == 0
+
+    asyncio.run(main())
 
 
 def test_settings_are_checked() -> None:

@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
 from ai_robot.core.bus import Message, Subscription
@@ -13,18 +14,35 @@ from ai_robot.core.checks import positive
 from ai_robot.core.data import Schema
 from ai_robot.core.module import Module, ModuleContext
 from ai_robot.messages import (
+    BatteryReport,
     CapabilityCall,
     CapabilityCancelled,
     CapabilityOffered,
     CapabilityResult,
     CapabilityWithdrawn,
     CloudStatus,
+    ConversationFromCloud,
+    ConversationOffered,
+    ConversationToCloud,
     EventOffered,
     RobotEvent,
 )
-from ai_robot.ports.cloud import CallCancelled, Capability, Cloud, EventKind, SafetyClass, ToolCall
+from ai_robot.ports.body import BatteryStatus
+from ai_robot.ports.cloud import (
+    CallCancelled,
+    Capability,
+    Cloud,
+    EventKind,
+    SafetyClass,
+    ToolCall,
+    TurnStart,
+)
 
 M = TypeVar("M", bound=Message)
+
+# Unread parts of the robot's conversation the module keeps: far more than can pile up,
+# since the link takes each part as it comes, and drops those of a session that is gone.
+CONVERSATION_BACKLOG = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,9 +66,12 @@ class CloudModule(Module):
       ``CapabilityResult``, or an error after ``call_timeout`` seconds.
     - Events: modules declare them (``EventOffered``) and publish them (``RobotEvent``);
       the link sends those the cloud subscribed to.
-    - ``CloudStatus`` tells the other modules when a session opens and closes.
-
-    Planned: turns and responses for the voice module, once it has a wake word.
+    - Conversations: once a module offers to hold them (``ConversationOffered``), the
+      link offers them too. This module carries the module's part
+      (``ConversationToCloud``) to the link, with the robot's context at the start of
+      each turn, and the cloud's part back (``ConversationFromCloud``).
+    - ``CloudStatus`` tells the other modules when a session opens and closes, and
+      whether it has conversations.
     """
 
     owns = ("cloud",)
@@ -70,6 +91,8 @@ class CloudModule(Module):
         self.link = self.port("cloud", Cloud)
         self.capabilities: dict[str, Offer] = {}  # by name
         self.events: dict[str, tuple[EventKind, Schema]] = {}
+        self.conversing: ConversationOffered | None = None  # the module that holds them
+        self.battery: BatteryStatus | None = None
         self.online = False
         self._calls: dict[str, asyncio.Task[None]] = {}  # call id -> the task answering it
         self._results: dict[str, asyncio.Future[CapabilityResult]] = {}
@@ -80,9 +103,12 @@ class CloudModule(Module):
         self.event_offers = self._subscribe(EventOffered)
         self.robot_events = self._subscribe(RobotEvent)
         self.results = self._subscribe(CapabilityResult)
+        self.conversation_offers = self._subscribe(ConversationOffered)
+        self.said = self._subscribe(ConversationToCloud, maxsize=CONVERSATION_BACKLOG)
+        self.batteries = self._subscribe(BatteryReport)
 
-    def _subscribe(self, kind: type[M]) -> Subscription[M]:
-        subscription = self.bus.subscribe(kind)
+    def _subscribe(self, kind: type[M], maxsize: int = 100) -> Subscription[M]:
+        subscription = self.bus.subscribe(kind, maxsize=maxsize)
         self.subscriptions.append(subscription)
         return subscription
 
@@ -93,14 +119,22 @@ class CloudModule(Module):
             self._on_offer(await self.offers.get())
         while self.event_offers.pending:
             self._on_event_offer(await self.event_offers.get())
+        while self.conversation_offers.pending:
+            self._on_conversation_offer(await self.conversation_offers.get())
         await self._offer()
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(self._follow(self.offers, self._changed(self._on_offer)))
             tasks.create_task(self._follow(self.withdrawals, self._changed(self._on_withdrawal)))
             tasks.create_task(self._follow(self.event_offers, self._changed(self._on_event_offer)))
+            tasks.create_task(
+                self._follow(self.conversation_offers, self._changed(self._on_conversation_offer))
+            )
             tasks.create_task(self._follow(self.robot_events, self._on_robot_event))
             tasks.create_task(self._follow(self.results, self._on_result))
+            tasks.create_task(self._follow(self.batteries, self._on_battery))
+            tasks.create_task(self._follow(self.said, self._say))
             tasks.create_task(self._serve_calls())
+            tasks.create_task(self._hear())
             tasks.create_task(self._follow_status())
 
     async def stop(self) -> None:
@@ -161,6 +195,16 @@ class CloudModule(Module):
         kind = message.kind
         self.events[kind.name] = (kind, Schema(f"{kind.name} schema", kind.schema))
 
+    def _on_conversation_offer(self, message: ConversationOffered) -> None:
+        if self.conversing is not None and self.conversing.owner != message.owner:
+            self.log.error(
+                "%s offers to hold conversations, which %s already does; ignored",
+                message.owner,
+                self.conversing.owner,
+            )
+            return
+        self.conversing = message
+
     async def _offer(self) -> None:
         await self.link.offer(
             [
@@ -169,6 +213,7 @@ class CloudModule(Module):
                 if offer.capability.safety in self.allowed
             ],
             [kind for _, (kind, _) in sorted(self.events.items())],
+            conversation=None if self.conversing is None else self.conversing.audio,
         )
 
     # ---- calls ----
@@ -260,4 +305,31 @@ class CloudModule(Module):
                 self.log.info("cloud session %s open; events: %s", status.session, events)
             else:
                 self.log.info("cloud session closed")
-            self.bus.publish(CloudStatus(status.online))
+            self.bus.publish(CloudStatus(status.online, status.conversations))
+
+    # ---- conversations ----
+
+    async def _on_battery(self, message: BatteryReport) -> None:
+        self.battery = message.status
+
+    async def _say(self, message: ConversationToCloud) -> None:
+        part = message.part
+        if isinstance(part, TurnStart):
+            part = replace(part, context=self._context())
+        await self.link.converse(part)
+
+    def _context(self) -> dict[str, Any]:
+        """The robot's situation, for the cloud, at the start of a turn (IO-4)."""
+        battery = self.battery
+        percent = None if battery is None else battery.percent
+        if percent is not None:  # a reading may stray: keep the message valid
+            percent = min(100.0, max(0.0, percent)) if math.isfinite(percent) else None
+        return {"battery": percent, "charging": None if battery is None else battery.charging}
+
+    async def _hear(self) -> None:
+        while True:
+            self.bus.publish(ConversationFromCloud(await self.link.conversation()))
+            # Parts may come many at once, such as pieces of text: let the module that
+            # holds the conversation take each one before the next, so that its queue
+            # does not overflow.
+            await asyncio.sleep(0)

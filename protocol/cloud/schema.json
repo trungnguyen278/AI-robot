@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Robot-cloud link, version 1.0",
-  "description": "Every message of protocol/cloud/README.md. Validate a message from the robot against #/$defs/from_robot, one from the cloud against #/$defs/from_cloud. Unknown message types and fields are allowed, so that newer minor versions can add them.",
+  "title": "Robot-cloud link, version 2.0",
+  "description": "Every message of protocol/cloud/README.md, each sent as one text stream on the topic ai-robot. Validate a message from the robot against #/$defs/from_robot, one from the cloud against #/$defs/from_cloud. Unknown message types and fields are allowed, so that newer minor versions can add them.",
   "$defs": {
     "id": {"type": "string", "minLength": 1, "maxLength": 64},
     "time": {"type": "number", "minimum": 0, "description": "Unix seconds on the sender's clock"},
@@ -20,24 +20,6 @@
       }
     },
 
-    "format": {
-      "type": "object",
-      "required": ["id", "codec", "rate", "channels", "frame_ms"],
-      "properties": {
-        "id": {"type": "integer", "minimum": 0, "maximum": 255},
-        "codec": {"type": "string", "minLength": 1, "maxLength": 32, "description": "opus or pcm_s16le; others are ignored by a side that does not know them"},
-        "rate": {"type": "integer", "minimum": 8000, "maximum": 192000},
-        "channels": {"type": "integer", "minimum": 1, "maximum": 2},
-        "frame_ms": {"type": "number", "exclusiveMinimum": 0, "maximum": 120},
-        "bitrate": {
-          "type": "array",
-          "prefixItems": [{"type": "integer", "minimum": 1}, {"type": "integer", "minimum": 1}],
-          "minItems": 2,
-          "maxItems": 2
-        }
-      }
-    },
-    "offer": {"type": "array", "items": {"$ref": "#/$defs/format"}, "maxItems": 32},
     "event_kind": {
       "type": "object",
       "required": ["name", "description", "schema"],
@@ -49,43 +31,27 @@
     },
 
     "robot_hello": {
-      "required": ["protocol", "software", "time", "utc_offset", "media", "events"],
+      "required": ["protocol", "software", "time", "utc_offset", "conversations", "events"],
       "properties": {
         "protocol": {"$ref": "#/$defs/version"},
         "software": {"type": "string", "minLength": 1, "maxLength": 64},
         "time": {"$ref": "#/$defs/time"},
         "utc_offset": {"type": "integer", "minimum": -1440, "maximum": 1440, "description": "Minutes"},
-        "media": {
-          "type": "object",
-          "required": ["speech", "voice"],
-          "properties": {"speech": {"$ref": "#/$defs/offer"}, "voice": {"$ref": "#/$defs/offer"}}
-        },
-        "events": {"type": "array", "items": {"$ref": "#/$defs/event_kind"}, "maxItems": 256},
-        "resume": {"type": "string", "minLength": 1, "maxLength": 512}
+        "conversations": {"type": "boolean", "description": "The robot publishes its microphone for turns and plays the agent's voice"},
+        "events": {"type": "array", "items": {"$ref": "#/$defs/event_kind"}, "maxItems": 256}
       }
     },
     "cloud_hello": {
-      "required": ["reply_to", "protocol", "session", "time", "media", "events"],
+      "required": ["reply_to", "protocol", "session", "time", "conversations", "events"],
       "properties": {
         "protocol": {"$ref": "#/$defs/version"},
         "session": {
           "type": "object",
           "required": ["id"],
-          "properties": {
-            "id": {"type": "string", "minLength": 1, "maxLength": 128},
-            "resume": {"type": "string", "minLength": 1, "maxLength": 512},
-            "resume_within": {"type": "number", "minimum": 0, "description": "Seconds"}
-          }
+          "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 128}}
         },
         "time": {"$ref": "#/$defs/time"},
-        "media": {
-          "type": "object",
-          "required": ["speech", "voice"],
-          "properties": {
-            "speech": {"type": ["integer", "null"], "minimum": 0, "maximum": 255},
-            "voice": {"type": ["integer", "null"], "minimum": 0, "maximum": 255}
-          }
-        },
+        "conversations": {"type": "boolean", "description": "The agent takes turns and answers with its voice"},
         "events": {"type": "array", "items": {"$ref": "#/$defs/name"}, "maxItems": 256}
       }
     },
@@ -126,6 +92,13 @@
       "required": ["turn"],
       "properties": {"turn": {"$ref": "#/$defs/id"}, "reason": {"$ref": "#/$defs/short_text"}}
     },
+    "robot_speech_end": {
+      "required": ["turn", "speech_ms"],
+      "properties": {
+        "turn": {"$ref": "#/$defs/id"},
+        "speech_ms": {"type": "integer", "minimum": 0, "description": "How much speech the robot sent in the turn"}
+      }
+    },
     "response_start": {
       "required": ["response", "turn"],
       "properties": {
@@ -144,13 +117,6 @@
     "response": {
       "required": ["response"],
       "properties": {"response": {"$ref": "#/$defs/id"}}
-    },
-    "response_interrupted": {
-      "required": ["response", "played_ms"],
-      "properties": {
-        "response": {"$ref": "#/$defs/id"},
-        "played_ms": {"type": "integer", "minimum": 0}
-      }
     },
     "error": {
       "required": ["code", "message"],
@@ -171,9 +137,9 @@
         {"if": {"$ref": "#/$defs/is_mcp"}, "then": {"$ref": "#/$defs/mcp"}},
         {"if": {"$ref": "#/$defs/is_event"}, "then": {"$ref": "#/$defs/event"}},
         {"if": {"$ref": "#/$defs/is_turn_start"}, "then": {"$ref": "#/$defs/turn_start"}},
-        {"if": {"$ref": "#/$defs/is_turn_speech_end"}, "then": {"$ref": "#/$defs/turn"}},
+        {"if": {"$ref": "#/$defs/is_turn_speech_end"}, "then": {"$ref": "#/$defs/robot_speech_end"}},
         {"if": {"$ref": "#/$defs/is_turn_cancel"}, "then": {"$ref": "#/$defs/turn"}},
-        {"if": {"$ref": "#/$defs/is_response_interrupted"}, "then": {"$ref": "#/$defs/response_interrupted"}},
+        {"if": {"$ref": "#/$defs/is_response_interrupted"}, "then": {"$ref": "#/$defs/response"}},
         {"if": {"$ref": "#/$defs/is_error"}, "then": {"$ref": "#/$defs/error"}},
         {"if": {"$ref": "#/$defs/is_bye"}, "then": {"$ref": "#/$defs/bye"}}
       ]
