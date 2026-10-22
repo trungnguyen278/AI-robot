@@ -22,6 +22,7 @@ from ai_robot.ports.cloud import (
     TurnCancel,
     TurnStart,
 )
+from ai_robot.ports.identity import Identity
 
 Outcome = tuple[Mapping[str, Any] | None, str | None]  # the result's data, or an error
 
@@ -43,11 +44,15 @@ class SimCloud(Cloud):
         self.heard: deque[RobotPart] = deque(maxlen=1000)
         self.online = False
         self.conversing = False
+        self.identity: Identity | None = None
         self._requests: asyncio.Queue[ToolCall | CallCancelled] = asyncio.Queue()
         self._statuses: asyncio.Queue[LinkStatus] = asyncio.Queue()
         self._said: asyncio.Queue[CloudPart] = asyncio.Queue()
         self._outcomes: dict[str, asyncio.Future[Outcome]] = {}
         self._ids = itertools.count(1)
+
+    async def identify(self, identity: Identity) -> None:
+        self.identity = identity
 
     async def offer(
         self,

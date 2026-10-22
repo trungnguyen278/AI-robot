@@ -13,6 +13,7 @@ from typing import Any
 from ai_robot.core.data import Schema, frozen
 from ai_robot.ports.audio import AudioFormat
 from ai_robot.ports.base import Port
+from ai_robot.ports.identity import Identity
 
 # Names of capabilities and events, as MCP allows for tool names.
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
@@ -255,6 +256,11 @@ class Cloud(Port):
     session already lists everything the robot can do. It reconnects on its own after
     a loss; ``status`` tells when the session opens and closes.
     """
+
+    @abstractmethod
+    async def identify(self, identity: Identity) -> None:
+        """Prove that the robot is ``identity`` when the link asks the server for its
+        tokens (docs/decisions/0010-device-identity.md). Called before ``offer``."""
 
     @abstractmethod
     async def offer(

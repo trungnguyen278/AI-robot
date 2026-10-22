@@ -26,9 +26,11 @@ from typing import Any
 
 import pytest
 from livekit import api, rtc
+from token_server import TokenServer
 
 from ai_robot.adapters.livekit import cloud
 from ai_robot.adapters.livekit.cloud import LiveKitCloud, TrackMicrophone
+from ai_robot.adapters.sim.identity import SimIdentity
 from ai_robot.core.data import Schema
 from ai_robot.ports import (
     AudioFormat,
@@ -176,7 +178,7 @@ class Participant:
                 "type": "hello",
                 "id": "c1",
                 "reply_to": robot["id"],
-                "protocol": "2.0",
+                "protocol": "2.1",
                 "session": {"id": f"s-{uuid.uuid4().hex[:8]}"},
                 "time": time.time(),
                 "conversations": True,
@@ -195,9 +197,10 @@ async def robot(
     monkeypatch.setenv("AI_ROBOT_LIVEKIT_API_KEY", KEY)
     monkeypatch.setenv("AI_ROBOT_LIVEKIT_API_SECRET", SECRET)
     link = LiveKitCloud(
+        tokens="development",
         url=url,
         room=room,
-        identity="robot",
+        participant="robot",
         connect_timeout=TIMEOUT,
         hello_timeout=TIMEOUT,
         reconnect_first=0.2,
@@ -233,7 +236,7 @@ def test_the_robot_and_the_agent_meet_in_the_room(
                 hello = await agent.receive()
                 assert (hello["type"], hello["protocol"], hello["conversations"]) == (
                     "hello",
-                    "2.0",
+                    "2.1",
                     False,
                 )
                 await agent.answer_hello(hello)
@@ -393,14 +396,15 @@ def test_the_link_outlives_any_failure_and_tries_again(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     async def main() -> None:
-        def broken(room: str, identity: str) -> str:
+        def broken(room: str, participant: str) -> str:
             raise RuntimeError("a bug")
 
         monkeypatch.setattr(cloud, "development_token", broken)
         link = LiveKitCloud(
+            tokens="development",
             url="ws://127.0.0.1:9",
             room="robot",
-            identity="robot",
+            participant="robot",
             connect_timeout=1.0,
             hello_timeout=1.0,
             reconnect_first=0.01,
@@ -420,3 +424,45 @@ def test_the_link_outlives_any_failure_and_tries_again(
 
     with caplog.at_level(logging.ERROR):
         asyncio.run(main())
+
+
+def test_a_robot_gets_its_room_from_the_server(server: str) -> None:
+    async def main() -> None:
+        identity = SimIdentity()
+        await identity.open()
+        room = f"robot-{uuid.uuid4().hex[:8]}"
+        tokens = TokenServer(
+            {await identity.robot_id(): await identity.public_key()},
+            livekit_url=server,
+            mint=lambda robot: token(room, "robot"),
+        )
+        await tokens.start()
+        link = LiveKitCloud(
+            tokens="server",
+            url=tokens.url,
+            room="unused",
+            participant="unused",
+            connect_timeout=TIMEOUT,
+            hello_timeout=TIMEOUT,
+            reconnect_first=0.2,
+            reconnect_max=1.0,
+            rate=50.0,
+            burst=100,
+            backlog=500,
+            catalogue_ttl=60.0,
+        )
+        await link.identify(identity)
+        await link.open()
+        agent = Participant()
+        try:
+            await link.offer([LAMP], [CHANGED])
+            await agent.join(server, room, "agent", "agent")
+            await agent.answer_hello(await agent.receive())
+            assert (await asyncio.wait_for(link.status(), TIMEOUT)).online
+            assert len(tokens.assertions) == 1
+        finally:
+            await agent.leave()
+            await link.close()
+            await tokens.stop()
+
+    asyncio.run(main())

@@ -9,19 +9,19 @@ The robot's core AI runs in the cloud. The robot captures, plays, shows and move
 - events;
 - the calls through which the cloud drives the robot.
 
-Version **2.0**:
+Version **2.1**:
 - It builds on three ADRs:
   - [ADR-0009](../../docs/decisions/0009-cloud-link-webrtc.md): WebRTC through a LiveKit server;
   - [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md): typed JSON messages, and MCP for capabilities;
   - [ADR-0010](../../docs/decisions/0010-device-identity.md): the robot's identity.
-- Version 1.0 carried everything over one WebSocket ([ADR-0007](../../docs/decisions/0007-cloud-link-transport.md), superseded). No server ever spoke it.
+- Version 2.1 adds the [token endpoint](#tokens-from-the-server). Version 1.0 carried everything over one WebSocket ([ADR-0007](../../docs/decisions/0007-cloud-link-transport.md), superseded); no server ever spoke it.
 - It meets the [requirements](requirements.md), whose identifiers (SES-2, PRIV-1…) it cites.
 - [`schema.json`](schema.json) defines every message, in JSON Schema 2020-12.
 - [`examples/`](examples/) holds whole sessions. The robot's tests check them, and the robot's own messages, against the schema (`software/tests/test_cloud_protocol.py`, `test_cloud_session.py`).
 
-> **Implemented by the robot so far:**
-> - Everything below, but only with tokens it makes itself for a development server ([Joining](#joining)). The token endpoint of ADR-0010 comes with the robot's identity, in a later minor version.
-> - The robot offers audio only when a module holds conversations, and its voice module does not yet: it waits for a wake word and voice activity detection.
+> **Implemented by the robot so far:** everything below, with two limits:
+> - Its key lives in a file, kept by the `file` adapter of its `identity` port, until its TPM is fitted (ADR-0010).
+> - It offers audio only when a module holds conversations, and its voice module does not yet: it waits for a wake word and voice activity detection.
 
 ## The room
 
@@ -41,15 +41,65 @@ The robot and the cloud meet in a LiveKit room, one for each robot. LiveKit carr
 
 ## Joining
 
-The robot needs the server's address, `url`, and a token: a JWT that names the room and the robot's identity, and lets it publish its microphone and send data.
-- **Address.** `wss://`: TLS, with the server's certificate checked against the system's trusted authorities. `ws://` is accepted only to the robot itself (`127.0.0.1`, `::1`, `localhost`), for development (SEC-1).
-- **Tokens from the server.** `ai-robot-server` gives the robot short-lived tokens in exchange for assertions signed by its key ([ADR-0010](../../docs/decisions/0010-device-identity.md)). The token endpoint is specified with the robot's identity, in a later minor version.
-- **Tokens for development.** Against a development server, the robot makes its own token with that server's API key and secret, from the environment variables `AI_ROBOT_LIVEKIT_API_KEY` and `AI_ROBOT_LIVEKIT_API_SECRET`. The room and the identity are settings. A robot in a home never holds these.
-- **Staying connected.**
-  - LiveKit keeps the connection alive and resumes it after a short loss (SES-3, SES-5).
-  - When it cannot, the robot joins again after a random wait, from 0 to `min(reconnect_max, reconnect_first × 2ⁿ)`, where n counts the failed attempts in a row. That is 1 s at first, then 2 s, and so on up to 60 s, as shipped: exponential backoff with full jitter (SES-4).
-  - A join that reaches the `hello` exchange resets n. Each join opens a new session.
-- **The robot's settings.** The robot's timings and rates in this document are settings, in `[ports.cloud.livekit]` of `software/config/base.toml`, and the values given here are those shipped. The sizes, the names and the versions are the protocol's own.
+To join its room, the robot needs the LiveKit server's address and a token: a JWT that names the room and the robot's identity, and lets it publish its microphone and send data. It gets both from `ai-robot-server`, or makes the token itself for a development server.
+
+**Addresses.** `https://` and `wss://` use TLS, with the server's certificate checked against the system's trusted authorities. `http://` and `ws://` are accepted only to the robot itself (`127.0.0.1`, `::1`, `localhost`), for development (SEC-1).
+
+### Tokens from the server
+
+A robot that its owner has set up has an identifier, and a key pair whose public half `ai-robot-server` knows ([ADR-0010](../../docs/decisions/0010-device-identity.md)). Before each join, it asks the server's token endpoint, `/robot/token`, for tokens. It proves who it is with an assertion signed by its key: OAuth 2.0 client authentication with a JWT ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523), §2.2).
+
+```http
+POST /robot/token HTTP/1.1
+Host: cloud.example
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials
+&client_assertion_type=urn%3Aietf%3Aparams%3Aoauth%3Aclient-assertion-type%3Ajwt-bearer
+&client_assertion=eyJhbGciOiJFUzI1NiIsImtpZCI6...
+```
+
+The assertion is a JWT signed with ES256, ECDSA on P-256 with SHA-256 ([RFC 7518](https://www.rfc-editor.org/rfc/rfc7518), §3.4):
+
+| Part | Content |
+|---|---|
+| Header | `alg`: `ES256`; `typ`: `JWT`; `kid`: the key's JWK thumbprint ([RFC 7638](https://www.rfc-editor.org/rfc/rfc7638)), so that the server finds the key, and can know two of a robot's keys while it changes them |
+| `iss`, `sub` | The robot's identifier |
+| `aud` | The token endpoint's URL |
+| `iat`, `exp` | When it was made, and when it expires: at most 5 minutes later |
+| `jti` | A random identifier. The server refuses one it has already seen while it is valid, so that a replayed assertion is worthless (SEC-12). |
+
+The server answers with JSON ([`schema.json`](schema.json), `$defs/token_response`):
+
+```json
+{"access_token": "...", "token_type": "Bearer", "expires_in": 600,
+ "livekit": {"url": "wss://media.cloud.example", "token": "eyJhbGciOiJIUzI1NiIs..."}}
+```
+
+| Field | Meaning |
+|---|---|
+| `livekit.url`, `livekit.token` | Where to join the robot's room, and with what. The token names the room and the robot's identity, and lets it publish only a microphone. |
+| `access_token`, `token_type` | A token for the server's own API, as OAuth 2.0 gives it. |
+| `expires_in` | How many seconds the tokens last. |
+
+- **Refusals** follow OAuth 2.0 ([RFC 6749](https://www.rfc-editor.org/rfc/rfc6749), §5.2): status 400 or 401, and JSON with `error` and `error_description`.
+  - `invalid_client` means a key the server does not know, or one that was revoked: the robot is not set up.
+  - The robot tries again later, with the same backoff as for joining.
+- **No redirects.** The endpoint answers itself. The robot does not follow a redirect, which would carry its assertion to an address it never chose: it takes one as a refusal.
+- **Renewal.** The robot asks for new tokens at each join. While it stays in its room, LiveKit renews the token it joined with.
+- **The clock.** The robot keeps its clock right (NTP); the server refuses assertions from a clock far off.
+
+### Tokens for development
+
+Against a development LiveKit server, the robot makes its own token with that server's API key and secret, from the environment variables `AI_ROBOT_LIVEKIT_API_KEY` and `AI_ROBOT_LIVEKIT_API_SECRET`. The room and the identity are settings. A robot in a home never holds these.
+
+### Staying connected
+
+- LiveKit keeps the connection alive and resumes it after a short loss (SES-3, SES-5).
+- When it cannot, the robot joins again after a random wait, from 0 to `min(reconnect_max, reconnect_first × 2ⁿ)`, where n counts the failed attempts in a row. That is 1 s at first, then 2 s, and so on up to 60 s, as shipped: exponential backoff with full jitter (SES-4).
+- A join that reaches the `hello` exchange resets n. Each join opens a new session.
+
+**The robot's settings.** The robot's timings and rates in this document are settings, in `[ports.cloud.livekit]` of `software/config/base.toml`, and the values given here are those shipped. There, `tokens` chooses where the robot gets its tokens, `server` or `development`, and `url` is the server's address or the development LiveKit server's. The sizes, the names, the paths and the versions are the protocol's own.
 
 ## Messages
 
@@ -90,7 +140,7 @@ The robot needs the server's address, `url`, and a token: a JWT that names the r
 The robot speaks first. Once it has joined and an agent is in the room, it sends its `hello` to that agent:
 
 ```json
-{"type": "hello", "id": "r1", "protocol": "2.0", "software": "0.1.0",
+{"type": "hello", "id": "r1", "protocol": "2.1", "software": "0.1.0",
  "time": 1792130400.25, "utc_offset": 420, "conversations": true,
  "events": [{"name": "screen.touched", "description": "Someone tapped the screen",
              "schema": {"type": "object", "properties": {"x": {"type": "number"}, "y": {"type": "number"}}}}]}
@@ -107,7 +157,7 @@ The robot speaks first. Once it has joined and an agent is in the room, it sends
 The agent sends nothing before it, and answers with its own:
 
 ```json
-{"type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.0",
+{"type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.1",
  "session": {"id": "s-5f2a"}, "time": 1792130400.31, "conversations": true, "events": ["screen.touched"]}
 ```
 

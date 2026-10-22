@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import logging
 import time
 from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
@@ -65,9 +64,10 @@ CHANGED = EventKind("lamp.changed", "The lamp changed", SWITCH)
 
 # The link's settings, as shipped.
 SETTINGS = {
+    "tokens": "development",
     "url": "ws://127.0.0.1:7880",
     "room": "robot",
-    "identity": "robot",
+    "participant": "robot",
     "connect_timeout": 10.0,
     "hello_timeout": 5.0,
     "reconnect_first": 1.0,
@@ -228,7 +228,7 @@ def test_the_robot_says_hello_first_and_the_session_opens() -> None:
     async def main() -> None:
         async with started() as (link, session, agent, _, _):
             hello = await agent.receive()
-            assert (hello["type"], hello["id"], hello["protocol"]) == ("hello", "r1", "2.0")
+            assert (hello["type"], hello["id"], hello["protocol"]) == ("hello", "r1", "2.1")
             assert hello["conversations"] is True
             assert [event["name"] for event in hello["events"]] == ["lamp.changed"]
             await agent.send(agent_hello(hello))
@@ -726,25 +726,6 @@ def test_the_turn_and_the_answer_end_with_their_session() -> None:
 
 
 @pytest.mark.parametrize(
-    ("url", "allowed"),
-    [
-        ("wss://cloud.example", True),
-        ("ws://127.0.0.1:7880", True),
-        ("ws://localhost:7880", True),
-        ("ws://cloud.example", False),
-        ("https://cloud.example", False),
-        ("", False),
-    ],
-)
-def test_addresses_are_checked(url: str, allowed: bool) -> None:
-    if allowed:
-        assert LiveKitCloud(**{**SETTINGS, "url": url}).url == url
-    else:
-        with pytest.raises(ValueError, match="url"):
-            LiveKitCloud(**{**SETTINGS, "url": url})
-
-
-@pytest.mark.parametrize(
     ("change", "message"),
     [
         ({"reconnect_max": 0.5}, "reconnect_max must not be below reconnect_first"),
@@ -752,25 +733,10 @@ def test_addresses_are_checked(url: str, allowed: bool) -> None:
         ({"backlog": 0}, "backlog must be at least 1"),
         ({"catalogue_ttl": -1.0}, "catalogue_ttl must not be negative"),
         ({"hello_timeout": 0}, "hello_timeout must be a positive number"),
-        ({"room": ""}, "room and identity must not be empty"),
+        ({"room": ""}, "room and participant must not be empty"),
+        ({"tokens": "magic"}, "tokens must be one of server, development"),
     ],
 )
 def test_settings_are_checked(change: dict[str, Any], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         LiveKitCloud(**{**SETTINGS, **change})
-
-
-def test_without_a_development_key_there_is_no_token(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    from ai_robot.adapters.livekit.cloud import NoToken, development_token
-
-    monkeypatch.delenv("AI_ROBOT_LIVEKIT_API_KEY", raising=False)
-    with pytest.raises(NoToken, match="AI_ROBOT_LIVEKIT_API_KEY"):
-        development_token("robot", "robot")
-    monkeypatch.setenv("AI_ROBOT_LIVEKIT_API_KEY", "key")
-    monkeypatch.setenv("AI_ROBOT_LIVEKIT_API_SECRET", "a-secret-long-enough-for-a-test-token")
-    assert development_token("robot", "robot").count(".") == 2  # a JWT
-
-    with caplog.at_level(logging.WARNING):
-        assert caplog.text == ""

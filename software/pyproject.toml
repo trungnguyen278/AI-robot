@@ -10,7 +10,8 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
-  "aiohttp>=3.13,<4",  # the screen served to a browser (adapters/web)
+  "aiohttp>=3.13,<4",  # the screen served to a browser, and requests to the cloud
+  "cryptography>=46,<51",  # keys kept in software, for development (adapters/keys)
   "jsonschema>=4.23,<5",  # checking data against the protocols' JSON Schemas
   "livekit>=1.1.21,<2",  # the cloud link over WebRTC (adapters/livekit)
   "livekit-api>=1.2.2,<2",  # tokens for a development LiveKit server

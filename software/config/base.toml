@@ -108,8 +108,12 @@ adapter = "sim"
 # How the link behaves (protocol/cloud/README.md). The LiveKit server's address, url,
 # is set where the server is chosen: local.toml or a profile.
 [ports.cloud.livekit]
+# Where the robot gets the token to join its room: "server", from ai-robot-server at url
+# (https://), with its identity; or "development", made with the key of a development
+# LiveKit server at url (ws://), from the environment (see local.example.toml).
+tokens = "server"
 room = "robot"  # the room of the tokens the robot makes for a development server...
-identity = "robot"  # ...and the robot's identity in it
+participant = "robot"  # ...and the robot's name in it
 connect_timeout = 10.0  # seconds to join the room
 hello_timeout = 5.0  # seconds the cloud's agent has to answer the robot's hello
 reconnect_first = 1.0  # seconds: the longest wait before the first new attempt
@@ -118,6 +122,13 @@ rate = 50.0  # messages a second the robot handles from the cloud...
 burst = 100  # ...in bursts of up to this many...
 backlog = 500  # ...while up to this many more wait their turn; it drops the rest
 catalogue_ttl = 60.0  # seconds the cloud may cache the robot's catalogue
+
+# The robot's identity: an identifier, and the key that proves it to ai-robot-server
+# (docs/decisions/0010-device-identity.md). "sim" makes a new one at each start, which no
+# server knows; "file" keeps one in a file, for a development computer: set its path in
+# local.toml. A robot keeps its key in a TPM.
+[ports.identity]
+adapter = "sim"
 
 # When the sun rises and sets. "fixed" until the robot's place is known; for the real
 # times, select "solar" in local.toml with the robot's latitude and longitude (see

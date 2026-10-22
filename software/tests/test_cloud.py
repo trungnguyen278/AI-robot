@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from ai_robot.adapters.sim.cloud import SimCloud
+from ai_robot.adapters.sim.identity import SimIdentity
 from ai_robot.adapters.sim.screen import SimScreen
 from ai_robot.core.bus import Bus
 from ai_robot.core.capabilities import CapabilityHost
@@ -126,7 +127,7 @@ class Lamp(Module):
 
 def cloud_module(bus: Bus, cloud: SimCloud, timeout: float = TIMEOUT) -> CloudModule:
     return CloudModule(
-        context("cloud", bus, {"cloud": cloud}),
+        context("cloud", bus, {"cloud": cloud, "identity": SimIdentity()}),
         allowed_classes=["informational"],
         call_timeout=timeout,
     )
@@ -421,7 +422,7 @@ def test_the_clouds_part_reaches_the_robot_in_order() -> None:
 
 
 def test_settings_are_checked() -> None:
-    ctx = context("cloud", Bus(), {"cloud": SimCloud()})
+    ctx = context("cloud", Bus(), {"cloud": SimCloud(), "identity": SimIdentity()})
     with pytest.raises(ConfigError, match=r"allowed_classes: unknown classes \['flying'\]"):
         create(CloudModule, "modules.cloud", ctx, allowed_classes=["flying"], call_timeout=1.0)
     with pytest.raises(ConfigError, match="call_timeout must be a positive number"):
