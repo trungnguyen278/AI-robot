@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""A simulated cloud: the robot runs and is tested without ai-robot-server."""
+"""A simulated cloud: the robot runs and is tested without ai-cloud."""
 
 from __future__ import annotations
 

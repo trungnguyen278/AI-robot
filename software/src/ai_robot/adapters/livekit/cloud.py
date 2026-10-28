@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""The link to ai-robot-server through a LiveKit server (protocol/cloud/README.md).
+"""The link to ai-cloud through a LiveKit server (protocol/cloud/README.md).
 
 The robot gets a token for its room (``tokens.py``), joins it (ADR-0009), holds a
 session with the cloud's agent there (``session.py``), and joins again after a loss. The
@@ -150,7 +150,7 @@ class LiveKitCloud(Cloud):
     """The link to the cloud through a LiveKit server (protocol/cloud/README.md, Joining).
 
     ``tokens`` says where the robot gets the token to join its room:
-    - ``server``: from ``ai-robot-server`` at ``url`` (``https://``, or ``http://`` to
+    - ``server``: from ``ai-cloud`` at ``url`` (``https://``, or ``http://`` to
       this computer), in exchange for an assertion signed by the robot's identity
       (``identify``), or from the server the robot was registered with (``serve``). The
       server says which LiveKit server to join, and whether it knows the robot;

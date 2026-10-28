@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""ai-robot-server's token endpoint, as the tests need it (protocol/cloud/README.md,
+"""ai-cloud's token endpoint, as the tests need it (protocol/cloud/README.md,
 Tokens from the server). It checks assertions with PyJWT, a JWT library of its own, so
 that the robot's hand-made ES256 assertions are proven to be standard."""
 

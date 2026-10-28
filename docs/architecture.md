@@ -5,8 +5,8 @@
 ```
               ┌──────── Raspberry Pi 5 — brain: ROS 2 on Ubuntu ───────┐
  Mics ─USB──▶ │ voice: wake word, VAD, conversation                    │
- Speaker ◀USB │ vision: AI camera (IMX500)                             │ ◀─ Wi-Fi ─▶ ai-robot-server
- Camera ─CSI▶ │ screen: the face on the 7" display (ui/)               │ ◀─ BLE ───▶ ai-robot-app
+ Speaker ◀USB │ vision: AI camera (IMX500)                             │ ◀─ Wi-Fi ─▶ ai-cloud
+ Camera ─CSI▶ │ screen: the face on the 7" display (ui/)               │ ◀─ BLE ───▶ ai-app
  Display ◀DSI │ motion · behavior · settings · setup · cloud · system  │
               │ ros2_control: tracks, neck and arms, body sensors      │
               └───────────────────────────┬────────────────────────────┘
@@ -24,8 +24,8 @@
 |---|---|---|
 | Raspberry Pi 5 | Audio, vision, face, AI, networking (built-in Wi-Fi/BLE), behavior; motion, through ros2_control's controllers | Real-time control loops |
 | Body controller (microcontroller not chosen yet — [ADR-0004](decisions/0004-pi-software-first.md)) | Servos, motors and encoders, distance sensor, LEDs, battery voltage; the motors' speed loop, from the wheel speeds the Pi asks for; a safe stop when the Pi goes silent | Networking |
-| `ai-robot-server` (later) | The core AI: speech recognition, conversation, voice, and probably moods; storage, device management, updates | Physical safety: the robot checks every call locally |
-| `ai-robot-app` (later) | Pairing, settings, remote control | |
+| `ai-cloud` (later) | The core AI: speech recognition, conversation, voice, and probably moods; storage, device management, updates | Physical safety: the robot checks every call locally |
+| `ai-app` (later) | Pairing, settings, remote control | |
 
 ## Principles
 
@@ -48,7 +48,7 @@ nodes          system · settings · voice · vision · screen · setup · cloud
 ros2_control   controllers: tracks (differential drive) · neck and arms (joint trajectories)
                  │  broadcasters: joints · distance · battery          GPIO: lights
                  │  one hardware interface ── body protocol ──▶ body controller
-edges          screen ◀─ WebSocket ─▶ renderer (ui/)       cloud ◀─ WebRTC ─▶ LiveKit, ai-robot-server
+edges          screen ◀─ WebSocket ─▶ renderer (ui/)       cloud ◀─ WebSocket, WebRTC ─▶ ai-cloud, LiveKit
                setup ◀─ Bluetooth LE ─▶ the app
 with sensors   Nav2 and SLAM Toolbox · MoveIt 2 · ROS4HRI packages: configuration, not new code
 ```
@@ -104,7 +104,10 @@ software/                     a colcon workspace
 
 The screen is the exception that is real already: the `screen` module decides what it shows (the expression, a scene such as the clock or the weather, the gaze, the battery), and a renderer page in [`ui/`](../ui/README.md), shown full screen by a browser, draws it and keeps the face alive on its own. They talk over the [screen protocol](../protocol/screen/README.md) (proposed in [ADR-0006](decisions/0006-screen-renderer.md)). On the robot, Ubuntu Frame shows the page in Chromium, in kiosk mode (ADR-0017).
 
-The `cloud` module links the robot to `ai-robot-server` over the [cloud protocol](../protocol/cloud/README.md). Its transport is WebRTC through a LiveKit server ([ADR-0009](decisions/0009-cloud-link-webrtc.md), in place of the WebSocket of [ADR-0007](decisions/0007-cloud-link-transport.md)), and its messages are proposed in [ADR-0008](decisions/0008-cloud-link-messages.md).
+The `cloud` module links the robot to `ai-cloud` over the [cloud link](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/README.md), which ai-platform defines.
+- **Version 3.0** keeps a WebSocket open to `ai-cloud` for the session, and joins a LiveKit room only to talk, one for each conversation ([ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md)).
+- **The robot still implements 2.2**, from its frozen copy in [`protocol/cloud/`](../protocol/cloud/README.md): everything goes through a LiveKit room it stays in ([ADR-0009](decisions/0009-cloud-link-webrtc.md), in place of the WebSocket of [ADR-0007](decisions/0007-cloud-link-transport.md)). It moves to 3.0 when it pins ai-platform.
+- The messages follow [ADR-0008](decisions/0008-cloud-link-messages.md).
 - **Capabilities.** The cloud drives the robot through MCP tools, which the modules offer on the bus: each module offers the capabilities of what it owns, such as the screen's expressions and scenes. The robot checks every call against the capability's schema and safety class.
 - **Events.** Modules declare events, and the cloud subscribes to those it wants.
 - **Conversations.** The module that holds them takes turns and plays the answers; the `cloud` module carries them, with their audio, over the link. That module is `voice`, which opens them with a wake word.
@@ -140,7 +143,7 @@ The measurements on the Pi 5 (memory for each node, the face's frame rate, the c
 - [ ] Which microcontroller becomes the body controller ([ADR-0004](decisions/0004-pi-software-first.md)).
 - [ ] Pi ⇄ body link (concept v0 shows UART/I2C) and the packet format, behind ros2_control's hardware interface ([ADR-0017](decisions/0017-ros-2.md)).
 - [x] Does the body controller or the Pi drive the motor driver? Decided in [ADR-0017](decisions/0017-ros-2.md): the body controller, from the wheel speeds ros2_control asks for.
-- [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md). The transport is WebRTC through LiveKit ([ADR-0009](decisions/0009-cloud-link-webrtc.md)), the robot proves its identity with a key in a TPM ([ADR-0010](decisions/0010-device-identity.md)), and the messages are proposed in [ADR-0008](decisions/0008-cloud-link-messages.md). Version 2.2 of the protocol is implemented on the robot, its key kept in its TPM, or in a file on a development computer. Updates are proposed in [ADR-0014](decisions/0014-updates.md); where moods live comes next.
+- [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the link's [requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md) are in ai-platform. The link is a WebSocket for the session, and WebRTC through LiveKit to talk ([ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md), version 3.0). The robot proves its identity with a key in a TPM ([ADR-0010](decisions/0010-device-identity.md)), and the messages follow [ADR-0008](decisions/0008-cloud-link-messages.md). The robot implements version 2.2, its key kept in its TPM, or in a file on a development computer; 3.0 comes with the move to ai-platform's pin. Updates are proposed in [ADR-0014](decisions/0014-updates.md); where moods live comes next.
 - [x] Audio — decided in [ADR-0011](decisions/0011-audio-voice-processor.md): a USB voice processor (XMOS XVF3800) with four microphones and echo cancellation, which the robot also speaks through.
 - [ ] How the robot draws its screen — proposed in [ADR-0006](decisions/0006-screen-renderer.md): a renderer in a full-screen browser ([ui/](../ui/README.md)), driven by the Pi software over the [screen protocol](../protocol/screen/README.md).
 - [x] Set-up — decided in [ADR-0015](decisions/0015-set-up.md): the owner's app over Bluetooth LE, secured by a code on the robot's screen (SPAKE2+), which gives the Wi-Fi network and registers the robot ([protocol/setup](../protocol/setup/README.md)). The robot's side is implemented; the app and the server's registration are not.

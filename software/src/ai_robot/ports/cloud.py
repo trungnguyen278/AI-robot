@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""The link to the cloud, ``ai-robot-server`` (protocol/cloud/README.md)."""
+"""The link to the cloud, ``ai-cloud`` (protocol/cloud/README.md)."""
 
 from __future__ import annotations
 
@@ -288,7 +288,7 @@ class Cloud(Port):
 
     @abstractmethod
     async def serve(self, server: str) -> None:
-        """Ask ``server`` for the robot's tokens from now on: the ``ai-robot-server`` the
+        """Ask ``server`` for the robot's tokens from now on: the ``ai-cloud`` the
         robot was registered with at set-up (protocol/setup/README.md). Until then, the
         link asks the server of its own settings. ``ValueError`` for an address the link
         does not accept."""

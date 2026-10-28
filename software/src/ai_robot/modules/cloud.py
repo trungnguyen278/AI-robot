@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Cloud: the robot's link to ai-robot-server."""
+"""Cloud: the robot's link to ai-cloud."""
 
 from __future__ import annotations
 

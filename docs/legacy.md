@@ -9,8 +9,8 @@ Repository: <https://github.com/trungnguyen278/Luni_Robot> (superseded by this r
 | Free wake-word training (microWakeWord on Colab) | `tools/train_wakeword.ipynb`, `docs/WAKEWORD.md` | A new robot name means training a new keyword. The `.tflite` model should also run on Linux (untested) |
 | Emotion and scene design (eyes, 9-tone palette, ~238 variants) | `ui_design/` (JSX/SVG), `ui_design/REQUIREMENTS.md` | Keep the design language; the old renderer targets a 320×240 SPI display, so the 7" face needs a new one |
 | Procedural C++ renderer | `esp32-s3/lib/display/`, `esp32-s3/src/ui/` | Almost pure C++17 — only 3 files depend on ESP-IDF |
-| Cloud WebSocket protocol (auth, Opus 16 kHz / 60 ms, sync_data) | `docs/modules/network.md`, `docs/modules/inter-mcu.md` | Reference for `ai-robot-server` |
-| BLE provisioning (GATT, 3 access levels, HMAC) | `esp32-c5/docs/BLE_APP_DEV.md`, `docs/modules/ble-provisioning.md` | Reference for `ai-robot-app` |
+| Cloud WebSocket protocol (auth, Opus 16 kHz / 60 ms, sync_data) | `docs/modules/network.md`, `docs/modules/inter-mcu.md` | Reference for `ai-cloud` |
+| BLE provisioning (GATT, 3 access levels, HMAC) | `esp32-c5/docs/BLE_APP_DEV.md`, `docs/modules/ble-provisioning.md` | Reference for `ai-app` |
 | Connection state machine with per-error retry policy | `docs/modules/state-machine.md` | |
 
 ## Lessons learned

@@ -21,9 +21,9 @@ A companion robot for the home: it moves on its own, sees, listens and talks, sh
 | | Turning the head towards the speaker | 2-DOF neck + camera |
 | | Gestures (waving, pointing), perhaps picking up light objects | Two 3-DOF arms; the arm design may change |
 | Sense | Distance ahead, battery level; more sensors as needed | |
-| Connect | AI service: speech recognition, conversation, speech synthesis | In the cloud, `ai-robot-server` ([requirements](../protocol/cloud/requirements.md)) |
+| Connect | AI service: speech recognition, conversation, speech synthesis | In the cloud, `ai-cloud` ([requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md)) |
 | | Software updates over the air | |
-| | Set-up and settings on the robot's touch screen, or from a phone app over Bluetooth LE; remote control from the app | `ai-robot-app` |
+| | Set-up and settings on the robot's touch screen, or from a phone app over Bluetooth LE; remote control from the app | `ai-app` |
 | Stay safe | Emergency stop; safe stop if the Pi goes silent | Design rule 4 in [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | | Status lights; clean shutdown before the battery runs out | [hardware/README.md](../hardware/README.md), open issue 6 |
 

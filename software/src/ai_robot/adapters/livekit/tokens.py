@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Tokens to join the robot's room (protocol/cloud/README.md, Joining).
 
-A robot gets them from ``ai-robot-server``'s token endpoint, with an assertion signed by
+A robot gets them from ``ai-cloud``'s token endpoint, with an assertion signed by
 its key (docs/decisions/0010-device-identity.md). For a development LiveKit server, it
 makes them itself with that server's key.
 """
