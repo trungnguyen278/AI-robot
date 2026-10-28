@@ -14,7 +14,6 @@ from ai_robot.core.module import Module, ModuleContext
 from ai_robot.messages import (
     ExpressionRequest,
     InteractionChanged,
-    InteractionState,
     SceneRequest,
     ScreenPriority,
     ScreenTouched,
@@ -40,8 +39,9 @@ class BehaviorModule(Module):
     - looks sleepy at night: from ``sleepy_after_sunset`` hours after sunset until
       sunrise, as the ``daylight`` port gives them.
 
-    Planned: the conversation flow (wake word, listening, processing, speaking),
-    reactions to what vision sees, moods.
+    A conversation counts as an interaction, as a tap does.
+
+    Planned: reactions to what vision sees, moods.
     """
 
     owns = ("daylight",)
@@ -76,6 +76,7 @@ class BehaviorModule(Module):
         self._suns: dict[date, SunTimes] = {}
         self._daylight_failing = False
         self.taps = self.bus.subscribe(ScreenTouched)
+        self.conversation = self.bus.subscribe(InteractionChanged)
         self._last_interaction = 0.0
         self._interacted = asyncio.Event()
         self._ambient = False  # the clock is up because nobody interacted
@@ -83,16 +84,17 @@ class BehaviorModule(Module):
 
     async def start(self) -> None:
         self._last_interaction = self._now()
-        self.bus.publish(InteractionChanged(InteractionState.IDLE))
 
     async def run(self) -> None:
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(self._react_to_taps())
+            tasks.create_task(self._follow_the_conversation())
             tasks.create_task(self._ambient_screen())
             tasks.create_task(self._watch_the_night())
 
     async def stop(self) -> None:
         self.taps.close()
+        self.conversation.close()
 
     async def _react_to_taps(self) -> None:
         recent: deque[float] = deque()
@@ -106,6 +108,10 @@ class BehaviorModule(Module):
             else:
                 self.bus.publish(ExpressionRequest(REACTION, "happy", duration=self.happy_seconds))
             self._interaction(now)
+
+    async def _follow_the_conversation(self) -> None:
+        async for _ in self.conversation:
+            self._interaction(self._now())
 
     def _interaction(self, now: float) -> None:
         """Someone interacted: the ambient screen goes, and its countdown starts again."""

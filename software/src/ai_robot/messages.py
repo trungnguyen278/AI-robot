@@ -33,7 +33,7 @@ class InteractionState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class InteractionChanged(Message):
-    """The interaction state changed. Published by behavior."""
+    """Where the conversation is now. Published by voice, on each change."""
 
     state: InteractionState
 

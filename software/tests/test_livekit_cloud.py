@@ -164,7 +164,7 @@ class Participant:
                 "type": "hello",
                 "id": "c1",
                 "reply_to": robot["id"],
-                "protocol": "2.1",
+                "protocol": "2.2",
                 "session": {"id": f"s-{uuid.uuid4().hex[:8]}"},
                 "time": time.time(),
                 "conversations": True,
@@ -222,7 +222,7 @@ def test_the_robot_and_the_agent_meet_in_the_room(
                 hello = await agent.receive()
                 assert (hello["type"], hello["protocol"], hello["conversations"]) == (
                     "hello",
-                    "2.1",
+                    "2.2",
                     False,
                 )
                 await agent.answer_hello(hello)

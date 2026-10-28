@@ -2,7 +2,7 @@
   "description": "A session as the robot runs it today, without conversations: the hello exchange, MCP discovery, a subscription to catalogue changes, calls that succeed and fail, an event, and the end. The enum of expressions in tools/list is shortened here.",
   "messages": [
     {"from": "robot", "message": {
-      "type": "hello", "id": "r1", "protocol": "2.1", "software": "0.1.0",
+      "type": "hello", "id": "r1", "protocol": "2.2", "software": "0.1.0",
       "time": 1792130400.25, "utc_offset": 420, "conversations": false,
       "events": [{
         "name": "screen.touched",
@@ -18,7 +18,7 @@
       }]
     }},
     {"from": "cloud", "message": {
-      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.1",
+      "type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.2",
       "session": {"id": "s-5f2a"},
       "time": 1792130400.31, "conversations": true,
       "events": ["screen.touched"]

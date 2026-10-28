@@ -42,7 +42,8 @@ Proposed in [ADR-0005](decisions/0005-pi-software-platform.md): one Python proce
 modules    system · motion · voice · vision · screen · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
-ports      audio_in · audio_out · camera · screen · cloud · identity · daylight
+ports      audio_in · audio_out · wake_word · voice_activity · camera · screen
+           cloud · identity · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -55,7 +56,7 @@ The screen is the exception that is real already: the `screen` module decides wh
 The `cloud` module links the robot to `ai-robot-server` over the [cloud protocol](../protocol/cloud/README.md). Its transport is WebRTC through a LiveKit server ([ADR-0009](decisions/0009-cloud-link-webrtc.md), in place of the WebSocket of [ADR-0007](decisions/0007-cloud-link-transport.md)), and its messages are proposed in [ADR-0008](decisions/0008-cloud-link-messages.md).
 - **Capabilities.** The cloud drives the robot through MCP tools, which the modules offer on the bus: each module offers the capabilities of what it owns, such as the screen's expressions and scenes. The robot checks every call against the capability's schema and safety class.
 - **Events.** Modules declare events, and the cloud subscribes to those it wants.
-- **Conversations.** The module that holds them takes turns and plays the answers; the `cloud` module carries them, with their audio, over the link. That module will be `voice`, once it has a wake word.
+- **Conversations.** The module that holds them takes turns and plays the answers; the `cloud` module carries them, with their audio, over the link. That module is `voice`, which opens them with a wake word.
 - **Without a server.** A simulated cloud stands in for it.
 
 ## Open questions (each should become an ADR)

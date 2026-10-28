@@ -12,6 +12,9 @@ requires-python = ">=3.11"
 dependencies = [
   "aiohttp>=3.13,<4",  # the screen served to a browser, and requests to the cloud
   "cryptography>=46,<51",  # keys kept in software, for development (adapters/keys)
+  "pymicro-wakeword>=2.5,<3",  # wake words, with microWakeWord models (adapters/microwakeword)
+  "pysilero-vad>=3.4,<4",  # voice, with Silero VAD (adapters/silero)
+  "sounddevice>=0.5.6,<0.6",  # microphones and speaker through PortAudio (adapters/portaudio)
   "jsonschema>=4.23,<5",  # checking data against the protocols' JSON Schemas
   "livekit>=1.1.21,<2",  # the cloud link over WebRTC (adapters/livekit)
   "livekit-api>=1.2.2,<2",  # tokens for a development LiveKit server

@@ -9,17 +9,17 @@ The robot's core AI runs in the cloud. The robot captures, plays, shows and move
 - events;
 - the calls through which the cloud drives the robot.
 
-Version **2.1**:
+Version **2.2**:
 - It builds on three ADRs:
   - [ADR-0009](../../docs/decisions/0009-cloud-link-webrtc.md): WebRTC through a LiveKit server;
   - [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md): typed JSON messages, and MCP for capabilities;
   - [ADR-0010](../../docs/decisions/0010-device-identity.md): the robot's identity.
-- Version 2.1 adds the [token endpoint](#tokens-from-the-server). Version 1.0 carried everything over one WebSocket ([ADR-0007](../../docs/decisions/0007-cloud-link-transport.md), superseded); no server ever spoke it.
+- Version 2.2 has the cloud end the user's speech, the robot only falling back ([The end of speech](#turns)). Version 2.1 added the [token endpoint](#tokens-from-the-server). Version 1.0 carried everything over one WebSocket ([ADR-0007](../../docs/decisions/0007-cloud-link-transport.md), superseded); no server ever spoke it.
 - It meets the [requirements](requirements.md), whose identifiers (SES-2, PRIV-1…) it cites.
 - [`schema.json`](schema.json) defines every message, in JSON Schema 2020-12.
 - [`examples/`](examples/) holds whole sessions. The robot's tests check them, and the robot's own messages, against the schema (`software/tests/test_cloud_protocol.py`, `test_cloud_session.py`).
 
-> **Implemented by the robot so far:** everything below, except conversations: the robot offers audio only when a module holds them, and its voice module does not yet, as it waits for a wake word and voice activity detection. Its key is in its TPM (the `tpm` adapter of its `identity` port, ADR-0010), or in a file on a development computer.
+> **Implemented by the robot so far:** everything below. Its `voice` module holds the conversations, with a wake word and voice activity detection ([ADR-0013](../../docs/decisions/0013-listening-on-the-robot.md)). Its key is in its TPM (the `tpm` adapter of its `identity` port, ADR-0010), or in a file on a development computer.
 
 ## The room
 
@@ -138,7 +138,7 @@ Against a development LiveKit server, the robot makes its own token with that se
 The robot speaks first. Once it has joined and an agent is in the room, it sends its `hello` to that agent:
 
 ```json
-{"type": "hello", "id": "r1", "protocol": "2.1", "software": "0.1.0",
+{"type": "hello", "id": "r1", "protocol": "2.2", "software": "0.1.0",
  "time": 1792130400.25, "utc_offset": 420, "conversations": true,
  "events": [{"name": "screen.touched", "description": "Someone tapped the screen",
              "schema": {"type": "object", "properties": {"x": {"type": "number"}, "y": {"type": "number"}}}}]}
@@ -155,7 +155,7 @@ The robot speaks first. Once it has joined and an agent is in the room, it sends
 The agent sends nothing before it, and answers with its own:
 
 ```json
-{"type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.1",
+{"type": "hello", "id": "c1", "reply_to": "r1", "protocol": "2.2",
  "session": {"id": "s-5f2a"}, "time": 1792130400.31, "conversations": true, "events": ["screen.touched"]}
 ```
 
@@ -286,12 +286,13 @@ sequenceDiagram
   - `trigger` is `wake_word`, `tap`, `button`, `follow_up` or `barge_in`.
   - `context` is a snapshot of the robot's situation (IO-4): `battery` (percent) and `charging`, each `null` when unknown. Later minor versions may add fields.
 - **Speech.** The robot feeds the user's speech to its `speech` track from `turn.start` until the speech ends.
-- **The end of speech.** Either side may decide that the user has finished, and says so with `turn.speech_end`. Once either side has sent it, the robot stops feeding the track.
-  - **The robot** decides with voice activity detection, or after 30 s of speech. Its `turn.speech_end` says how much speech it sent, so that the cloud knows when it has all of it: the message and the audio travel apart.
+- **The end of speech.** Either side may decide that the user has finished, and says so with `turn.speech_end`. Once either side has sent it, the robot stops feeding the track ([ADR-0012](../../docs/decisions/0012-end-of-speech.md)).
+  - **The cloud** decides, with its own detection, which may use what was said, and sends `{"turn": "t1"}`.
+  - **The robot** decides only as a fallback, when the cloud has not: after a silence of a few seconds, which the robot sets, or after 30 s of speech. Its `turn.speech_end` says how much speech it sent, so that the cloud knows when it has all of it: the message and the audio travel apart.
     ```json
     {"type": "turn.speech_end", "id": "r5", "turn": "t1", "speech_ms": 2140}
     ```
-  - **The cloud** decides with its own detection, earlier or later, and sends `{"turn": "t1"}`.
+- **Nothing heard.** If nobody speaks within a few seconds of `turn.start`, the robot cancels the turn with `turn.cancel` and the reason `nothing heard`.
 - **Cancelling.** Either side may abandon a turn with `turn.cancel` `{"turn": "t1", "reason": "nothing heard"}`.
 - **One turn at a time.** A session has at most one turn (SES-8): a new `turn.start` ends the previous turn as if it were cancelled.
 

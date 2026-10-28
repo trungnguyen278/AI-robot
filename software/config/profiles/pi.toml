@@ -6,6 +6,20 @@
 # The ports without one yet run the simulated adapters, as desktop does. The body stays
 # simulated until the body controller is chosen (docs/decisions/0004).
 
+# Its microphones and speaker: the voice processor, through PipeWire (docs/decisions/0013).
+[ports.audio_in]
+adapter = "portaudio"
+
+[ports.audio_out]
+adapter = "portaudio"
+
+# What it hears on its own: its wake words, and voice.
+[ports.wake_word]
+adapter = "micro"
+
+[ports.voice_activity]
+adapter = "silero"
+
 # The robot's identity, in its TPM (docs/decisions/0010). Needs the tpm extra.
 [ports.identity]
 adapter = "tpm"

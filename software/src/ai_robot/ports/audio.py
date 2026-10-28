@@ -59,7 +59,8 @@ class AudioOut(Port):
 
     @abstractmethod
     async def drain(self) -> None:
-        """Wait until all queued audio has been played."""
+        """Wait until the audio queued before the call has been played; what is
+        written meanwhile does not hold it up."""
 
     @abstractmethod
     async def drop(self) -> None:

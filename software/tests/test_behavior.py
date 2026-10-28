@@ -18,7 +18,14 @@ from ai_robot.core.bus import Bus, Message, Subscription
 from ai_robot.core.config import ConfigError
 from ai_robot.core.factory import create
 from ai_robot.core.module import ModuleContext, RobotInfo
-from ai_robot.messages import ExpressionRequest, SceneRequest, ScreenPriority, ScreenTouched
+from ai_robot.messages import (
+    ExpressionRequest,
+    InteractionChanged,
+    InteractionState,
+    SceneRequest,
+    ScreenPriority,
+    ScreenTouched,
+)
 from ai_robot.modules.behavior import (
     AMBIENT,
     MOOD,
@@ -141,6 +148,18 @@ def test_the_clock_comes_when_nobody_interacts_and_a_tap_takes_it_away() -> None
             bus.publish(tap())
             assert await next_of(scenes) == SceneRequest(AMBIENT, None)
             assert await next_of(scenes) == clock  # once idle again
+
+    asyncio.run(main())
+
+
+def test_a_conversation_takes_the_clock_away() -> None:
+    async def main() -> None:
+        bus, module = make(idle_minutes=0.002)  # 0.12 s
+        scenes = bus.subscribe(SceneRequest)
+        async with running(module):
+            assert (await next_of(scenes)).scene == "clock"
+            bus.publish(InteractionChanged(InteractionState.LISTENING))
+            assert await next_of(scenes) == SceneRequest(AMBIENT, None)
 
     asyncio.run(main())
 
