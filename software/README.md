@@ -153,7 +153,7 @@ The link follows the [cloud protocol](../protocol/cloud/README.md). The cloud se
 
 ### Set-up
 
-The `setup` module sets the robot up with the owner's app, over Bluetooth LE ([protocol/setup](../protocol/setup/README.md), [ADR-0015](../docs/decisions/0015-set-up.md)):
+The `setup` module sets the robot up with the owner's app, over Bluetooth LE ([set-up](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/setup/README.md), in ai-platform; [ADR-0015](../docs/decisions/0015-set-up.md)):
 - **When.** Set-up opens by itself while the robot is not bound, or when someone at the robot asks; it shows a code and its QR code on the screen, and closes after `window` seconds, when it is done, or after `attempts` wrong codes. A tap opens it again while the robot is not bound.
 - **The session.** The code secures it, through SPAKE2+ (`core/spake2plus.py`, checked against RFC 9383's test vectors), then AES-GCM (`core/setup_session.py`). The app scans for networks, joins one, and asks for the robot's registration, which the `cloud` module signs with the robot's key.
 - **Bound.** The robot is bound once the server it was registered with accepts it; the `binding` port keeps that, so that the robot knows it while offline (a file on the robot).

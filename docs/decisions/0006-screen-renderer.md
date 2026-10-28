@@ -1,8 +1,8 @@
 # 0006 — Screen: a browser renderer with a procedural face, driven by the Pi software
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
-- **Revised:** 2026-10-16, with scenes (still proposed; see the dev log)
+- **Revised:** 2026-10-16, with scenes (see the dev log)
 
 ## Context
 

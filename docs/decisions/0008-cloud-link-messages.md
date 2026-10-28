@@ -1,7 +1,11 @@
 # 0008 — Cloud link messages: typed JSON, MCP for capabilities, binary audio frames
 
-- **Status:** Proposed; point 3, the binary audio frames, superseded by [0009](0009-cloud-link-webrtc.md)
+- **Status:** Accepted; point 3, the binary audio frames, superseded by [0009](0009-cloud-link-webrtc.md)
 - **Date:** 2026-10-16
+- **Amended by:**
+  - [ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md): the protocol is defined in ai-platform, in `protocols/cloud/` (point 4);
+  - [ai-platform ADR-0003](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0003-compatibility.md): the cloud speaks every major version that devices still use, each for at least 24 months after the next one ships, then tells the devices still on it to update (point 5);
+  - [ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md): on the control channel, each side numbers its messages in the session (`seq`), and a reply names the number it answers (`reply_to`), so that the session can resume on a new connection; a conversation's messages travel in its room, without numbers (point 1)
 
 ## Context
 

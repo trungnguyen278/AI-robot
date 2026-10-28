@@ -5,7 +5,7 @@ The **single source of truth** for each protocol between the robot's components.
 | Protocol | Between | Status |
 |---|---|---|
 | [Body link](body/README.md) | The Pi 5 and the body controller | Not decided yet |
-| [Screen](screen/README.md) | The Pi software (`software/`) and the screen renderer (`ui/`) | Version 1, proposed in [ADR-0006](../docs/decisions/0006-screen-renderer.md) |
+| [Screen](screen/README.md) | The Pi software (`software/`) and the screen renderer (`ui/`) | Version 1 ([ADR-0006](../docs/decisions/0006-screen-renderer.md)) |
 | [Cloud link](cloud/README.md) | The robot (`software/`) and `ai-cloud` | Moved to [ai-platform](https://github.com/trungnguyen278/ai-platform) (`protocols/cloud/`), now at version 3.0. This copy, version 2.2, is frozen: the robot implements it until it speaks 3.0, from `platform/` ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)) |
 | [Set-up](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/setup/README.md) | The owner's app (`ai-app`), the robot and `ai-cloud`, over Bluetooth LE | In ai-platform, which this repository pins at `platform/`: version 2.0, which the robot implements |
 

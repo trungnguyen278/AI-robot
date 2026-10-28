@@ -1,6 +1,6 @@
 # 0018 — Conversations on the robot: one wake word, many turns
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-28
 - **Amends:** [ADR-0012](0012-end-of-speech.md), whose fallbacks give way to the conversation's own limits, and [ADR-0013](0013-listening-on-the-robot.md), whose wake word now opens a conversation
 
