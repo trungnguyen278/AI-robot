@@ -5,16 +5,26 @@ that the robot's hand-made ES256 assertions are proven to be standard."""
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 import jwt
 from aiohttp import web
 
+from ai_robot.core.data import Schema
 from ai_robot.core.jose import thumbprint
 
 ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+SCHEMA = Path(__file__).resolve().parents[2] / "protocol" / "cloud" / "schema.json"
+
+
+def token_schema() -> Schema:
+    """The schema of the token endpoint's answer."""
+    root = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    return Schema("token_response", {**root, "$ref": "#/$defs/token_response"})
 
 
 class TokenServer:

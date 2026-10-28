@@ -8,6 +8,7 @@ adapters is selected:
 - ``web/``, with aiohttp: the screen served to a browser;
 - ``livekit/``: the link to the cloud;
 - ``keys/``: keys kept in software;
+- ``tpm/``, with tpm2-pytss: keys in the robot's TPM (the ``tpm`` extra, on Linux);
 - ``sun/``: sunrise and sunset;
 - later, ALSA, Picamera2 or the body link.
 """
@@ -37,6 +38,7 @@ ADAPTERS: dict[str, dict[str, str]] = {
     "identity": {
         "sim": "ai_robot.adapters.sim.identity:SimIdentity",
         "file": "ai_robot.adapters.keys.identity:FileIdentity",
+        "tpm": "ai_robot.adapters.tpm.identity:TpmIdentity",
     },
     "daylight": {
         "fixed": "ai_robot.adapters.sun.daylight:FixedDaylight",
@@ -73,7 +75,16 @@ def create_adapter(port: str, table: Mapping[str, Any]) -> Port:
     if not isinstance(specific, Mapping):
         raise ConfigError(f"[ports.{port}.{name}] must be a table")
     settings.update(specific)
-    adapter = create(import_object(adapters[name]), f"ports.{port} ({name})", **settings)
+    try:
+        cls = import_object(adapters[name])
+    except ModuleNotFoundError as error:
+        if error.name is None or error.name.partition(".")[0] == "ai_robot":
+            raise
+        raise ConfigError(
+            f"ports.{port}.adapter: {name!r} needs {error.name}, which is not installed "
+            "(software/README.md says what each adapter needs)"
+        ) from None
+    adapter = create(cls, f"ports.{port} ({name})", **settings)
     if not isinstance(adapter, PORT_TYPES[port]):
         raise TypeError(f"{adapters[name]} does not implement {PORT_TYPES[port].__name__}")
     return adapter

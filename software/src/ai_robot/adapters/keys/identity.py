@@ -19,11 +19,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
-from ai_robot.core.jose import b64url
+from ai_robot.core.jose import es256, p256_jwk
 from ai_robot.ports.identity import Identity
-
-# Bytes in a P-256 coordinate, and in each half of an ES256 signature (RFC 7518, §3.4).
-COORDINATE = 32
 
 
 class SoftwareIdentity(Identity):
@@ -44,17 +41,11 @@ class SoftwareIdentity(Identity):
 
     async def public_key(self) -> Mapping[str, str]:
         numbers = self._held()[1].public_key().public_numbers()
-        return {
-            "kty": "EC",
-            "crv": "P-256",
-            "x": b64url(numbers.x.to_bytes(COORDINATE, "big")),
-            "y": b64url(numbers.y.to_bytes(COORDINATE, "big")),
-        }
+        return p256_jwk(numbers.x, numbers.y)
 
     async def sign(self, data: bytes) -> bytes:
         der = self._held()[1].sign(data, ec.ECDSA(hashes.SHA256()))
-        r, s = decode_dss_signature(der)
-        return r.to_bytes(COORDINATE, "big") + s.to_bytes(COORDINATE, "big")
+        return es256(*decode_dss_signature(der))
 
     def _held(self) -> tuple[str, ec.EllipticCurvePrivateKey]:
         if self._id is None or self._key is None:
