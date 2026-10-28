@@ -9,17 +9,20 @@ Only pins that are used or planned are listed. GPIO is 3.3 V and **not 5 V toler
 
 | GPIO (BCM) | Physical pin | Function | Used for | Status |
 |---|---|---|---|---|
-| 2 / 3 | 3 / 5 | I2C1 SDA / SCL | ReSpeaker HAT codec | planned |
+| 7 | 26 | SPI0 CE1 | TPM chip select | proposed |
+| 9 / 10 / 11 | 21 / 19 / 23 | SPI0 MISO / MOSI / SCLK | TPM | proposed |
 | 14 / 15 | 8 / 10 | UART0 TX / RX | Link to the ESP32-S3 | planned |
-| 18 / 19 / 20 / 21 | 12 / 35 / 38 / 40 | I2S BCLK / LRCLK / DIN / DOUT | Audio: ReSpeaker **or** MAX98357A | planned — conflict, see [open issue 1](README.md#open-issues) |
+| 24 | 18 | GPIO, left as an input | TPM reset (RST#) | proposed |
+| — | 17 / 20 / 25 | 3.3 V / GND / GND | TPM supply | proposed |
 
-Not on the header: display → DSI port; camera → CSI port; fan → fan connector; RTC battery → BAT connector.
+- The TPM module covers pins 17 to 26, so GPIO8 (SPI0 CE0, pin 24) and GPIO25 (pin 22) stay unused ([TPM notes](components/letstrust-tpm.md)).
+- Nothing else on SPI0 may listen without a chip select.
+
+Not on the header: display → DSI port; camera → CSI port; microphones and speaker → USB, through the XVF3800 array ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md), proposed); fan → fan connector; RTC battery → BAT connector.
 
 ### I2C addresses on the Pi's I2C1 bus
 
-| Address | Device |
-|---|---|
-| unverified | TLV320AIC3104 codec (ReSpeaker HAT) |
+None: nothing on the header uses I2C1.
 
 ## ESP32-S3 (body-controller)
 
