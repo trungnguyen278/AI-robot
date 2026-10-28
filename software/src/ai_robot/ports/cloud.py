@@ -18,6 +18,7 @@ from ai_robot.ports.identity import Identity
 # Names of capabilities and events, as MCP allows for tool names.
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 MAX_ID = 64  # characters in the identifier of a turn or a response ($defs/id in schema.json)
+MAX_SPEECH_SECONDS = 30.0  # the robot ends a turn's speech after this long (README.md, Turns)
 
 
 class SafetyClass(StrEnum):

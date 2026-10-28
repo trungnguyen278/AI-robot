@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Robot-cloud link, version 2.1",
+  "title": "Robot-cloud link, version 2.2",
   "description": "Every message of protocol/cloud/README.md, each sent as one text stream on the topic ai-robot. Validate a message from the robot against #/$defs/from_robot, one from the cloud against #/$defs/from_cloud. Unknown message types and fields are allowed, so that newer minor versions can add them.",
   "$defs": {
     "id": {"type": "string", "minLength": 1, "maxLength": 64},

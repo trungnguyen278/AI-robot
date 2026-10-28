@@ -49,12 +49,15 @@ from ai_robot.ports.cloud import (
 from ai_robot.ports.daylight import Daylight, SunTimes
 from ai_robot.ports.identity import Identity
 from ai_robot.ports.image import Color, Image
+from ai_robot.ports.listening import VoiceActivity, WakeWord
 from ai_robot.ports.screen import Screen, ScreenState, Touch
 
 # The port names used in the configuration ([ports.<name>]) and in Module.owns.
 PORT_TYPES: dict[str, type[Port]] = {
     "audio_in": AudioIn,
     "audio_out": AudioOut,
+    "wake_word": WakeWord,
+    "voice_activity": VoiceActivity,
     "camera": Camera,
     "screen": Screen,
     "cloud": Cloud,
@@ -114,4 +117,6 @@ __all__ = [
     "TurnCancel",
     "TurnStart",
     "Voice",
+    "VoiceActivity",
+    "WakeWord",
 ]

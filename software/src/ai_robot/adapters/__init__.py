@@ -5,12 +5,15 @@ The configuration selects one adapter per port (``adapter = "sim"``). Adapters a
 grouped by technology, so the libraries of a technology are imported only when one of its
 adapters is selected:
 - ``sim/``: simulated;
+- ``portaudio/``, with sounddevice: the microphones and the speaker;
+- ``microwakeword/``, with pymicro-wakeword: wake words;
+- ``silero/``, with pysilero-vad: voice;
 - ``web/``, with aiohttp: the screen served to a browser;
 - ``livekit/``: the link to the cloud;
 - ``keys/``: keys kept in software;
 - ``tpm/``, with tpm2-pytss: keys in the robot's TPM (the ``tpm`` extra, on Linux);
 - ``sun/``: sunrise and sunset;
-- later, ALSA, Picamera2 or the body link.
+- later, Picamera2 or the body link.
 """
 
 from __future__ import annotations
@@ -24,8 +27,22 @@ from ai_robot.ports import PORT_TYPES, Port
 
 # port -> adapter name -> "package.module:Class"
 ADAPTERS: dict[str, dict[str, str]] = {
-    "audio_in": {"sim": "ai_robot.adapters.sim.audio:SimAudioIn"},
-    "audio_out": {"sim": "ai_robot.adapters.sim.audio:SimAudioOut"},
+    "audio_in": {
+        "sim": "ai_robot.adapters.sim.audio:SimAudioIn",
+        "portaudio": "ai_robot.adapters.portaudio.audio:PortAudioIn",
+    },
+    "audio_out": {
+        "sim": "ai_robot.adapters.sim.audio:SimAudioOut",
+        "portaudio": "ai_robot.adapters.portaudio.audio:PortAudioOut",
+    },
+    "wake_word": {
+        "sim": "ai_robot.adapters.sim.listening:SimWakeWord",
+        "micro": "ai_robot.adapters.microwakeword.wake_word:MicroWakeWords",
+    },
+    "voice_activity": {
+        "sim": "ai_robot.adapters.sim.listening:SimVoiceActivity",
+        "silero": "ai_robot.adapters.silero.voice_activity:SileroVoiceActivity",
+    },
     "camera": {"sim": "ai_robot.adapters.sim.camera:SimCamera"},
     "screen": {
         "sim": "ai_robot.adapters.sim.screen:SimScreen",

@@ -97,7 +97,7 @@ Proposed shape (decision 2 in §13, [ADR-0008](../../docs/decisions/0008-cloud-l
 
 1. **Trigger**, on the robot: the wake word, a tap, or a follow-up the cloud asked for. The face shows "listening" at once (PERF-1).
 2. **Turn start**: an event with the trigger and the context (IO-3, IO-4), then the user's speech as a stream (IO-2).
-3. **End of speech**: detected on the robot (voice activity detection) and reported (IO-3). The cloud may decide earlier or later. A turn **MUST** also end after a maximum duration. The previous generation had no voice activity detection: listening ended when its button was released, or after 30 s.
+3. **End of speech**: decided by the cloud or by the robot (decision 4), and reported (IO-3). A turn **MUST** also end after a maximum duration. The previous generation had no voice activity detection: listening ended when its button was released, or after 30 s.
 4. **Answer**: the cloud streams speech with its text (IO-9) and capability calls (IO-11), for example `screen.show_expression` with `happy` while it speaks. It ends the answer, or asks for a follow-up (IO-10).
 5. **Barge-in**: if the user speaks while the robot talks, the robot stops playback at once, on its own (PERF-3). It reports how much was played (IO-3) and starts a new turn.
 
@@ -223,7 +223,7 @@ Each becomes an ADR, `Proposed` until agreed.
 | 1 | Transport | WebSocket over TLS, carrying JSON and binary audio frames (the previous generation, xiaozhi, the OpenAI and Gemini realtime APIs). WebRTC (built for lossy networks, more complex). MQTT plus UDP audio. | Decided: WebRTC through a LiveKit server, for the audio and the messages ([ADR-0009](../../docs/decisions/0009-cloud-link-webrtc.md), superseding [ADR-0007](../../docs/decisions/0007-cloud-link-transport.md)) |
 | 2 | Message format | JSON-RPC 2.0 with MCP-shaped capabilities (§5). A protocol of our own. | MCP for capabilities, standard and what language models already consume, inside the link's own JSON messages: [ADR-0008](../../docs/decisions/0008-cloud-link-messages.md) |
 | 3 | Audio formats offered, and the baseline (§6.3) | Opus at 16 or 24 kHz, 20 or 60 ms frames, at several bit rates; 16-bit PCM at 16 kHz | Decided: Opus, negotiated by SDP, which every WebRTC endpoint supports ([ADR-0009](../../docs/decisions/0009-cloud-link-webrtc.md)) |
-| 4 | End of speech | On the robot (voice activity detection), the cloud confirming. In the cloud only. | Both: the robot ends turns locally, and the cloud may end them earlier |
+| 4 | End of speech | On the robot (voice activity detection), the cloud confirming. In the cloud only. | Proposed: the cloud ends the user's speech, and the robot only falls back, after a long silence or 30 s ([ADR-0012](../../docs/decisions/0012-end-of-speech.md)) |
 | 5 | Device identity and credentials | A client certificate (mutual TLS). Short-lived tokens signed with the device's key. A long-lived token from set-up (the previous generation). | Decided: a key pair in a TPM on the robot, registered at set-up; short-lived tokens in exchange for signed assertions ([ADR-0010](../../docs/decisions/0010-device-identity.md)) |
 | 6 | Updates | Debian packages, an image with two slots, or a container | To study with the Raspberry Pi OS update tools |
 | 7 | Where moods live | In the cloud, sending expression requests, as now planned. On the robot. | In the cloud. The robot's `behavior` module keeps only local reactions (taps, offline) |

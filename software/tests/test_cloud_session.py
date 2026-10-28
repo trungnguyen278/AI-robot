@@ -228,7 +228,7 @@ def test_the_robot_says_hello_first_and_the_session_opens() -> None:
     async def main() -> None:
         async with started() as (link, session, agent, _, _):
             hello = await agent.receive()
-            assert (hello["type"], hello["id"], hello["protocol"]) == ("hello", "r1", "2.1")
+            assert (hello["type"], hello["id"], hello["protocol"]) == ("hello", "r1", "2.2")
             assert hello["conversations"] is True
             assert [event["name"] for event in hello["events"]] == ["lamp.changed"]
             await agent.send(agent_hello(hello))

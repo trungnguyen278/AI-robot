@@ -43,6 +43,17 @@
 #     url = "ws://127.0.0.1:7880"
 #     room = "robot-desk"  # a room of its own on a server several people share
 
+# Talk to the robot with this computer's microphone and speaker. Use headphones:
+# without the robot's voice processor, nothing cancels its own voice.
+# [ports.audio_in]
+# adapter = "portaudio"
+# [ports.audio_out]
+# adapter = "portaudio"
+# [ports.wake_word]
+# adapter = "micro"
+# [ports.voice_activity]
+# adapter = "silero"
+
 # Tune how the robot behaves, for example a longer smile after a tap:
 # [modules.behavior]
 # happy_seconds = 3.0
