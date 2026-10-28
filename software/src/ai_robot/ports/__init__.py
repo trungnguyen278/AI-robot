@@ -11,6 +11,7 @@ every port:
 
 from ai_robot.ports.audio import AudioFormat, AudioIn, AudioOut
 from ai_robot.ports.base import Port
+from ai_robot.ports.binding import Binding, BindingStore
 from ai_robot.ports.body import (
     BatteryStatus,
     DriveBase,
@@ -50,7 +51,17 @@ from ai_robot.ports.daylight import Daylight, SunTimes
 from ai_robot.ports.identity import Identity
 from ai_robot.ports.image import Color, Image
 from ai_robot.ports.listening import VoiceActivity, WakeWord
+from ai_robot.ports.network import (
+    JoinError,
+    JoinFailure,
+    Network,
+    NetworkState,
+    NetworkStatus,
+    Security,
+    WifiNetwork,
+)
 from ai_robot.ports.screen import Screen, ScreenState, Touch
+from ai_robot.ports.setup import Connected, Disconnected, LinkEvent, Received, SetupLink
 
 # The port names used in the configuration ([ports.<name>]) and in Module.owns.
 PORT_TYPES: dict[str, type[Port]] = {
@@ -62,6 +73,9 @@ PORT_TYPES: dict[str, type[Port]] = {
     "screen": Screen,
     "cloud": Cloud,
     "identity": Identity,
+    "binding": BindingStore,
+    "setup_link": SetupLink,
+    "network": Network,
     "daylight": Daylight,
     "drive": DriveBase,
     "joints": Joints,
@@ -77,28 +91,39 @@ __all__ = [
     "AudioIn",
     "AudioOut",
     "BatteryStatus",
+    "Binding",
+    "BindingStore",
     "CallCancelled",
     "Camera",
     "Capability",
     "Cloud",
     "CloudPart",
     "Color",
+    "Connected",
     "ConversationAudio",
     "Daylight",
+    "Disconnected",
     "DriveBase",
     "EventKind",
     "Frame",
     "Identity",
     "Image",
     "Interrupted",
+    "JoinError",
+    "JoinFailure",
     "JointInfo",
     "Joints",
     "Lights",
+    "LinkEvent",
     "LinkStatus",
+    "Network",
+    "NetworkState",
+    "NetworkStatus",
     "Port",
     "Pose",
     "Power",
     "RangeSensor",
+    "Received",
     "ResponseEnd",
     "ResponseStart",
     "ResponseStop",
@@ -108,6 +133,8 @@ __all__ = [
     "SafetyClass",
     "Screen",
     "ScreenState",
+    "Security",
+    "SetupLink",
     "Speech",
     "SpeechEnd",
     "SunTimes",
@@ -119,4 +146,5 @@ __all__ = [
     "Voice",
     "VoiceActivity",
     "WakeWord",
+    "WifiNetwork",
 ]

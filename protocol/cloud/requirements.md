@@ -227,6 +227,7 @@ Each becomes an ADR, `Proposed` until agreed.
 | 5 | Device identity and credentials | A client certificate (mutual TLS). Short-lived tokens signed with the device's key. A long-lived token from set-up (the previous generation). | Decided: a key pair in a TPM on the robot, registered at set-up; short-lived tokens in exchange for signed assertions ([ADR-0010](../../docs/decisions/0010-device-identity.md)) |
 | 6 | Updates | Debian packages, an image with two slots, or a container | To study with the Raspberry Pi OS update tools |
 | 7 | Where moods live | In the cloud, sending expression requests, as now planned. On the robot. | In the cloud. The robot's `behavior` module keeps only local reactions (taps, offline) |
+| 8 | Set-up (§10) | The app over Bluetooth LE, secured by a code on the robot's screen (a PAKE). Bluetooth's own pairing. A Wi-Fi access point on the robot. The device authorization grant. | Proposed: the app over Bluetooth LE, with SPAKE2+ on a code shown on the robot's screen; the robot signs its registration, which the app relays ([ADR-0015](../../docs/decisions/0015-set-up.md)) |
 
 ## References
 

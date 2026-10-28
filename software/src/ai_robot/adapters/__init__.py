@@ -12,6 +12,9 @@ adapters is selected:
 - ``livekit/``: the link to the cloud;
 - ``keys/``: keys kept in software;
 - ``tpm/``, with tpm2-pytss: keys in the robot's TPM (the ``tpm`` extra, on Linux);
+- ``files/``: the robot's state in files;
+- ``bluez/``, with dbus-fast: Bluetooth LE, for set-up (Linux);
+- ``networkmanager/``, with dbus-fast: the robot's Wi-Fi (Linux);
 - ``sun/``: sunrise and sunset;
 - later, Picamera2 or the body link.
 """
@@ -56,6 +59,18 @@ ADAPTERS: dict[str, dict[str, str]] = {
         "sim": "ai_robot.adapters.sim.identity:SimIdentity",
         "file": "ai_robot.adapters.keys.identity:FileIdentity",
         "tpm": "ai_robot.adapters.tpm.identity:TpmIdentity",
+    },
+    "binding": {
+        "sim": "ai_robot.adapters.sim.binding:SimBindingStore",
+        "file": "ai_robot.adapters.files.binding:FileBindingStore",
+    },
+    "setup_link": {
+        "sim": "ai_robot.adapters.sim.setup:SimSetupLink",
+        "bluez": "ai_robot.adapters.bluez.setup:BluezSetupLink",
+    },
+    "network": {
+        "sim": "ai_robot.adapters.sim.network:SimNetwork",
+        "networkmanager": "ai_robot.adapters.networkmanager.network:NetworkManagerNetwork",
     },
     "daylight": {
         "fixed": "ai_robot.adapters.sun.daylight:FixedDaylight",

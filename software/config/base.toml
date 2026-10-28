@@ -26,7 +26,7 @@ shutdown_step_timeout = 5.0  # seconds each step of the shutdown may take before
 [modules]
 # Started in this order and stopped in reverse. motion comes last, so it is the first
 # to stop: the body is made safe before anything else shuts down.
-enabled = ["system", "voice", "vision", "screen", "cloud", "behavior", "motion"]
+enabled = ["system", "voice", "vision", "screen", "setup", "cloud", "behavior", "motion"]
 
 [modules.system]
 battery_interval = 5.0  # seconds between battery reports
@@ -58,6 +58,17 @@ nothing_heard = 6.0  # without voice this long after a turn starts, the turn is 
 barge_in = 0.4  # voice over an answer this long interrupts it
 offline_expression = "confused"  # the face when the wake word is heard but the cloud cannot talk
 offline_seconds = 2.0  # how long it shows
+
+[modules.setup]
+# Set-up from the app, over Bluetooth LE (protocol/setup/README.md; docs/decisions/0015).
+window = 900.0  # seconds set-up stays open with no session: 15 minutes, Matter's longest
+attempts = 20  # failed attempts with the code after which set-up closes, as in Matter
+idle = 120.0  # seconds a session may stay silent before it ends
+join_timeout = 60.0  # seconds joining a Wi-Fi network may take
+bind_timeout = 120.0  # seconds after set-up the screen waits for the server to accept the robot
+# What the QR code holds: {setup} stands for the set-up string. An address around it,
+# once the app has one, lets a phone's camera open the app.
+link = "{setup}"
 
 [modules.screen]
 # Microphone loudness (dBFS) that the face's voice reaction maps to 0 and to 1.
@@ -163,6 +174,44 @@ adapter = "sim"
 [ports.identity.tpm]
 # How the TCG software stack reaches the TPM: through the kernel's resource manager.
 tcti = "device:/dev/tpmrm0"
+
+# Where the robot keeps its binding: the server it was registered with at set-up, and
+# whether that server accepts it (protocol/setup/README.md). "sim" keeps it in memory, as
+# a robot the simulated cloud knows; "file" keeps it in a file, on the robot's data
+# partition.
+[ports.binding]
+adapter = "sim"
+
+[ports.binding.sim]
+bound = true
+
+[ports.binding.file]
+# In the robot's state directory (XDG's, in the home of the user who runs it).
+path = "~/.local/state/ai-robot/binding.json"
+
+# The link the app sets the robot up through: Bluetooth LE (protocol/setup/README.md).
+# "bluez": the Pi's Bluetooth, through BlueZ on D-Bus.
+[ports.setup_link]
+adapter = "sim"
+
+[ports.setup_link.bluez]
+adapter = "hci0"  # the Bluetooth controller: the Pi's own
+bus = "system"  # the D-Bus BlueZ is on; tests give another bus's address
+confirm_timeout = 5.0  # seconds an app has to confirm a fragment, before it is dropped
+
+# The robot's Wi-Fi: the networks it sees and joins. "sim" sees the networks below, which
+# take any password.
+[ports.network]
+adapter = "sim"
+
+[ports.network.sim]
+networks = [{ssid = "Simulated", security = "wpa2", signal = 70}]
+
+# "networkmanager": the system's network service, on D-Bus.
+[ports.network.networkmanager]
+interface = "wlan0"  # the Wi-Fi interface: the Pi's own
+bus = "system"  # the D-Bus NetworkManager is on; tests give another bus's address
+scan_timeout = 10.0  # seconds a scan for networks may take
 
 # When the sun rises and sets. "fixed" until the robot's place is known; for the real
 # times, select "solar" in local.toml with the robot's latitude and longitude (see

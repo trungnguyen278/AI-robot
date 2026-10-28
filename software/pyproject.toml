@@ -11,7 +11,9 @@ license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
   "aiohttp>=3.13,<4",  # the screen served to a browser, and requests to the cloud
-  "cryptography>=46,<51",  # keys kept in software, for development (adapters/keys)
+  "cryptography>=46,<51",  # keys kept in software (adapters/keys); set-up's encryption (core)
+  "pycryptodome>=4.0.1,<5",  # set-up's SPAKE2+: arithmetic on P-256 points (core/spake2plus.py)
+  "dbus-fast>=5.2,<6; sys_platform == 'linux'",  # D-Bus: BlueZ and NetworkManager
   "pymicro-wakeword>=2.5,<3",  # wake words, with microWakeWord models (adapters/microwakeword)
   "pysilero-vad>=3.4,<4",  # voice, with Silero VAD (adapters/silero)
   "sounddevice>=0.5.6,<0.6",  # microphones and speaker through PortAudio (adapters/portaudio)

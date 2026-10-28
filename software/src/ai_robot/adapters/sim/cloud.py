@@ -21,6 +21,7 @@ from ai_robot.ports.cloud import (
     ToolCall,
     TurnCancel,
     TurnStart,
+    check_url,
 )
 from ai_robot.ports.identity import Identity
 
@@ -34,7 +35,8 @@ class SimCloud(Cloud):
     every event, which it keeps in ``events``. If the robot offers conversations, it
     takes them, and keeps the robot's part of them in ``heard``. It calls a capability,
     or says its own part of a conversation, only when told to (``call``, ``begin``,
-    ``say``), as tests do.
+    ``say``), as tests do. Its server knows the robot, whichever it is asked to
+    ``serve``, until a test says otherwise (``forget``, ``recognise``).
     """
 
     def __init__(self) -> None:
@@ -45,6 +47,8 @@ class SimCloud(Cloud):
         self.online = False
         self.conversing = False
         self.identity: Identity | None = None
+        self.server: str | None = None  # the server the robot was registered with, if any
+        self.knows_robot = True  # set it to False before the robot starts for one not set up
         self._requests: asyncio.Queue[ToolCall | CallCancelled] = asyncio.Queue()
         self._statuses: asyncio.Queue[LinkStatus] = asyncio.Queue()
         self._said: asyncio.Queue[CloudPart] = asyncio.Queue()
@@ -53,6 +57,9 @@ class SimCloud(Cloud):
 
     async def identify(self, identity: Identity) -> None:
         self.identity = identity
+
+    async def serve(self, server: str) -> None:
+        self.server = check_url("server", server, ("https", "http"))
 
     async def offer(
         self,
@@ -63,12 +70,10 @@ class SimCloud(Cloud):
     ) -> None:
         self.capabilities = {capability.name: capability for capability in capabilities}
         if not self.online:
-            self.online = True
             self.event_kinds = {kind.name: kind for kind in events}
             self.conversing = conversation is not None
-            self._statuses.put_nowait(
-                LinkStatus(True, "sim", frozenset(self.event_kinds), conversations=self.conversing)
-            )
+            self.online = self.knows_robot  # a server that does not know the robot opens no session
+            self._statuses.put_nowait(self._status())
 
     async def request(self) -> ToolCall | CallCancelled:
         return await self._requests.get()
@@ -90,6 +95,25 @@ class SimCloud(Cloud):
 
     async def status(self) -> LinkStatus:
         return await self._statuses.get()
+
+    def _status(self) -> LinkStatus:
+        if not self.online:
+            return LinkStatus(False, bound=self.knows_robot)
+        events = frozenset(self.event_kinds)
+        return LinkStatus(True, "sim", events, self.conversing, bound=self.knows_robot)
+
+    def forget(self) -> None:
+        """The server no longer knows the robot, as if its owner revoked it: the session
+        ends."""
+        self.knows_robot = False
+        self.online = False
+        self._statuses.put_nowait(self._status())
+
+    def recognise(self) -> None:
+        """The server knows the robot again, as after set-up: a session opens."""
+        self.knows_robot = True
+        self.online = True
+        self._statuses.put_nowait(self._status())
 
     async def converse(self, part: RobotPart) -> None:
         if self.conversing:

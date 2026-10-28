@@ -6,7 +6,9 @@ Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependen
 - [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen;
 - [jsonschema](https://python-jsonschema.readthedocs.io/), to check data against the protocols' JSON Schemas;
 - [LiveKit's Python SDK](https://docs.livekit.io/reference/python/) (`livekit`, `livekit-api`), for the link to the cloud over WebRTC;
-- [cryptography](https://cryptography.io/), for the robot's key kept in software on a development computer;
+- [cryptography](https://cryptography.io/), for the robot's key kept in software on a development computer, and set-up's encryption;
+- [PyCryptodome](https://www.pycryptodome.org/), for set-up's SPAKE2+, which needs arithmetic on P-256 points that `cryptography` does not offer ([ADR-0015](../docs/decisions/0015-set-up.md));
+- [dbus-fast](https://github.com/bluetooth-devices/dbus-fast), on Linux only, to reach BlueZ (Bluetooth LE) and NetworkManager (Wi-Fi) over D-Bus;
 - [pymicro-wakeword](https://github.com/OHF-Voice/pymicro-wakeword), for wake words, and [pysilero-vad](https://github.com/rhasspy/pysilero-vad), for voice ([ADR-0013](../docs/decisions/0013-listening-on-the-robot.md));
 - [sounddevice](https://python-sounddevice.readthedocs.io/), for the microphones and the speaker, through PortAudio: `libportaudio2` on Debian and Raspberry Pi OS;
 - [tpm2-pytss](https://github.com/tpm2-software/tpm2-pytss), the `tpm` extra, for the robot's key in its TPM. It builds against the TCG software stack's libraries: `libtss2-dev` on Debian and Raspberry Pi OS.
@@ -14,11 +16,11 @@ Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependen
 ## How it fits together
 
 ```
-modules    system · motion · voice · vision · screen · cloud · behavior
+modules    system · motion · voice · vision · screen · setup · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
 ports      audio_in · audio_out · wake_word · voice_activity · camera · screen
-           cloud · identity · daylight
+           setup_link · network · cloud · identity · binding · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -31,7 +33,8 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `voice` | `audio_in`, `audio_out`, `wake_word`, `voice_activity` | Conversations with the cloud: the wake word, turns, the end of speech when the cloud has not decided it, answers, barge-in; where the conversation is (the interaction state). The voice processor cancels the echo ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md) to [ADR-0013](../docs/decisions/0013-listening-on-the-robot.md)) |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
-| `cloud` | `cloud`, `identity` | The link to `ai-robot-server`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)) |
+| `setup` | `setup_link`, `network` | Set-up with the owner's app over Bluetooth LE: when it opens, the code on the screen, the session, the Wi-Fi network ([protocol/setup](../protocol/setup/README.md)) |
+| `cloud` | `cloud`, `identity`, `binding` | The link to `ai-robot-server`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)). It signs the robot's registration at set-up, and keeps whether the robot is bound |
 | `behavior` | `daylight` | Decides what the robot does: for now, reactions to taps, the clock when nobody interacts (taps and conversations count), a sleepy face from sunset to sunrise |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.
@@ -58,7 +61,7 @@ software/
 │   ├── native.py           C++ functions, with pure-Python fallbacks
 │   ├── core/               Configuration, bus, module base class, factory
 │   ├── ports/              Port interfaces
-│   ├── adapters/           Adapter registry; sim/ (simulated), portaudio/ (microphones and speaker), microwakeword/ (wake words), silero/ (voice), web/ (aiohttp: the screen served to a browser), livekit/ (the cloud link), keys/ (keys kept in software), tpm/ (keys in the robot's TPM), sun/ (sunrise and sunset)
+│   ├── adapters/           Adapter registry; sim/ (simulated), portaudio/ (microphones and speaker), microwakeword/ (wake words), silero/ (voice), web/ (aiohttp: the screen served to a browser), livekit/ (the cloud link), keys/ (keys kept in software), tpm/ (keys in the robot's TPM), files/ (state kept in files), bluez/ (Bluetooth LE), networkmanager/ (Wi-Fi), sun/ (sunrise and sunset)
 │   └── modules/            Module registry and the modules
 ├── native/                 Optional C++ extension (pybind11 + scikit-build-core)
 └── tests/
@@ -84,7 +87,23 @@ On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`. It keeps t
 - the TPM's overlay in `/boot/firmware/config.txt`: `dtoverlay=tpm-slb9670` ([TPM notes](../hardware/components/letstrust-tpm.md));
 - PortAudio, for the microphones and the speaker: `sudo apt install libportaudio2`;
 - the voice processor as PipeWire's default input and output, so that everything the robot plays reaches its echo canceller: find its two devices with `wpctl status`, then `wpctl set-default <id>` for each;
-- access to `/dev/tpmrm0` for the user who runs the robot, through the `tss` group: `sudo usermod -aG tss "$USER"`, then log in again.
+- access to `/dev/tpmrm0` for the user who runs the robot, through the `tss` group: `sudo usermod -aG tss "$USER"`, then log in again;
+- for set-up, the Wi-Fi through NetworkManager. Its polkit policy lets a user in a desktop session scan and join networks, and Debian's own rule lets the `netdev` and `sudo` groups save them. A robot run from SSH, or as a service, needs a rule of its own for the user who runs it, which this writes:
+
+  ```sh
+  sudo tee /etc/polkit-1/rules.d/50-ai-robot.rules > /dev/null <<EOF
+  polkit.addRule(function (action, subject) {
+      if (subject.user == "$USER" && (
+              action.id == "org.freedesktop.NetworkManager.network-control" ||
+              action.id == "org.freedesktop.NetworkManager.wifi.scan" ||
+              action.id == "org.freedesktop.NetworkManager.settings.modify.system")) {
+          return polkit.Result.YES;
+      }
+  });
+  EOF
+  ```
+
+  BlueZ's D-Bus policy lets any user offer the set-up service. These are the policies of Debian Trixie's `network-manager` 1.52.1 and `bluez` 5.82 packages; the robot's image will carry its own rule ([ADR-0014](../docs/decisions/0014-updates.md)).
 
 On a Pi without its TPM, select the `file` identity in `config/local.toml` (see `local.example.toml`).
 
@@ -121,7 +140,18 @@ The real link goes through a LiveKit server (the `livekit` adapter, [ADR-0009](.
 
   The cloud's agent then joins the same room.
 
+The server is the one in `url` until the robot is set up with another: set-up registers the robot with the server the owner's app names, and the robot then uses that one.
+
 The link follows the [cloud protocol](../protocol/cloud/README.md). The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of the link run against a real LiveKit server when one is found: the path to `livekit-server` in `LIVEKIT_SERVER`, or the program on the `PATH`. The tests of the `tpm` adapter run against a software TPM, with the `tpm` extra installed: the path to `swtpm` in `SWTPM`, or the program on the `PATH` (`sudo apt install swtpm`).
+
+### Set-up
+
+The `setup` module sets the robot up with the owner's app, over Bluetooth LE ([protocol/setup](../protocol/setup/README.md), [ADR-0015](../docs/decisions/0015-set-up.md)):
+- **When.** Set-up opens by itself while the robot is not bound, or when someone at the robot asks; it shows a code and its QR code on the screen, and closes after `window` seconds, when it is done, or after `attempts` wrong codes. A tap opens it again while the robot is not bound.
+- **The session.** The code secures it, through SPAKE2+ (`core/spake2plus.py`, checked against RFC 9383's test vectors), then AES-GCM (`core/setup_session.py`). The app scans for networks, joins one, and asks for the robot's registration, which the `cloud` module signs with the robot's key.
+- **Bound.** The robot is bound once the server it was registered with accepts it; the `binding` port keeps that, so that the robot knows it while offline (a file on the robot).
+
+On a computer, the `sim` adapters stand in: no app connects, and the simulated binding says that the robot is bound. The tests play the app through the simulated link (`tests/test_setup.py`). The `bluez` and `networkmanager` adapters are tested against fake BlueZ and NetworkManager services on a private D-Bus (`tests/test_bluez_setup.py`, `tests/test_networkmanager.py`), which needs Linux and `dbus-daemon` (`sudo apt install dbus-daemon`).
 
 ### C++ extension
 

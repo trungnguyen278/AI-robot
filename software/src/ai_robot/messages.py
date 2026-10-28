@@ -253,3 +253,40 @@ class ConversationFromCloud(Message):
     cloud, read by voice."""
 
     part: CloudPart
+
+
+# ---- Set-up: the owner sets the robot up from the app (protocol/setup/README.md) ----
+# The setup module holds set-up; the cloud module, which owns the robot's key, signs its
+# registration and learns from the server whether the robot is bound.
+
+
+@dataclass(frozen=True, slots=True)
+class BindingChanged(Message):
+    """Whether the robot is bound to an owner's account: the server it was registered
+    with accepts it. Published by cloud when it starts, then on every change."""
+
+    robot: str  # the robot's identifier
+    bound: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RegistrationRequested(Message):
+    """The app asks for the robot's registration with ``server``, for ``challenge``
+    (protocol/setup/README.md, The registration). Published by setup, read by cloud,
+    which answers with a ``RegistrationSigned`` of the same ``request``."""
+
+    request: str  # unique among the requests in progress
+    challenge: str
+    server: str
+
+
+@dataclass(frozen=True, slots=True)
+class RegistrationSigned(Message):
+    """The robot's signed registration, or why there is none: ``error`` is the set-up
+    protocol's code, ``server`` (an address the robot does not accept) or ``identity``
+    (it could not sign). Published by cloud."""
+
+    request: str
+    registration: str | None = None
+    error: str | None = None
+    detail: str = ""  # for people

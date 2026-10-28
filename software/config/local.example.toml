@@ -54,6 +54,18 @@
 # [ports.voice_activity]
 # adapter = "silero"
 
+# Set the robot up from the app over this computer's Bluetooth, joining Wi-Fi networks
+# through its NetworkManager (Linux; software/README.md says what they need). Keep the
+# binding in a file, as the robot does.
+# [ports.setup_link]
+# adapter = "bluez"
+# [ports.network]
+# adapter = "networkmanager"
+# [ports.network.networkmanager]
+# interface = "wlp2s0"  # this computer's Wi-Fi interface, as `nmcli device` lists it
+# [ports.binding]
+# adapter = "file"
+
 # Tune how the robot behaves, for example a longer smile after a tap:
 # [modules.behavior]
 # happy_seconds = 3.0

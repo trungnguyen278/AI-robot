@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import Any, TypeVar
@@ -12,9 +13,11 @@ from typing import Any, TypeVar
 from ai_robot.core.bus import Message, Subscription
 from ai_robot.core.checks import positive
 from ai_robot.core.data import Schema
+from ai_robot.core.jose import b64url, b64url_json
 from ai_robot.core.module import Module, ModuleContext
 from ai_robot.messages import (
     BatteryReport,
+    BindingChanged,
     CapabilityCall,
     CapabilityCancelled,
     CapabilityOffered,
@@ -25,8 +28,11 @@ from ai_robot.messages import (
     ConversationOffered,
     ConversationToCloud,
     EventOffered,
+    RegistrationRequested,
+    RegistrationSigned,
     RobotEvent,
 )
+from ai_robot.ports.binding import Binding, BindingStore
 from ai_robot.ports.body import BatteryStatus
 from ai_robot.ports.cloud import (
     CallCancelled,
@@ -36,6 +42,7 @@ from ai_robot.ports.cloud import (
     SafetyClass,
     ToolCall,
     TurnStart,
+    check_url,
 )
 from ai_robot.ports.identity import Identity
 
@@ -44,6 +51,25 @@ M = TypeVar("M", bound=Message)
 # Unread parts of the robot's conversation the module keeps: far more than can pile up,
 # since the link takes each part as it comes, and drops those of a session that is gone.
 CONVERSATION_BACKLOG = 1000
+
+# Fixed by the protocol (protocol/setup/README.md, The registration).
+REGISTRATION_TYPE = "robot-registration+jwt"
+
+
+async def registration(identity: Identity, challenge: str, server: str) -> str:
+    """The robot's registration with ``server`` for ``challenge``: a JWT signed with
+    ES256 by its key, which carries the public key (protocol/setup/README.md)."""
+    robot = await identity.robot_id()
+    header = {"alg": "ES256", "typ": REGISTRATION_TYPE, "jwk": dict(await identity.public_key())}
+    claims = {
+        "iss": robot,
+        "sub": robot,
+        "aud": server,
+        "nonce": challenge,
+        "jti": secrets.token_urlsafe(16),
+    }
+    signed = f"{b64url_json(header)}.{b64url_json(claims)}"
+    return f"{signed}.{b64url(await identity.sign(signed.encode('ascii')))}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,9 +101,14 @@ class CloudModule(Module):
       whether it has conversations.
     - The robot's ``identity`` proves who it is when the link asks the server for its
       tokens (docs/decisions/0010-device-identity.md).
+    - Set-up: this module signs the robot's registration (``RegistrationRequested``,
+      ``RegistrationSigned``), then asks the server it names for the robot's tokens. The
+      robot is bound once that server accepts it, and unbound when the server no longer
+      knows it; ``binding`` keeps that across restarts, and ``BindingChanged`` tells the
+      other modules (protocol/setup/README.md).
     """
 
-    owns = ("cloud", "identity")
+    owns = ("cloud", "identity", "binding")
 
     def __init__(
         self, ctx: ModuleContext, *, allowed_classes: list[str], call_timeout: float
@@ -93,6 +124,9 @@ class CloudModule(Module):
         self.call_timeout = positive("call_timeout", call_timeout)
         self.link = self.port("cloud", Cloud)
         self.identity = self.port("identity", Identity)
+        self.store = self.port("binding", BindingStore)
+        self.binding = Binding()
+        self.robot_id = ""
         self.capabilities: dict[str, Offer] = {}  # by name
         self.events: dict[str, tuple[EventKind, Schema]] = {}
         self.conversing: ConversationOffered | None = None  # the module that holds them
@@ -110,6 +144,7 @@ class CloudModule(Module):
         self.conversation_offers = self._subscribe(ConversationOffered)
         self.said = self._subscribe(ConversationToCloud, maxsize=CONVERSATION_BACKLOG)
         self.batteries = self._subscribe(BatteryReport)
+        self.registrations = self._subscribe(RegistrationRequested)
 
     def _subscribe(self, kind: type[M], maxsize: int = 100) -> Subscription[M]:
         subscription = self.bus.subscribe(kind, maxsize=maxsize)
@@ -117,7 +152,15 @@ class CloudModule(Module):
         return subscription
 
     async def start(self) -> None:
+        self.robot_id = await self.identity.robot_id()
+        self.binding = await self.store.load()
         await self.link.identify(self.identity)
+        if self.binding.server is not None:
+            try:
+                await self.link.serve(self.binding.server)
+            except ValueError as error:
+                self.log.error("the robot's server cannot be used: %s", error)
+        self.bus.publish(BindingChanged(self.robot_id, self.binding.bound))
 
     async def run(self) -> None:
         # Take what the modules offered while they started, so that the first session
@@ -140,6 +183,7 @@ class CloudModule(Module):
             tasks.create_task(self._follow(self.results, self._on_result))
             tasks.create_task(self._follow(self.batteries, self._on_battery))
             tasks.create_task(self._follow(self.said, self._say))
+            tasks.create_task(self._follow(self.registrations, self._register))
             tasks.create_task(self._serve_calls())
             tasks.create_task(self._hear())
             tasks.create_task(self._follow_status())
@@ -304,6 +348,8 @@ class CloudModule(Module):
     async def _follow_status(self) -> None:
         while True:
             status = await self.link.status()
+            if status.bound is not None and status.bound != self.binding.bound:
+                await self._bind(status.bound)
             if status.online == self.online:
                 continue
             self.online = status.online
@@ -313,6 +359,51 @@ class CloudModule(Module):
             else:
                 self.log.info("cloud session closed")
             self.bus.publish(CloudStatus(status.online, status.conversations))
+
+    # ---- set-up ----
+
+    async def _keep(self) -> None:
+        """Save the binding. If it cannot be saved, the robot goes on with it in memory."""
+        try:
+            await self.store.save(self.binding)
+        except OSError as error:
+            self.log.error("cannot keep the robot's binding: %s", error)
+
+    async def _bind(self, bound: bool) -> None:
+        """The server said that it accepts the robot, or no longer knows it."""
+        self.binding = Binding(self.binding.server, bound)
+        await self._keep()
+        if bound:
+            self.log.info("the robot's server accepts it: it is set up")
+        else:
+            self.log.warning("the robot's server does not know it: it must be set up")
+        self.bus.publish(BindingChanged(self.robot_id, bound))
+
+    async def _register(self, request: RegistrationRequested) -> None:
+        """Sign the registration the app asked for, then use the server it names."""
+
+        def refuse(error: str, detail: str) -> None:
+            self.bus.publish(RegistrationSigned(request.request, error=error, detail=detail))
+
+        if self.binding.bound:
+            refuse("bound", "the robot is bound: a new owner needs a reset")
+            return
+        try:
+            server = check_url("server", request.server, ("https", "http"))
+        except ValueError as error:
+            refuse("server", str(error))
+            return
+        try:
+            signed = await registration(self.identity, request.challenge, server)
+        except Exception as error:  # a TPM can fail in many ways; set-up must say so
+            self.log.exception("the robot could not sign its registration")
+            refuse("identity", f"the robot could not sign: {type(error).__name__}")
+            return
+        self.binding = Binding(server, False)
+        await self._keep()
+        await self.link.serve(server)
+        self.log.info("the robot signed its registration")
+        self.bus.publish(RegistrationSigned(request.request, signed))
 
     # ---- conversations ----
 

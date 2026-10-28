@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -19,6 +20,22 @@ from ai_robot.ports.identity import Identity
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 MAX_ID = 64  # characters in the identifier of a turn or a response ($defs/id in schema.json)
 MAX_SPEECH_SECONDS = 30.0  # the robot ends a turn's speech after this long (README.md, Turns)
+LOOPBACK = {"127.0.0.1", "::1", "localhost"}  # where plain http:// and ws:// may go (SEC-1)
+
+
+def check_url(name: str, url: str, schemes: tuple[str, str]) -> str:
+    """``url`` if its scheme is the secure one of ``schemes``, or the other one to this
+    computer only (SEC-1); otherwise ``ValueError``."""
+    secure, plain = schemes
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in schemes or not parts.hostname:
+        raise ValueError(f"{name} must be a {secure}:// address, got {url!r}")
+    if parts.scheme == plain and parts.hostname not in LOOPBACK:
+        raise ValueError(
+            f"{name}: {plain}:// is allowed only to this computer (127.0.0.1, ::1, "
+            f"localhost); use {secure}://, got {url!r}"
+        )
+    return url
 
 
 class SafetyClass(StrEnum):
@@ -232,12 +249,17 @@ CloudPart = (
 @dataclass(frozen=True, slots=True)
 class LinkStatus:
     """Whether a session with the cloud is open, which events it subscribed to, and
-    whether it has conversations: the robot offered them and the cloud takes them."""
+    whether it has conversations: the robot offered them and the cloud takes them.
+
+    ``bound`` is what the server last said of the robot when it asked for its tokens:
+    ``True`` if it accepts it, ``False`` if it does not know it or revoked it (the robot
+    is not set up), ``None`` if it has not said, or cannot (a development server)."""
 
     online: bool
     session: str | None = None
     events: frozenset[str] = frozenset()
     conversations: bool = False
+    bound: bool | None = None
 
 
 class Cloud(Port):
@@ -255,13 +277,21 @@ class Cloud(Port):
 
     The link opens no session until ``offer`` has been called, so that the first
     session already lists everything the robot can do. It reconnects on its own after
-    a loss; ``status`` tells when the session opens and closes.
+    a loss; ``status`` tells when the session opens and closes, and what the server
+    says of the robot.
     """
 
     @abstractmethod
     async def identify(self, identity: Identity) -> None:
         """Prove that the robot is ``identity`` when the link asks the server for its
         tokens (docs/decisions/0010-device-identity.md). Called before ``offer``."""
+
+    @abstractmethod
+    async def serve(self, server: str) -> None:
+        """Ask ``server`` for the robot's tokens from now on: the ``ai-robot-server`` the
+        robot was registered with at set-up (protocol/setup/README.md). Until then, the
+        link asks the server of its own settings. ``ValueError`` for an address the link
+        does not accept."""
 
     @abstractmethod
     async def offer(

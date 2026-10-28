@@ -18,6 +18,20 @@ def b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
+def b64url_decode(text: str) -> bytes:
+    """The bytes that ``text`` holds in base64url without padding; ``ValueError`` for
+    anything else, such as padding or characters outside the alphabet."""
+    if not text.isascii() or "=" in text or len(text) % 4 == 1:
+        raise ValueError("not base64url without padding")
+    try:
+        data = base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    except ValueError:
+        raise ValueError("not base64url without padding") from None
+    if b64url(data) != text:  # other characters, or bits left over in the last one
+        raise ValueError("not base64url without padding")
+    return data
+
+
 def b64url_json(value: Any) -> str:
     """``value`` as compact JSON, then base64url: a part of a JWS."""
     return b64url(json.dumps(value, separators=(",", ":")).encode())

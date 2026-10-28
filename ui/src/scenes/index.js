@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /* Scenes: pages of information that fill the screen while the face watches from a
-   corner (clock, weather, timer…), and status screens (charging, start-up).
+   corner (clock, weather, timer…), and status screens (charging, start-up, set-up).
 
    Each scene gives:
    - `tone`: its colour (tones.js), or a function of its data that returns one;
@@ -22,10 +22,11 @@ import { TONES } from '../tones.js';
 import boot from './boot.js';
 import charging from './charging.js';
 import clock from './clock.js';
+import setup from './setup.js';
 import timer from './timer.js';
 import weather from './weather.js';
 
-export const SCENES = { boot, charging, clock, timer, weather };
+export const SCENES = { boot, charging, clock, setup, timer, weather };
 
 /** The tone of scene `spec` showing `data`; cyan if it names no known tone. */
 export function sceneTone(spec, data) {
