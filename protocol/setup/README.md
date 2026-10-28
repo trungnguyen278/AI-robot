@@ -1,5 +1,7 @@
 # Set-up — the app ⇄ the robot, over Bluetooth LE
 
+> **Moved:** this protocol is maintained in [ai-platform](https://github.com/trungnguyen278/ai-platform) (`protocols/setup/`) from 2026-10-28. This copy is frozen until this repository pins ai-platform at `platform/` ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)).
+
 How the owner's app sets up a robot: its Wi-Fi network, and its registration with the owner's account on `ai-robot-server`.
 - On the robot (`software/`), it is the `setup` module, with its `setup_link` and `network` ports.
 - The app (`ai-robot-app`) does not exist yet.
