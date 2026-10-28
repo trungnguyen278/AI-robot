@@ -25,3 +25,4 @@ Each significant decision is a short file: context, decision, alternatives consi
 | [0015](0015-set-up.md) | Set-up: the app over Bluetooth LE, secured by a code on the robot's screen | Accepted | 2026-10-24 |
 | [0016](0016-settings.md) | Settings: declared by the modules, shown as a panel on the touch screen | Accepted | 2026-10-25 |
 | [0017](0017-ros-2.md) | ROS 2 on the robot: every module a node, the body through ros2_control, on Ubuntu | Accepted | 2026-10-27 |
+| [0018](0018-conversations.md) | Conversations on the robot: one wake word, many turns | Proposed | 2026-10-28 |
