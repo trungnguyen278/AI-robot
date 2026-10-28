@@ -15,7 +15,7 @@ class Identity(Port):
 
     The key is an elliptic-curve key on P-256, which signs with ES256 (RFC 7518, §3.4).
     The identifier and the public key are what the owner registers with
-    ``ai-robot-server`` at set-up.
+    ``ai-cloud`` at set-up.
     """
 
     @abstractmethod

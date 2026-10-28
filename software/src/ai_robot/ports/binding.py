@@ -12,7 +12,7 @@ from ai_robot.ports.base import Port
 
 @dataclass(frozen=True, slots=True)
 class Binding:
-    """The robot's binding: the ``ai-robot-server`` it was registered with, if any, and
+    """The robot's binding: the ``ai-cloud`` it was registered with, if any, and
     whether that server has accepted it since. A robot that was never set up has
     neither."""
 

@@ -52,8 +52,8 @@ Each folder is an independent component with its own README; see [Contributing](
 
 | Repository | Role | Status |
 |---|---|---|
-| [ai-cloud](https://github.com/trungnguyen278/ai-cloud) | The cloud side of the project's AI devices: their AI, tokens, set-up and updates | Private for now |
-| [ai-platform](https://github.com/trungnguyen278/ai-platform) | What the repositories share: the protocols between them, and the decisions that span them ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)) | Private for now |
+| [ai-cloud](https://github.com/trungnguyen278/ai-cloud) | The cloud side of the project's AI devices: their AI, tokens, set-up and updates | Architecture and decisions; no code yet |
+| [ai-platform](https://github.com/trungnguyen278/ai-platform) | What the repositories share: the protocols between them, and the decisions that span them ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)) | In use: the cloud link 3.0, set-up 1.0 |
 | `ai-app` | The owner's app: set-up, settings, remote control | Not created yet |
 | [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Superseded — see [docs/legacy.md](docs/legacy.md) |
 

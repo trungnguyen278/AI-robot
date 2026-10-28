@@ -148,7 +148,7 @@ send_timeout = 1.0  # seconds a page may take to accept a message before it is d
 heartbeat = 10.0  # seconds between pings that find a page gone silent
 close_timeout = 2.0  # seconds a page may take to acknowledge the end of the connection
 
-# The link to ai-robot-server (protocol/cloud/README.md). "sim" until a server exists;
+# The link to ai-cloud (protocol/cloud/README.md). "sim" until a server exists;
 # "livekit" with the server's address, set in local.toml (see local.example.toml).
 [ports.cloud]
 adapter = "sim"
@@ -156,7 +156,7 @@ adapter = "sim"
 # How the link behaves (protocol/cloud/README.md). The LiveKit server's address, url,
 # is set where the server is chosen: local.toml or a profile.
 [ports.cloud.livekit]
-# Where the robot gets the token to join its room: "server", from ai-robot-server at url
+# Where the robot gets the token to join its room: "server", from ai-cloud at url
 # (https://), with its identity; or "development", made with the key of a development
 # LiveKit server at url (ws://), from the environment (see local.example.toml).
 tokens = "server"
@@ -171,7 +171,7 @@ burst = 100  # ...in bursts of up to this many...
 backlog = 500  # ...while up to this many more wait their turn; it drops the rest
 catalogue_ttl = 60.0  # seconds the cloud may cache the robot's catalogue
 
-# The robot's identity: an identifier, and the key that proves it to ai-robot-server
+# The robot's identity: an identifier, and the key that proves it to ai-cloud
 # (docs/decisions/0010-device-identity.md). "tpm" keeps them in the robot's TPM, as the pi
 # profile does; "sim" makes a new one at each start, which no server knows; "file" keeps
 # one in a file, for a development computer: set its path in local.toml.
