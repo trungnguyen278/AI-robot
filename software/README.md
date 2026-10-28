@@ -2,7 +2,7 @@
 
 > **Status:** skeleton. Every port has a simulated adapter, so the whole robot already runs on any computer; real adapters are added as the hardware arrives.
 >
-> **Platform:** this code follows [ADR-0005](../docs/decisions/0005-pi-software-platform.md): one Python process with its own message bus. [ADR-0017](../docs/decisions/0017-ros-2.md), proposed, supersedes it: ROS 2 Lyrical on Ubuntu 26.04, every module a node. The [migration](../docs/architecture.md#migration) moves this code there. Its modules keep their logic, ports, adapters and tests.
+> **Platform:** this code follows [ADR-0005](../docs/decisions/0005-pi-software-platform.md): one Python process with its own message bus. [ADR-0017](../docs/decisions/0017-ros-2.md) supersedes it: ROS 2 Lyrical on Ubuntu 26.04, every module a node. The [migration](../docs/architecture.md#migration) moves this code there. Its modules keep their logic, ports, adapters and tests.
 
 Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependencies:
 - [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen;

@@ -1,6 +1,6 @@
 # 0014 — Updates: whole signed images in two slots, with RAUC
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-24
 - **Revised:**
   - 2026-10-27, for Ubuntu ([ADR-0017](0017-ros-2.md)): the image, its builder and the data partition's contents;

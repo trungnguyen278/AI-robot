@@ -51,7 +51,7 @@
 
 ## Software
 
-- **OS:** Ubuntu 26.04 LTS Server, 64-bit, proposed in [ADR-0017](../../docs/decisions/0017-ros-2.md) for ROS 2. Canonical certifies it on the Pi 5, which needs a bootloader EEPROM dated 2025-02-11 or later. A March 2026 Ubuntu bug report adds that 2025-12-08 is known to work, so update the EEPROM to the latest before installing.
+- **OS:** Ubuntu 26.04 LTS Server, 64-bit, chosen in [ADR-0017](../../docs/decisions/0017-ros-2.md) for ROS 2. Canonical certifies it on the Pi 5, which needs a bootloader EEPROM dated 2025-02-11 or later. A March 2026 Ubuntu bug report adds that 2025-12-08 is known to work, so update the EEPROM to the latest before installing.
 - **Raspberry Pi OS**, the vendor's own: 64-bit, based on Debian 13 "Trixie" (latest image seen: 2026-04-21, kernel 6.12).
   - Its Pi 5 kernel (`kernel_2712.img`) uses 16 KB memory pages: `getconf PAGESIZE` gives 16384 on the robot's Pi, measured 2026-10-28.
   - Some software costs much more under 16 KB pages: each ROS 2 Python process carries a 128 MB region from LTTng-UST ([ADR-0017](../../docs/decisions/0017-ros-2.md)). `kernel8.img`, shipped beside it, uses 4 KB pages *(secondary source)*, as Ubuntu's kernel does.

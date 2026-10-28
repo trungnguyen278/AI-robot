@@ -1,6 +1,6 @@
 # 0012 — The end of the user's speech: the cloud decides, the robot falls back
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-23
 
 ## Context

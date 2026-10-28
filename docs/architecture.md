@@ -37,7 +37,7 @@
 
 ## Software on the Pi
 
-Proposed in [ADR-0017](decisions/0017-ros-2.md), which supersedes [ADR-0005](decisions/0005-pi-software-platform.md): ROS 2 Lyrical, the LTS supported to May 2031, on Ubuntu 26.04 LTS.
+Decided in [ADR-0017](decisions/0017-ros-2.md), which supersedes [ADR-0005](decisions/0005-pi-software-platform.md): ROS 2 Lyrical, the LTS supported to May 2031, on Ubuntu 26.04 LTS.
 
 Today's code still follows ADR-0005: one Python process with its own message bus ([`software/README.md`](../software/README.md)). The [migration](#migration) below moves it.
 
@@ -110,7 +110,7 @@ The `cloud` module links the robot to `ai-robot-server` over the [cloud protocol
 - **Conversations.** The module that holds them takes turns and plays the answers; the `cloud` module carries them, with their audio, over the link. That module is `voice`, which opens them with a wake word.
 - **Without a server.** A simulated cloud stands in for it.
 
-The `setup` module sets the robot up with the owner's app over Bluetooth LE, by the [set-up protocol](../protocol/setup/README.md) (proposed in [ADR-0015](decisions/0015-set-up.md)). A code on the robot's screen secures the session; the app gives the Wi-Fi network, which NetworkManager joins, and relays the robot's registration, which the `cloud` module signs with the robot's key. The robot is bound once its server accepts it; until then it shows the set-up screen.
+The `setup` module sets the robot up with the owner's app over Bluetooth LE, by the [set-up protocol](../protocol/setup/README.md) ([ADR-0015](decisions/0015-set-up.md)). A code on the robot's screen secures the session; the app gives the Wi-Fi network, which NetworkManager joins, and relays the robot's registration, which the `cloud` module signs with the robot's key. The robot is bound once its server accepts it; until then it shows the set-up screen.
 
 The `settings` module shows the robot's settings on the touch screen, as a panel the renderer draws over the face, and keeps what the owner chooses ([ADR-0016](decisions/0016-settings.md)). Each module declares its own settings on the bus and applies them, as it offers its capabilities to the cloud: the volume and the microphones are `voice`'s, what the cloud may do is `cloud`'s, set-up is `setup`'s.
 
@@ -136,11 +136,11 @@ The measurements on the Pi 5 (memory for each node, the face's frame rate, the c
 
 ## Open questions (each should become an ADR)
 
-- [ ] OS, ROS 2 or not, language on the Pi, how its modules communicate — proposed in [ADR-0017](decisions/0017-ros-2.md): ROS 2 Lyrical on Ubuntu 26.04, every module a node. It supersedes [ADR-0005](decisions/0005-pi-software-platform.md).
+- [x] OS, ROS 2 or not, language on the Pi, how its modules communicate — decided in [ADR-0017](decisions/0017-ros-2.md): ROS 2 Lyrical on Ubuntu 26.04, every module a node. It supersedes [ADR-0005](decisions/0005-pi-software-platform.md).
 - [ ] Which microcontroller becomes the body controller ([ADR-0004](decisions/0004-pi-software-first.md)).
 - [ ] Pi ⇄ body link (concept v0 shows UART/I2C) and the packet format, behind ros2_control's hardware interface ([ADR-0017](decisions/0017-ros-2.md)).
-- [ ] Does the body controller or the Pi drive the motor driver? Proposed in [ADR-0017](decisions/0017-ros-2.md): the body controller, from the wheel speeds ros2_control asks for.
+- [x] Does the body controller or the Pi drive the motor driver? Decided in [ADR-0017](decisions/0017-ros-2.md): the body controller, from the wheel speeds ros2_control asks for.
 - [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md). The transport is WebRTC through LiveKit ([ADR-0009](decisions/0009-cloud-link-webrtc.md)), the robot proves its identity with a key in a TPM ([ADR-0010](decisions/0010-device-identity.md)), and the messages are proposed in [ADR-0008](decisions/0008-cloud-link-messages.md). Version 2.2 of the protocol is implemented on the robot, its key kept in its TPM, or in a file on a development computer. Updates are proposed in [ADR-0014](decisions/0014-updates.md); where moods live comes next.
-- [ ] Audio — proposed in [ADR-0011](decisions/0011-audio-voice-processor.md): a USB voice processor (XMOS XVF3800) with four microphones and echo cancellation, which the robot also speaks through.
+- [x] Audio — decided in [ADR-0011](decisions/0011-audio-voice-processor.md): a USB voice processor (XMOS XVF3800) with four microphones and echo cancellation, which the robot also speaks through.
 - [ ] How the robot draws its screen — proposed in [ADR-0006](decisions/0006-screen-renderer.md): a renderer in a full-screen browser ([ui/](../ui/README.md)), driven by the Pi software over the [screen protocol](../protocol/screen/README.md).
-- [ ] Set-up — proposed in [ADR-0015](decisions/0015-set-up.md): the owner's app over Bluetooth LE, secured by a code on the robot's screen (SPAKE2+), which gives the Wi-Fi network and registers the robot ([protocol/setup](../protocol/setup/README.md)). The robot's side is implemented; the app and the server's registration are not.
+- [x] Set-up — decided in [ADR-0015](decisions/0015-set-up.md): the owner's app over Bluetooth LE, secured by a code on the robot's screen (SPAKE2+), which gives the Wi-Fi network and registers the robot ([protocol/setup](../protocol/setup/README.md)). The robot's side is implemented; the app and the server's registration are not.

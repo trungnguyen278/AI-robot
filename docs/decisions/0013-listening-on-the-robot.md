@@ -1,6 +1,6 @@
 # 0013 — Listening on the robot: microWakeWord, Silero VAD, and PipeWire
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-23
 
 ## Context
@@ -8,7 +8,7 @@
 - What the robot must hear on its own, without the cloud:
   - its wake word, to start a turn (PERF-1: the listening face within 200 ms);
   - voice, for barge-in and for the fallbacks of [ADR-0012](0012-end-of-speech.md).
-- It hears through the voice processor of [ADR-0011](0011-audio-voice-processor.md), proposed. That processor cancels the echo of what is played through it, so everything the robot plays must go there.
+- It hears through the voice processor of [ADR-0011](0011-audio-voice-processor.md). That processor cancels the echo of what is played through it, so everything the robot plays must go there.
 - The wake word must be the robot's name, which can change ([design rule 3](../../CONTRIBUTING.md#design-rules)), and its owners may say it with a Vietnamese accent.
 - How others do it:
 

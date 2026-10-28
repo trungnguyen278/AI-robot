@@ -1,6 +1,6 @@
 # reSpeaker XMOS XVF3800 USB 4-Mic Array
 
-> Component note, created with the `hardware-change` checklist. Last updated: 2026-10-23. Proposed in [ADR-0011](../../docs/decisions/0011-audio-voice-processor.md).
+> Component note, created with the `hardware-change` checklist. Last updated: 2026-10-23. Chosen in [ADR-0011](../../docs/decisions/0011-audio-voice-processor.md).
 
 - **Role in the robot:** its ears and its voice.
   - The XVF3800 cleans up what the four microphones hear: echo cancellation, beamforming and noise suppression.

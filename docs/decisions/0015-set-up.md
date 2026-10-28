@@ -1,6 +1,6 @@
 # 0015 — Set-up: the app over Bluetooth LE, secured by a code on the robot's screen
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-24
 
 ## Context

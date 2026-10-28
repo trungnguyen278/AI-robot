@@ -17,7 +17,7 @@
 | Neck and arms | 8 × FEETECH STS3215 (bus servo, 12 V version) | 2-DOF neck, 3-DOF per arm — [notes](components/feetech-sts3215.md) |
 | Face | Waveshare 7inch DSI LCD (C) | [notes](components/waveshare-7inch-dsi-lcd-c.md) |
 | Eyes | Raspberry Pi AI Camera (IMX500) | [notes](components/raspberry-pi-ai-camera.md) |
-| Ears and voice | reSpeaker XMOS XVF3800 USB 4-mic array, driving a 4 Ω 5 W speaker | Proposed in [ADR-0011](../docs/decisions/0011-audio-voice-processor.md) — [notes](components/respeaker-xvf3800.md) |
+| Ears and voice | reSpeaker XMOS XVF3800 USB 4-mic array, driving a 4 Ω 5 W speaker | Chosen in [ADR-0011](../docs/decisions/0011-audio-voice-processor.md) — [notes](components/respeaker-xvf3800.md) |
 | Sensors | VL53L1X (ToF), NeoPixel LEDs | On the ESP32-S3 — [VL53L1X notes](components/vl53l1x.md) |
 | Power | 3S Li-ion battery and charger, 25–30 A fuse, HY57B emergency stop, Pololu D24V90F5 5 V regulator | [regulator notes](components/pololu-d24v90f5.md) |
 
