@@ -60,7 +60,7 @@ night_check = 30.0  # seconds between two looks at the time of day
 [modules.cloud]
 # The safety classes of the capabilities the cloud may use: informational (the screen,
 # sounds), privacy (the camera), physical (motion), system (reboot, updates, settings).
-# The cloud cannot change this (protocol/cloud/requirements.md, SEC-9).
+# The cloud cannot change this (platform/protocols/cloud/requirements.md, SEC-9).
 allowed_classes = ["informational"]
 call_timeout = 10.0  # seconds a capability may take before the cloud gets an error
 
@@ -158,28 +158,25 @@ send_timeout = 1.0  # seconds a page may take to accept a message before it is d
 heartbeat = 10.0  # seconds between pings that find a page gone silent
 close_timeout = 2.0  # seconds a page may take to acknowledge the end of the connection
 
-# The link to ai-cloud (protocol/cloud/README.md). "sim" until a server exists;
-# "livekit" with the server's address, set in local.toml (see local.example.toml).
+# The link to ai-cloud (platform/protocols/cloud/README.md). "sim" until a server exists;
+# "websocket" with the server's address, set in local.toml (see local.example.toml).
 [ports.cloud]
 adapter = "sim"
 
-# How the link behaves (protocol/cloud/README.md). The LiveKit server's address, url,
-# is set where the server is chosen: local.toml or a profile.
-[ports.cloud.livekit]
-# Where the robot gets the token to join its room: "server", from ai-cloud at url
-# (https://), with its identity; or "development", made with the key of a development
-# LiveKit server at url (ws://), from the environment (see local.example.toml).
-tokens = "server"
-room = "robot"  # the room of the tokens the robot makes for a development server...
-participant = "robot"  # ...and the robot's name in it
-connect_timeout = 10.0  # seconds to join the room
-hello_timeout = 5.0  # seconds the cloud's agent has to answer the robot's hello
+# How the link behaves (platform/protocols/cloud/README.md, Settings). The address of
+# ai-cloud, server, is set where the cloud is chosen: local.toml or a profile. Set-up
+# replaces it with the cloud the robot was registered with.
+[ports.cloud.websocket]
+connect_timeout = 10.0  # seconds for each step of connecting: the token, the handshake, the close
+hello_timeout = 5.0  # seconds the cloud has to answer the robot's hello
 reconnect_first = 1.0  # seconds: the longest wait before the first new attempt
 reconnect_max = 60.0  # seconds: the longest wait between attempts
+replay = 1000  # messages the robot keeps until the cloud has them, to resume a session
 rate = 50.0  # messages a second the robot handles from the cloud...
 burst = 100  # ...in bursts of up to this many...
 backlog = 500  # ...while up to this many more wait their turn; it drops the rest
 catalogue_ttl = 60.0  # seconds the cloud may cache the robot's catalogue
+waiting_events = 100  # events kept while the robot is offline; the oldest go first
 
 # The robot's identity: an identifier, and the key that proves it to ai-cloud
 # (docs/decisions/0010-device-identity.md). "tpm" keeps them in the robot's TPM, as the pi

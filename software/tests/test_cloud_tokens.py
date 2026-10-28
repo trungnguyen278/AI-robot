@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""Tokens to join the robot's room: from the server, with the robot's identity, or made
-for a development server (protocol/cloud/README.md, Joining)."""
+"""Access tokens for the control channel, from ai-cloud's token endpoint, in exchange for
+an assertion signed by the robot's key (platform/protocols/cloud/README.md, Tokens from
+the server)."""
 
 from __future__ import annotations
 
@@ -8,51 +9,28 @@ import asyncio
 import contextlib
 import hashlib
 from collections.abc import AsyncIterator
-from pathlib import Path
 from typing import Any
 
 import aiohttp
 import jwt
 import pytest
-from local_servers import free_port
-from token_server import TokenServer, token_schema
+from fake_cloud import FakeCloud, schema
 
-from ai_robot.adapters.livekit.cloud import LiveKitCloud
-from ai_robot.adapters.livekit.tokens import (
-    Access,
-    NoToken,
-    assertion,
-    development_token,
-    server_access,
-)
 from ai_robot.adapters.sim.identity import SimIdentity
+from ai_robot.adapters.websocket.tokens import NoToken, NotSetUp, access_token, assertion
 from ai_robot.core.jose import b64url, thumbprint
 
-SCHEMA = Path(__file__).resolve().parents[2] / "protocol" / "cloud" / "schema.json"
-SETTINGS = {
-    "tokens": "server",
-    "url": "https://cloud.example",
-    "room": "robot",
-    "participant": "robot",
-    "connect_timeout": 10.0,
-    "hello_timeout": 5.0,
-    "reconnect_first": 1.0,
-    "reconnect_max": 60.0,
-    "rate": 50.0,
-    "burst": 100,
-    "backlog": 500,
-    "catalogue_ttl": 60.0,
-}
+TIMEOUT = 5.0
 
 
 @contextlib.asynccontextmanager
 async def server_and_robot(
     known: bool = True,
-) -> AsyncIterator[tuple[TokenServer, SimIdentity, aiohttp.ClientSession]]:
+) -> AsyncIterator[tuple[FakeCloud, SimIdentity, aiohttp.ClientSession]]:
     identity = SimIdentity()
     await identity.open()
     robots = {await identity.robot_id(): await identity.public_key()} if known else {}
-    server = TokenServer(robots)
+    server = FakeCloud(robots)
     await server.start()
     try:
         async with aiohttp.ClientSession() as http:
@@ -61,17 +39,20 @@ async def server_and_robot(
         await server.stop()
 
 
-def test_a_robot_the_server_knows_gets_its_tokens() -> None:
+async def token(server: FakeCloud, identity: SimIdentity, http: aiohttp.ClientSession) -> str:
+    return await access_token(http, server.url, identity, schema("token_response"), TIMEOUT)
+
+
+def test_a_robot_the_server_knows_gets_its_token() -> None:
     async def main() -> None:
         async with server_and_robot() as (server, identity, http):
-            access = await server_access(http, server.url, identity, token_schema())
+            assert await token(server, identity, http) == "access-1"
             robot = await identity.robot_id()
-            assert access == Access("wss://media.cloud.example", f"token-for-{robot}")
             (claims,) = server.assertions
             assert claims["iss"] == claims["sub"] == robot
             assert claims["aud"] == server.endpoint
             assert claims["exp"] - claims["iat"] == 60
-            await server_access(http, server.url, identity, token_schema())
+            assert await token(server, identity, http) == "access-2"
             assert server.assertions[0]["jti"] != server.assertions[1]["jti"]
 
     asyncio.run(main())
@@ -81,7 +62,7 @@ def test_the_assertion_is_a_standard_es256_jwt() -> None:
     async def main() -> None:
         identity = SimIdentity()
         await identity.open()
-        signed = await assertion(identity, "https://cloud.example/robot/token")
+        signed = await assertion(identity, "https://cloud.example/device/token")
         jwk = await identity.public_key()
         header = jwt.get_unverified_header(signed)
         assert header == {"alg": "ES256", "typ": "JWT", "kid": thumbprint(jwk)}
@@ -89,7 +70,7 @@ def test_the_assertion_is_a_standard_es256_jwt() -> None:
             signed,
             jwt.PyJWK(dict(jwk)).key,
             algorithms=["ES256"],
-            audience="https://cloud.example/robot/token",
+            audience="https://cloud.example/device/token",
         )
         assert claims["iss"] == await identity.robot_id()
 
@@ -105,8 +86,8 @@ def test_the_key_id_is_the_rfc_7638_thumbprint() -> None:
 def test_a_robot_the_server_does_not_know_must_be_set_up() -> None:
     async def main() -> None:
         async with server_and_robot(known=False) as (server, identity, http):
-            with pytest.raises(NoToken, match="does not know this robot: it must be set up"):
-                await server_access(http, server.url, identity, token_schema())
+            with pytest.raises(NotSetUp, match="does not know this robot: it must be set up"):
+                await token(server, identity, http)
 
     asyncio.run(main())
 
@@ -114,25 +95,27 @@ def test_a_robot_the_server_does_not_know_must_be_set_up() -> None:
 @pytest.mark.parametrize(
     ("answer", "message"),
     [
-        ({"access_token": "a"}, "is not tokens"),
-        ("not tokens", "is not tokens"),
-        (
-            {
-                "access_token": "a",
-                "token_type": "Bearer",
-                "expires_in": 600,
-                "livekit": {"url": "ws://media.cloud.example", "token": "t"},
-            },
-            "ws:// is allowed only to this computer",
-        ),
+        ({"access_token": "a"}, "is not a token"),
+        ("not a token", "is not a token"),
+        ({"access_token": "a", "token_type": "Bearer", "expires_in": 0}, "is not a token"),
+        ({"access_token": "a", "token_type": "MAC", "expires_in": 600}, "uses bearer"),
     ],
 )
-def test_an_answer_that_is_not_proper_tokens_is_refused(answer: Any, message: str) -> None:
+def test_an_answer_that_is_not_a_proper_token_is_refused(answer: Any, message: str) -> None:
     async def main() -> None:
         async with server_and_robot() as (server, identity, http):
             server.answer = answer
             with pytest.raises(NoToken, match=message):
-                await server_access(http, server.url, identity, token_schema())
+                await token(server, identity, http)
+
+    asyncio.run(main())
+
+
+def test_a_bearer_token_is_taken_whatever_its_case() -> None:
+    async def main() -> None:
+        async with server_and_robot() as (server, identity, http):
+            server.answer = {"access_token": "a", "token_type": "bearer", "expires_in": 600}
+            assert await token(server, identity, http) == "a"
 
     asyncio.run(main())
 
@@ -142,97 +125,7 @@ def test_the_robot_does_not_follow_a_redirect() -> None:
         async with server_and_robot() as (server, identity, http):
             server.redirect = server.url + "/elsewhere"
             with pytest.raises(NoToken, match="redirects"):
-                await server_access(http, server.url, identity, token_schema())
+                await token(server, identity, http)
             assert server.elsewhere == []  # the assertion went nowhere else
 
     asyncio.run(main())
-
-
-def test_server_tokens_need_an_identity() -> None:
-    async def main() -> None:
-        link = LiveKitCloud(**SETTINGS)
-        await link.open()
-        try:
-            with pytest.raises(NoToken, match="no identity"):
-                await link._access()
-        finally:
-            await link.close()
-
-    asyncio.run(main())
-
-
-@pytest.mark.parametrize(
-    ("tokens", "url", "allowed"),
-    [
-        ("server", "https://cloud.example", True),
-        ("server", "http://127.0.0.1:8080", True),
-        ("server", "http://cloud.example", False),
-        ("server", "wss://cloud.example", False),
-        ("development", "wss://media.example", True),
-        ("development", "ws://localhost:7880", True),
-        ("development", "ws://media.example", False),
-        ("development", "https://media.example", False),
-        ("development", "", False),
-    ],
-)
-def test_addresses_are_checked(tokens: str, url: str, allowed: bool) -> None:
-    settings = {**SETTINGS, "tokens": tokens, "url": url}
-    if allowed:
-        assert LiveKitCloud(**settings).url == url
-    else:
-        with pytest.raises(ValueError, match="url"):
-            LiveKitCloud(**settings)
-
-
-def test_the_link_says_whether_the_server_knows_the_robot() -> None:
-    async def main() -> None:
-        identity = SimIdentity()
-        await identity.open()
-        nowhere = f"ws://127.0.0.1:{free_port()}"  # the room's server, which is not there
-        server = TokenServer({}, livekit_url=nowhere)
-        await server.start()
-        quick = {"reconnect_first": 0.05, "reconnect_max": 0.1}
-        link = LiveKitCloud(**{**SETTINGS, **quick})
-        try:
-            await link.serve(server.url)  # the server it was registered with, not url
-            await link.identify(identity)
-            await link.open()
-            await link.offer([], [])
-            status = await asyncio.wait_for(link.status(), 5.0)
-            assert (status.online, status.bound) == (False, False)
-            server.robots[await identity.robot_id()] = await identity.public_key()  # set up
-            status = await asyncio.wait_for(link.status(), 5.0)
-            assert (status.online, status.bound) == (False, True)
-        finally:
-            await link.close()
-            await server.stop()
-
-    asyncio.run(main())
-
-
-def test_the_server_to_serve_is_checked() -> None:
-    async def main() -> None:
-        link = LiveKitCloud(**SETTINGS)
-        with pytest.raises(ValueError, match="server must be a https:// address"):
-            await link.serve("wss://cloud.example")
-        with pytest.raises(ValueError, match="allowed only to this computer"):
-            await link.serve("http://cloud.example")
-        await link.serve("https://other.example")
-        assert link.server == "https://other.example"
-
-    asyncio.run(main())
-
-
-def test_development_tokens_need_the_servers_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    with pytest.raises(NoToken, match="AI_ROBOT_LIVEKIT_API_KEY"):
-        development_token("robot", "robot")
-    monkeypatch.setenv("AI_ROBOT_LIVEKIT_API_KEY", "key")
-    monkeypatch.setenv("AI_ROBOT_LIVEKIT_API_SECRET", "a-secret-long-enough-for-a-test-token")
-    claims = jwt.decode(
-        development_token("robot-desk", "robot"),
-        "a-secret-long-enough-for-a-test-token",
-        algorithms=["HS256"],
-    )
-    assert claims["sub"] == "robot"
-    assert claims["video"]["room"] == "robot-desk"
-    assert claims["video"]["canPublishSources"] == ["microphone"]

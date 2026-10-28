@@ -1,0 +1,524 @@
+# SPDX-License-Identifier: MIT
+"""The link to ai-cloud over a WebSocket, the control channel of the cloud link
+(platform/protocols/cloud/README.md).
+
+Before each connection, the robot gets an access token (``tokens.py``). On the
+connection (``connection.py``) it holds a session (``session.py``), which outlives a
+lost connection: the robot connects again and resumes it. The cloud calls the robot's
+capabilities over MCP (``mcp.py``), and the robot sends the events the cloud subscribed
+to, and what its owner changes.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import email.utils
+import itertools
+import json
+import logging
+import random
+import time
+from collections import deque
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import aiohttp
+
+from ai_robot import software_version
+from ai_robot.adapters.websocket.connection import Connection, Ending
+from ai_robot.adapters.websocket.session import MAX_MESSAGE, Session, instant
+from ai_robot.adapters.websocket.tokens import NoToken, NotSetUp, access_token
+from ai_robot.core.checks import finite, positive
+from ai_robot.core.config import platform_dir
+from ai_robot.core.data import Schema, plain
+from ai_robot.ports.cloud import (
+    CallCancelled,
+    Capability,
+    Cloud,
+    CloudPart,
+    ConversationAudio,
+    DeviceInfo,
+    EventKind,
+    LinkStatus,
+    RobotPart,
+    ToolCall,
+    TurnCancel,
+    TurnStart,
+    check_url,
+)
+from ai_robot.ports.identity import Identity
+
+log = logging.getLogger(__name__)
+
+# Fixed by the protocol (platform/protocols/cloud/README.md, Connecting and The session).
+PROTOCOL = "3.0"
+LINK_PATH = "/device/v3/link"
+LONGEST_WAIT = 86400.0  # seconds: the longest wait the protocol speaks of ($defs/seconds)
+
+
+class Refused(Exception):
+    """The cloud refused the WebSocket's handshake with ``status``, and may have said
+    how long to wait before the next attempt (``retry_after``, in seconds)."""
+
+    def __init__(self, status: int, retry_after: float | None) -> None:
+        super().__init__(f"the cloud refused the connection ({status})")
+        self.status = status
+        self.retry_after = retry_after
+
+
+class WebSocketCloud(Cloud):
+    """The link to ai-cloud over a WebSocket (platform/protocols/cloud/README.md).
+
+    ``server`` is the ai-cloud the robot connects to (``https://``, or ``http://`` to this
+    computer), until set-up names the one it was registered with (``serve``). The robot
+    proves its identity (``identify``) to get its access tokens.
+
+    This link holds no conversations: its ``hello`` says so, and a turn ends at once.
+
+    The other settings, in seconds unless they say, are explained in
+    ``config/base.toml`` (``[ports.cloud.websocket]``).
+    """
+
+    def __init__(
+        self,
+        *,
+        server: str,
+        connect_timeout: float,
+        hello_timeout: float,
+        reconnect_first: float,
+        reconnect_max: float,
+        replay: int,
+        rate: float,
+        burst: int,
+        backlog: int,
+        catalogue_ttl: float,
+        waiting_events: int,
+    ) -> None:
+        self.server = check_url("server", server, ("https", "http"))
+        self.connect_timeout = positive("connect_timeout", connect_timeout)
+        self.hello_timeout = positive("hello_timeout", hello_timeout)
+        self.reconnect_first = positive("reconnect_first", reconnect_first)
+        self.reconnect_max = positive("reconnect_max", reconnect_max)
+        if self.reconnect_max < self.reconnect_first:
+            raise ValueError("reconnect_max must not be below reconnect_first")
+        self.replay = _count("replay", replay)
+        self.rate = positive("rate", rate)
+        self.burst = _count("burst", burst)
+        self.backlog = _count("backlog", backlog)
+        self.catalogue_ttl = finite("catalogue_ttl", catalogue_ttl)
+        if self.catalogue_ttl < 0:
+            raise ValueError(f"catalogue_ttl must not be negative, got {catalogue_ttl}")
+        self.capabilities: dict[str, Capability] = {}
+        self.event_kinds: list[EventKind] = []
+        self.device: DeviceInfo | None = None
+        self.identity: Identity | None = None
+        self.bound: bool | None = None  # what the server last said of the robot
+        self.update_required = False
+        self.session: Session | None = None  # the session, open or to resume
+        self.connection: Connection | None = None  # the connection that carries it
+        self.schema: Schema | None = None
+        self._token_schema: Schema | None = None
+        self._http: aiohttp.ClientSession | None = None
+        self._numbers = itertools.count(1)
+        self._described = asyncio.Event()
+        self._offered = asyncio.Event()
+        # Events that happened while no connection carried a session: (name, data, when).
+        self._waiting: deque[tuple[str, Mapping[str, Any], float]] = deque(
+            maxlen=_count("waiting_events", waiting_events)
+        )
+        self._requests: asyncio.Queue[ToolCall | CallCancelled] = asyncio.Queue()
+        self._statuses: asyncio.Queue[LinkStatus] = asyncio.Queue()
+        self._heard: asyncio.Queue[CloudPart] = asyncio.Queue()
+        self._reported: LinkStatus | None = None
+        self._task: asyncio.Task[None] | None = None
+        self._closing = False
+
+    async def open(self) -> None:
+        self.schema, self._token_schema = await asyncio.to_thread(
+            _load_schemas, platform_dir() / "cloud" / "schema.json"
+        )
+        traces = aiohttp.TraceConfig()
+        traces.on_request_redirect.append(_refuse_redirect)
+        self._http = aiohttp.ClientSession(trace_configs=[traces])
+        self._task = asyncio.create_task(self._run(), name="cloud link")
+
+    async def close(self) -> None:
+        self._closing = True
+        session, connection = self.session, self.connection
+        if session is not None and connection is not None:
+            with contextlib.suppress(Exception):
+                session.mcp.end()
+                await connection.finish("stopping")
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+        if self.session is not None:
+            await self.session.close()
+        if self._http is not None:
+            await self._http.close()
+
+    # ---- the port ----
+
+    async def identify(self, identity: Identity) -> None:
+        self.identity = identity
+
+    async def serve(self, server: str) -> None:
+        self.server = check_url("server", server, ("https", "http"))
+
+    async def describe(self, device: DeviceInfo) -> None:
+        before, self.device = self.device, device
+        self._described.set()
+        session = self.session
+        if before is not None and session is not None and self.connection is not None:
+            changes = _changes(before, device)
+            if changes:
+                session.changed(changes)
+        # Otherwise the next hello says it.
+
+    async def offer(
+        self,
+        capabilities: Sequence[Capability],
+        events: Sequence[EventKind],
+        *,
+        conversation: ConversationAudio | None = None,
+    ) -> None:
+        offered = {capability.name: capability for capability in capabilities}
+        changed = offered != self.capabilities
+        self.capabilities = offered
+        self.event_kinds = list(events)
+        self._offered.set()
+        if changed and self.session is not None:
+            self.session.mcp.catalogue_changed()
+
+    async def request(self) -> ToolCall | CallCancelled:
+        return await self._requests.get()
+
+    async def reply(
+        self,
+        call: ToolCall,
+        *,
+        data: Mapping[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None:
+        if self.session is not None:
+            self.session.mcp.reply(call, data, error)
+
+    async def emit(self, name: str, data: Mapping[str, Any]) -> None:
+        when = time.time()
+        if self.session is not None and self.connection is not None:
+            self.session.emit(name, data, when)
+        else:
+            self._waiting.append((name, data, when))  # the oldest go first (REL-3)
+
+    async def status(self) -> LinkStatus:
+        return await self._statuses.get()
+
+    async def converse(self, part: RobotPart) -> None:
+        if isinstance(part, TurnStart):
+            self._heard.put_nowait(TurnCancel(part.turn, "no conversations"))
+
+    async def conversation(self) -> CloudPart:
+        return await self._heard.get()
+
+    # ---- what the session tells the link ----
+
+    def called(self, call: ToolCall) -> None:
+        self._requests.put_nowait(call)
+
+    def cancelled(self, call: str) -> None:
+        self._requests.put_nowait(CallCancelled(call))
+
+    # ---- statuses ----
+
+    def _report(self) -> None:
+        """Tell the robot the link's status, if it changed."""
+        session = self.session
+        if session is None or self.connection is None:
+            status = LinkStatus(False, bound=self.bound, update_required=self.update_required)
+        else:
+            status = LinkStatus(
+                True,
+                session.id,
+                session.events,
+                bound=self.bound,
+                update_required=self.update_required,
+            )
+        if status != self._reported:
+            self._reported = status
+            self._statuses.put_nowait(status)
+
+    def _known(self, bound: bool) -> None:
+        """The server said whether it knows the robot."""
+        if bound != self.bound:
+            self.bound = bound
+            self._report()
+
+    def _needs_update(self, why: str) -> None:
+        if not self.update_required:
+            log.error("the robot needs an update: %s", why)
+            self.update_required = True
+            self._report()
+
+    # ---- connecting, again and again ----
+
+    async def _run(self) -> None:
+        """Connect, hold the session, and connect again after a loss, for ever."""
+        await self._described.wait()
+        await self._offered.wait()
+        failures = 0  # attempts in a row that did not complete a hello exchange
+        reported = False  # whether this outage was logged
+        while not self._closing:
+            ending: Ending | None = None
+            wait = 0.0  # the least the robot waits before the next attempt
+            try:
+                ending = await self._connect()
+            except NotSetUp as error:
+                self._known(False)
+                reported = _outage(reported, error)
+            except Refused as refused:
+                if refused.status == 410:
+                    self._needs_update("the cloud no longer speaks this version of the link")
+                reported = _outage(reported, refused)
+                wait = refused.retry_after or 0.0
+            except (NoToken, aiohttp.ClientError, OSError, TimeoutError) as error:
+                reported = _outage(reported, error)
+            except Exception:  # the link must outlive any failure, and try again
+                log.exception("the cloud link failed")
+            if ending is not None:
+                wait = max(wait, await self._after(ending))
+            if ending is not None and ending.greeted:
+                failures, reported = 0, False
+            else:
+                failures += 1
+            longest = self.reconnect_max if self.update_required else None
+            await asyncio.sleep(max(wait, self._backoff(failures, longest)))
+
+    def _backoff(self, failures: int, longest: float | None = None) -> float:
+        """A random wait before the next attempt: exponential backoff with full jitter,
+        or the longest one."""
+        if longest is None:
+            longest = min(self.reconnect_max, self.reconnect_first * 2**failures)
+        return random.uniform(0, longest)
+
+    async def _connect(self) -> Ending:
+        """One connection: get a token, open the WebSocket, and hold the session on it."""
+        if self.identity is None:
+            raise NoToken("no identity to prove the robot's to the server")
+        assert self._http is not None and self._token_schema is not None
+        assert self.schema is not None
+        token = await access_token(
+            self._http, self.server, self.identity, self._token_schema, self.connect_timeout
+        )
+        self._known(True)
+        try:
+            async with asyncio.timeout(self.connect_timeout):
+                ws = await self._http.ws_connect(
+                    _link_url(self.server),
+                    headers={"Authorization": f"Bearer {token}"},
+                    max_msg_size=MAX_MESSAGE,
+                    timeout=aiohttp.ClientWSTimeout(ws_close=self.connect_timeout),
+                )
+        except aiohttp.WSServerHandshakeError as error:
+            raise Refused(error.status, _retry_after(error.headers)) from None
+        try:
+            return await self._hold(Connection(ws, self.schema, self.connect_timeout))
+        finally:
+            await ws.close()
+
+    async def _hold(self, connection: Connection) -> Ending:
+        """Say hello on ``connection``, then carry the session on it until it ends."""
+        assert self.device is not None and self.schema is not None
+        resuming, said = self.session, self.device
+        declared = {kind.name for kind in self.event_kinds}
+        await connection.say(self._hello(said, resuming))
+        try:
+            async with asyncio.timeout(self.hello_timeout):
+                answer = await connection.first()
+        except TimeoutError:
+            log.warning("the cloud did not answer the hello within %g s", self.hello_timeout)
+            await connection.finish("no_hello")
+            return Ending(greeted=False)
+        if answer is None:
+            return Ending(greeted=False)  # the connection closed
+        problem = _hello_problem(self.schema, answer, resuming)
+        if problem is None and answer["type"] == "bye":
+            return Ending(greeted=False, reason=answer["reason"], by_cloud=True)
+        if problem is not None:
+            log.warning("the cloud's hello is not valid: %s", problem)
+            await connection.finish("no_hello")
+            return Ending(greeted=False)
+        if answer["protocol"].split(".")[0] != PROTOCOL.split(".")[0]:
+            log.warning("the cloud speaks the link %s, not %s", answer["protocol"], PROTOCOL)
+            await connection.finish("unsupported_protocol")
+            return Ending(greeted=False)
+        if answer["resumed"]:
+            assert resuming is not None
+            session = resuming
+            unreceived = session.unreceived(answer["received"])
+            if unreceived is None:
+                log.warning("cannot resume the cloud session %s: too much was lost", session.id)
+                await connection.finish("resume_failed")
+                return Ending(greeted=True, reason="resume_failed")
+            for text in unreceived:
+                connection.write(text)
+            log.info("cloud session %s resumed", session.id)
+        else:
+            await self._forget()
+            session = Session(self, answer["session"], next(self._numbers), self.schema)
+            self.session = session
+            log.info("cloud session %s open (protocol %s)", session.id, answer["protocol"])
+        session.events = frozenset(answer["events"]) & declared
+        session.connection = self.connection = connection
+        changes = _changes(said, self.device)  # what the owner changed since the hello
+        if changes:
+            session.changed(changes)
+        while self._waiting:
+            session.emit(*self._waiting.popleft())
+        if self.update_required:
+            log.info("the cloud accepts the robot's software again")
+            self.update_required = False
+        self._report()
+        try:
+            return await connection.carry(session, answer["ping_interval"])
+        finally:
+            session.connection = self.connection = None
+            self._report()
+
+    def _hello(self, device: DeviceInfo, resuming: Session | None) -> dict[str, Any]:
+        """The robot's ``hello``: what it is, what its owner chose, what it can say."""
+        hello: dict[str, Any] = {
+            "type": "hello",
+            "protocol": PROTOCOL,
+            "device": {"kind": device.kind, "model": device.model, "software": software_version()},
+            "time": instant(time.time()),
+            "time_zone": device.time_zone,
+            "languages": list(device.languages),
+            "allowed_classes": sorted(str(safety) for safety in device.allowed_classes),
+            "conversations": False,
+            "media": [],
+            "events": [
+                {"name": kind.name, "description": kind.description, "schema": plain(kind.schema)}
+                for kind in self.event_kinds
+            ],
+        }
+        if resuming is not None:
+            hello["resume"] = {"session": resuming.id, "received": resuming.received}
+        return hello
+
+    async def _after(self, ending: Ending) -> float:
+        """Act on how a connection ended. Returns the least wait before the next one."""
+        if ending.reason is None:
+            return 0.0  # lost: the next connection resumes the session
+        await self._forget()
+        if not ending.by_cloud:
+            return 0.0
+        log.warning("the cloud ended the session: %s", ending.reason)
+        if ending.reason == "revoked":
+            self._known(False)
+        elif ending.reason == "update_required":
+            self._needs_update("the cloud asks for it")
+        elif ending.reason == "replaced":
+            return self._backoff(0, self.reconnect_max)  # keep to the newer connection
+        return 0.0
+
+    async def _forget(self) -> None:
+        """The session is over: its calls in progress are cancelled."""
+        session, self.session = self.session, None
+        if session is None:
+            return
+        await session.close()
+        for call in session.mcp.abandon():
+            self._requests.put_nowait(CallCancelled(call))
+        self._report()
+
+
+async def _refuse_redirect(
+    session: aiohttp.ClientSession, context: Any, params: aiohttp.TraceRequestRedirectParams
+) -> None:
+    """A redirect would carry the robot's token where it never chose to send it: the
+    robot follows none (SEC-1), and takes one as a refusal."""
+    raise Refused(params.response.status, None)
+
+
+def _count(name: str, value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a whole number from 1, got {value!r}")
+    return value
+
+
+def _outage(reported: bool, error: BaseException) -> bool:
+    """Log a failure to connect once for each outage; returns that it was."""
+    if not reported:
+        log.warning("cannot reach the cloud: %s", error or type(error).__name__)
+    return True
+
+
+def _load_schemas(path: Path) -> tuple[Schema, Schema]:
+    """From the protocol's schema.json: the schema of the cloud's messages on the control
+    channel, and that of the token endpoint's answer."""
+    try:
+        schema = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"cannot read the cloud link's schema: {error}") from None
+    name = "platform/protocols/cloud/schema.json"
+    return (
+        Schema(name, {**schema, "$ref": "#/$defs/from_cloud"}),
+        Schema(name, {**schema, "$ref": "#/$defs/token_response"}),
+    )
+
+
+def _link_url(server: str) -> str:
+    """The control channel's address on ``server``: ``wss://``, or ``ws://`` for an
+    ``http://`` server."""
+    scheme, rest = server.rstrip("/").split("://", 1)
+    return f"{'wss' if scheme == 'https' else 'ws'}://{rest}{LINK_PATH}"
+
+
+def _hello_problem(schema: Schema, answer: Any, resuming: Session | None) -> str | None:
+    """What is wrong with the cloud's first message, which must be its ``hello`` or a
+    ``bye``."""
+    problem = schema.problem(answer)
+    if problem is not None:
+        return problem
+    if answer["type"] == "bye":
+        return None
+    if answer["type"] != "hello":
+        return f"a {answer['type']} message came before the cloud's hello"
+    if answer["resumed"] and (resuming is None or answer["session"] != resuming.id):
+        return "it resumes a session the robot did not name"
+    return None
+
+
+def _changes(before: DeviceInfo, after: DeviceInfo) -> dict[str, Any]:
+    """What ``device.changed`` says: the owner's choices that differ from ``before``."""
+    changes: dict[str, Any] = {}
+    if after.languages != before.languages:
+        changes["languages"] = list(after.languages)
+    if after.time_zone != before.time_zone:
+        changes["time_zone"] = after.time_zone
+    if after.allowed_classes != before.allowed_classes:
+        changes["allowed_classes"] = sorted(str(safety) for safety in after.allowed_classes)
+    return changes
+
+
+def _retry_after(headers: Mapping[str, str] | None) -> float | None:
+    """The wait a refusal's ``Retry-After`` asks for, in seconds (RFC 9110, §10.2.3),
+    within the longest the protocol speaks of."""
+    value = headers.get("Retry-After") if headers else None
+    if not value:
+        return None
+    try:
+        seconds = float(int(value))
+    except ValueError:
+        try:
+            when = email.utils.parsedate_to_datetime(value)
+        except (TypeError, ValueError, IndexError):
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        seconds = (when - datetime.now(UTC)).total_seconds()
+    return min(max(seconds, 0.0), LONGEST_WAIT)

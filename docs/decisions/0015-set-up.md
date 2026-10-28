@@ -8,7 +8,7 @@
 
 ## Context
 
-- What set-up must do (the [requirements](../../protocol/cloud/requirements.md), §10):
+- What set-up must do (the [requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md), §10):
   - give the robot a Wi-Fi network, and register its key with the owner's account (PROV-1, SEC-3);
   - prove that the robot joining the account is the one in front of the owner (PROV-2). [ADR-0010](0010-device-identity.md) chose a code shown on its screen, and left the protocol to this decision;
   - until then, the robot refuses all but set-up and says so (PROV-3), and only a reset gives it to a new owner (PROV-4);

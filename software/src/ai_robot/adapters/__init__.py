@@ -9,7 +9,7 @@ adapters is selected:
 - ``microwakeword/``, with pymicro-wakeword: wake words;
 - ``silero/``, with pysilero-vad: voice;
 - ``web/``, with aiohttp: the screen served to a browser;
-- ``livekit/``: the link to the cloud;
+- ``websocket/``, with aiohttp: the link to the cloud;
 - ``keys/``: keys kept in software;
 - ``tpm/``, with tpm2-pytss: keys in the robot's TPM (the ``tpm`` extra, on Linux);
 - ``files/``: the robot's state in files;
@@ -54,7 +54,7 @@ ADAPTERS: dict[str, dict[str, str]] = {
     },
     "cloud": {
         "sim": "ai_robot.adapters.sim.cloud:SimCloud",
-        "livekit": "ai_robot.adapters.livekit.cloud:LiveKitCloud",
+        "websocket": "ai_robot.adapters.websocket.cloud:WebSocketCloud",
     },
     "identity": {
         "sim": "ai_robot.adapters.sim.identity:SimIdentity",

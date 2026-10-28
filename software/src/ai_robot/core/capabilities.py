@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Offering capabilities and events from a module (protocol/cloud/README.md)."""
+"""Offering capabilities and events from a module (platform/protocols/cloud/README.md)."""
 
 from __future__ import annotations
 

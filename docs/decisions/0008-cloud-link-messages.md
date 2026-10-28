@@ -9,7 +9,7 @@
 
 ## Context
 
-- This is decision 2 of the [requirements](../../protocol/cloud/requirements.md): how the messages of the robot ⇄ cloud link are written, over the WebSocket of [ADR-0007](0007-cloud-link-transport.md). The requirements say:
+- This is decision 2 of the [requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md): how the messages of the robot ⇄ cloud link are written, over the WebSocket of [ADR-0007](0007-cloud-link-transport.md). The requirements say:
   - The cloud drives any capability the robot declares, with schemas and safety classes (EXT-1…10).
   - Each audio frame names its negotiated format (NEG-5).
   - Every message carries an identifier (SES-6) and is validated on arrival (SEC-14).

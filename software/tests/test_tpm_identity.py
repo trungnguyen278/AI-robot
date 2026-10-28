@@ -13,9 +13,9 @@ import pytest
 
 pytest.importorskip("tpm2_pytss", reason="tpm2-pytss is not installed (the tpm extra)")
 
+from fake_cloud import FakeCloud, schema
 from identity_checks import check, unb64url, verifies
 from local_servers import free_ports
-from token_server import TokenServer, token_schema
 from tpm2_pytss import (
     ESAPI,
     ESYS_TR,
@@ -29,7 +29,6 @@ from tpm2_pytss import (
     TSS2_Exception,
 )
 
-from ai_robot.adapters.livekit.tokens import server_access
 from ai_robot.adapters.tpm.identity import (
     ID_ATTRIBUTES,
     ID_INDEX,
@@ -37,6 +36,7 @@ from ai_robot.adapters.tpm.identity import (
     TpmIdentity,
     key_template,
 )
+from ai_robot.adapters.websocket.tokens import access_token
 
 
 async def identity_of(tcti: str) -> tuple[str, Mapping[str, str]]:
@@ -181,16 +181,18 @@ def test_the_server_takes_the_assertions_the_tpm_signs(tpm: str) -> None:
         await identity.open()
         try:
             robot = await identity.robot_id()
-            server = TokenServer({robot: await identity.public_key()})
+            server = FakeCloud({robot: await identity.public_key()})
             await server.start()
             try:
                 async with aiohttp.ClientSession() as http:
-                    access = await server_access(http, server.url, identity, token_schema())
+                    token = await access_token(
+                        http, server.url, identity, schema("token_response"), 10.0
+                    )
             finally:
                 await server.stop()
         finally:
             await identity.close()
-        assert access.token == f"token-for-{robot}"
+        assert token in server.tokens
         assert [each["iss"] for each in server.assertions] == [robot]
 
     asyncio.run(main())
