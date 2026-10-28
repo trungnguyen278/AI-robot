@@ -7,12 +7,14 @@ on:
       - "software/**"
       - "protocol/screen/**"
       - "protocol/cloud/**"
+      - "protocol/setup/**"
       - ".github/workflows/software.yml"
   pull_request:
     paths:
       - "software/**"
       - "protocol/screen/**"
       - "protocol/cloud/**"
+      - "protocol/setup/**"
       - ".github/workflows/software.yml"
 
 permissions:
@@ -39,10 +41,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: System libraries (PortAudio, the TPM's), and a software TPM for the tests
+      - name: System libraries (PortAudio, the TPM's); a software TPM and a D-Bus for the tests
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libportaudio2 libtss2-dev swtpm
+          sudo apt-get install -y --no-install-recommends libportaudio2 libtss2-dev swtpm dbus-daemon
       - name: Install
         run: python -m pip install -e ".[dev,tpm]"
       - name: LiveKit server, for the cloud link's tests

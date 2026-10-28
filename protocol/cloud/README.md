@@ -45,7 +45,7 @@ To join its room, the robot needs the LiveKit server's address and a token: a JW
 
 ### Tokens from the server
 
-A robot that its owner has set up has an identifier, and a key pair whose public half `ai-robot-server` knows ([ADR-0010](../../docs/decisions/0010-device-identity.md)). Before each join, it asks the server's token endpoint, `/robot/token`, for tokens. It proves who it is with an assertion signed by its key: OAuth 2.0 client authentication with a JWT ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523), §2.2).
+A robot that its owner has set up has an identifier, and a key pair whose public half `ai-robot-server` knows ([ADR-0010](../../docs/decisions/0010-device-identity.md)): the owner registers it at set-up ([the set-up protocol](../setup/README.md#the-registration)). Before each join, it asks the server's token endpoint, `/robot/token`, for tokens. It proves who it is with an assertion signed by its key: OAuth 2.0 client authentication with a JWT ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523), §2.2).
 
 ```http
 POST /robot/token HTTP/1.1
@@ -81,7 +81,7 @@ The server answers with JSON ([`schema.json`](schema.json), `$defs/token_respons
 | `expires_in` | How many seconds the tokens last. |
 
 - **Refusals** follow OAuth 2.0 ([RFC 6749](https://www.rfc-editor.org/rfc/rfc6749), §5.2): status 400 or 401, and JSON with `error` and `error_description`.
-  - `invalid_client` means a key the server does not know, or one that was revoked: the robot is not set up.
+  - `invalid_client` means a key the server does not know, or one that was revoked: the robot is not set up. It then shows its set-up screen ([the set-up protocol](../setup/README.md)).
   - The robot tries again later, with the same backoff as for joining.
 - **No redirects.** The endpoint answers itself. The robot does not follow a redirect, which would carry its assertion to an address it never chose: it takes one as a refusal.
 - **Renewal.** The robot asks for new tokens at each join. While it stays in its room, LiveKit renews the token it joined with.
@@ -97,7 +97,7 @@ Against a development LiveKit server, the robot makes its own token with that se
 - When it cannot, the robot joins again after a random wait, from 0 to `min(reconnect_max, reconnect_first × 2ⁿ)`, where n counts the failed attempts in a row. That is 1 s at first, then 2 s, and so on up to 60 s, as shipped: exponential backoff with full jitter (SES-4).
 - A join that reaches the `hello` exchange resets n. Each join opens a new session.
 
-**The robot's settings.** The robot's timings and rates in this document are settings, in `[ports.cloud.livekit]` of `software/config/base.toml`, and the values given here are those shipped. There, `tokens` chooses where the robot gets its tokens, `server` or `development`, and `url` is the server's address or the development LiveKit server's. The sizes, the names, the paths and the versions are the protocol's own.
+**The robot's settings.** The robot's timings and rates in this document are settings, in `[ports.cloud.livekit]` of `software/config/base.toml`, and the values given here are those shipped. There, `tokens` chooses where the robot gets its tokens, `server` or `development`, and `url` is the server's address or the development LiveKit server's. Set-up may register the robot with another server, which the robot then uses in place of `url`. The sizes, the names, the paths and the versions are the protocol's own.
 
 ## Messages
 

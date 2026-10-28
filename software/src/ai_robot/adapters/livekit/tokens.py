@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import secrets
 import time
-import urllib.parse
 from dataclasses import dataclass
 
 import aiohttp
@@ -19,6 +18,7 @@ from livekit import api
 
 from ai_robot.core.data import Schema
 from ai_robot.core.jose import b64url, b64url_json, thumbprint
+from ai_robot.ports.cloud import check_url
 from ai_robot.ports.identity import Identity
 
 # Fixed by the protocol (protocol/cloud/README.md, Tokens from the server).
@@ -27,7 +27,6 @@ GRANT_TYPE = "client_credentials"
 ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"  # RFC 7523, §2.2
 KEY_ENV = "AI_ROBOT_LIVEKIT_API_KEY"  # a development server's key, for development tokens
 SECRET_ENV = "AI_ROBOT_LIVEKIT_API_SECRET"
-LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 # How this implementation works, which nobody needs to tune.
 ASSERTION_SECONDS = 60  # how long an assertion is valid; the protocol allows up to 300
@@ -37,27 +36,16 @@ class NoToken(Exception):
     """The robot could not get a token for its room."""
 
 
+class NotSetUp(NoToken):
+    """The server does not know the robot's key, or revoked it: the robot is not set up."""
+
+
 @dataclass(frozen=True, slots=True)
 class Access:
     """Where to join the robot's room, and the token to join it with."""
 
     url: str
     token: str
-
-
-def check_url(name: str, url: str, schemes: tuple[str, str]) -> str:
-    """``url`` if its scheme is the secure one of ``schemes``, or the other one to this
-    computer only (SEC-1); otherwise ``ValueError``."""
-    secure, plain = schemes
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme not in schemes or not parts.hostname:
-        raise ValueError(f"{name} must be a {secure}:// address, got {url!r}")
-    if parts.scheme == plain and parts.hostname not in LOOPBACK:
-        raise ValueError(
-            f"{name}: {plain}:// is allowed only to this computer (127.0.0.1, ::1, "
-            f"localhost); use {secure}://, got {url!r}"
-        )
-    return url
 
 
 def development_token(room: str, participant: str) -> str:
@@ -118,7 +106,7 @@ async def server_access(
         if response.status != 200:
             error = answer.get("error") if isinstance(answer, dict) else None
             if error == "invalid_client":
-                raise NoToken("the server does not know this robot: it must be set up")
+                raise NotSetUp("the server does not know this robot: it must be set up")
             raise NoToken(f"the server refused the robot's tokens ({response.status}, {error})")
     problem = schema.problem(answer)
     if problem is not None:

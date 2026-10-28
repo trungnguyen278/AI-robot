@@ -14,6 +14,7 @@ from typing import Any
 import aiohttp
 import jwt
 import pytest
+from local_servers import free_port
 from token_server import TokenServer, token_schema
 
 from ai_robot.adapters.livekit.cloud import LiveKitCloud
@@ -181,6 +182,45 @@ def test_addresses_are_checked(tokens: str, url: str, allowed: bool) -> None:
     else:
         with pytest.raises(ValueError, match="url"):
             LiveKitCloud(**settings)
+
+
+def test_the_link_says_whether_the_server_knows_the_robot() -> None:
+    async def main() -> None:
+        identity = SimIdentity()
+        await identity.open()
+        nowhere = f"ws://127.0.0.1:{free_port()}"  # the room's server, which is not there
+        server = TokenServer({}, livekit_url=nowhere)
+        await server.start()
+        quick = {"reconnect_first": 0.05, "reconnect_max": 0.1}
+        link = LiveKitCloud(**{**SETTINGS, **quick})
+        try:
+            await link.serve(server.url)  # the server it was registered with, not url
+            await link.identify(identity)
+            await link.open()
+            await link.offer([], [])
+            status = await asyncio.wait_for(link.status(), 5.0)
+            assert (status.online, status.bound) == (False, False)
+            server.robots[await identity.robot_id()] = await identity.public_key()  # set up
+            status = await asyncio.wait_for(link.status(), 5.0)
+            assert (status.online, status.bound) == (False, True)
+        finally:
+            await link.close()
+            await server.stop()
+
+    asyncio.run(main())
+
+
+def test_the_server_to_serve_is_checked() -> None:
+    async def main() -> None:
+        link = LiveKitCloud(**SETTINGS)
+        with pytest.raises(ValueError, match="server must be a https:// address"):
+            await link.serve("wss://cloud.example")
+        with pytest.raises(ValueError, match="allowed only to this computer"):
+            await link.serve("http://cloud.example")
+        await link.serve("https://other.example")
+        assert link.server == "https://other.example"
+
+    asyncio.run(main())
 
 
 def test_development_tokens_need_the_servers_key(monkeypatch: pytest.MonkeyPatch) -> None:

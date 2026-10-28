@@ -23,3 +23,14 @@ adapter = "silero"
 # The robot's identity, in its TPM (docs/decisions/0010). Needs the tpm extra.
 [ports.identity]
 adapter = "tpm"
+
+# Set-up (protocol/setup/README.md): Bluetooth LE through BlueZ, the Wi-Fi through
+# NetworkManager, and its binding in a file, so that it knows it is set up while offline.
+[ports.setup_link]
+adapter = "bluez"
+
+[ports.network]
+adapter = "networkmanager"
+
+[ports.binding]
+adapter = "file"

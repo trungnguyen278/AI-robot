@@ -59,8 +59,11 @@ The scenes and their data:
 |---|---|
 | `charging` | none: shows the battery from `status`. The software shows it for a few seconds when the robot is plugged in. |
 | `clock` | none: the time of day on the software's clock |
+| `setup` | `state`: `code` (the code and its QR code), `connected` (an app is setting the robot up), `connecting` (set up, waiting for the server) or `closed` (not set up: a tap opens set-up). With `code`: `code` (8 digits), `discriminator` (4 hexadecimal digits) and `link` (what the QR code holds, up to 256 characters). See the [set-up protocol](../setup/README.md). |
 | `timer` | `ends_at` (Unix time in seconds, on the software's clock, when it rings), `duration` (seconds), `label` (optional, up to 16 characters). The renderer counts down on its own, so the timer is sent once; at zero it pulses until the scene is taken away. |
 | `weather` | `condition` (`clear`, `partly-cloudy`, `cloudy`, `rain`, `storm`, `snow`, `fog`), `temperature`, `unit` (`C` or `F`), `night` (optional, `true` for the moon), `place` (optional, up to 18 characters) |
+
+A scene marked `robot_only` in the vocabulary, `setup`, is the robot's own: the cloud cannot ask for it, so that a set-up code on the screen is always the robot's.
 
 A renderer draws a scene even with missing or malformed data, with placeholders (a timer without `ends_at` shows `--:--`). A scene asked for again with new data is updated in place, without starting over.
 

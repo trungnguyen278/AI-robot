@@ -25,6 +25,20 @@
       "description": "The present time on a dial and in digits, with the date",
       "data": {}
     },
+    "setup": {
+      "description": "Set-up from the app: the code to scan or type, then how set-up is going (protocol/setup/README.md)",
+      "robot_only": true,
+      "data": {
+        "state": {
+          "type": "string",
+          "values": ["code", "connected", "connecting", "closed"],
+          "description": "code: the code and its QR code; connected: an app is setting the robot up; connecting: set up, the robot waits for its server; closed: not set up, a tap opens set-up"
+        },
+        "code": {"type": "string", "max_length": 8, "description": "The set-up code, 8 digits, shown in two groups of four"},
+        "discriminator": {"type": "string", "max_length": 4, "description": "4 hexadecimal digits that tell robots in set-up apart"},
+        "link": {"type": "string", "max_length": 256, "description": "What the QR code holds"}
+      }
+    },
     "timer": {
       "description": "A ring that empties as the time runs out; pulses at zero",
       "data": {

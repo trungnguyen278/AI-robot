@@ -21,6 +21,7 @@ import { MOTIONS } from '../src/motions.js';
 import { EYE, FACE } from '../src/pose.js';
 import { SCENES, sceneSlot, sceneTone } from '../src/scenes/index.js';
 import { CORNER } from '../src/scenes/kit.js';
+import { CODE_LENGTH, DISCRIMINATOR_LENGTH, LINK_LENGTH, STATES } from '../src/scenes/setup.js';
 import { LABEL_LENGTH } from '../src/scenes/timer.js';
 import { CONDITIONS, PLACE_LENGTH, UNITS } from '../src/scenes/weather.js';
 import { clip } from '../src/text.js';
@@ -58,12 +59,18 @@ async function checkVocabulary() {
     check(Object.hasOwn(SCENES, name), name, 'required by the protocol, missing from scenes/');
   }
   // What the scenes accept, against what the protocol says they take.
-  const { weather, timer } = vocabulary.scenes;
+  const { weather, timer, setup } = vocabulary.scenes;
   check(same(Object.keys(CONDITIONS), weather.data.condition.values), 'weather',
     `draws ${Object.keys(CONDITIONS).join(', ')}; the protocol lists ${weather.data.condition.values.join(', ')}`);
   check(same(UNITS, weather.data.unit.values), 'weather', 'units differ from the protocol');
   check(PLACE_LENGTH === weather.data.place.max_length, 'weather', 'place length differs from the protocol');
   check(LABEL_LENGTH === timer.data.label.max_length, 'timer', 'label length differs from the protocol');
+  check(same(STATES, setup.data.state.values), 'setup',
+    `draws ${STATES.join(', ')}; the protocol lists ${setup.data.state.values.join(', ')}`);
+  check(CODE_LENGTH === setup.data.code.max_length, 'setup', 'code length differs from the protocol');
+  check(DISCRIMINATOR_LENGTH === setup.data.discriminator.max_length, 'setup',
+    'discriminator length differs from the protocol');
+  check(LINK_LENGTH === setup.data.link.max_length, 'setup', 'link length differs from the protocol');
 }
 
 function checkExpressions() {
@@ -127,6 +134,7 @@ function drawAll(where, ctx, layout, animator) {
 const NONSENSE = {
   condition: 'volcano', temperature: 'hot', unit: 7, night: 'yes', place: 42,
   ends_at: null, duration: -5, label: {},
+  state: 'flying', code: 12345678, discriminator: [], link: { url: 'x' },
 };
 
 function checkDrawing() {

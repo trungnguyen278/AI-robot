@@ -6,6 +6,7 @@ The repository is released under the [MIT License](LICENSE). These files come fr
 |---|---|---|
 | `software/tests/data/okay_nabu.wav` | [pymicro-wakeword](https://github.com/OHF-Voice/pymicro-wakeword), `tests/okay_nabu/2.wav`, by the Open Home Foundation and its contributors | [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
 | `software/tests/data/speech.wav` | [pysilero-vad](https://github.com/rhasspy/pysilero-vad), `tests/speech.wav` | MIT License, below |
+| `ui/third_party/qrcodegen/qrcodegen.js` | [QR Code generator library](https://github.com/nayuki/QR-Code-generator) by Project Nayuki, built from its TypeScript ([how](ui/third_party/qrcodegen/README.md)) | MIT License, in the file's header |
 
 Libraries installed as dependencies are not copied here: their licences come with them.
 

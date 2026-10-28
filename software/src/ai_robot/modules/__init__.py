@@ -13,6 +13,7 @@ MODULES: dict[str, str] = {
     "cloud": "ai_robot.modules.cloud:CloudModule",
     "motion": "ai_robot.modules.motion:MotionModule",
     "screen": "ai_robot.modules.screen:ScreenModule",
+    "setup": "ai_robot.modules.setup:SetupModule",
     "system": "ai_robot.modules.system:SystemModule",
     "vision": "ai_robot.modules.vision:VisionModule",
     "voice": "ai_robot.modules.voice:VoiceModule",

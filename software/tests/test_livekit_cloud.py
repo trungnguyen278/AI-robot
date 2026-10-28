@@ -19,11 +19,13 @@ import struct
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+import waiting
 from livekit import api, rtc
 from local_servers import free_port, running
 from token_server import TokenServer
@@ -49,6 +51,9 @@ KEY = "test"
 SECRET = "a-test-secret-that-is-long-enough-for-livekit"
 TOPIC = "ai-robot"
 TIMEOUT = 10.0
+
+until = partial(waiting.until, timeout=TIMEOUT)
+
 SCHEMA = Path(__file__).resolve().parents[2] / "protocol" / "cloud" / "schema.json"
 AUDIO = ConversationAudio(AudioFormat(16000, 1), AudioFormat(16000, 1))
 SWITCH = {"type": "object", "properties": {"on": {"type": "boolean"}}, "required": ["on"]}
@@ -202,12 +207,6 @@ async def robot(
         yield link, room
     finally:
         await link.close()
-
-
-async def until(condition: Any, timeout: float = TIMEOUT) -> None:
-    async with asyncio.timeout(timeout):
-        while not condition():
-            await asyncio.sleep(0.05)
 
 
 def test_the_robot_and_the_agent_meet_in_the_room(
@@ -542,6 +541,9 @@ def test_a_robot_gets_its_room_from_the_server(server: str) -> None:
             await link.offer([LAMP], [CHANGED])
             await agent.join(server, room, "agent", "agent")
             await agent.answer_hello(await agent.receive())
+            # The server's answer says that it knows the robot, before the session opens.
+            known = await asyncio.wait_for(link.status(), TIMEOUT)
+            assert not known.online and known.bound is True
             assert (await asyncio.wait_for(link.status(), TIMEOUT)).online
             assert len(tokens.assertions) == 1
         finally:

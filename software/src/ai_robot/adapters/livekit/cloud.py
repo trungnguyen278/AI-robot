@@ -26,7 +26,7 @@ from ai_robot.adapters.livekit.session import MAX_MESSAGE, TOPIC, Session
 from ai_robot.adapters.livekit.tokens import (
     Access,
     NoToken,
-    check_url,
+    NotSetUp,
     development_token,
     server_access,
 )
@@ -47,6 +47,7 @@ from ai_robot.ports.cloud import (
     TurnCancel,
     TurnStart,
     Voice,
+    check_url,
 )
 from ai_robot.ports.identity import Identity
 
@@ -151,7 +152,8 @@ class LiveKitCloud(Cloud):
     ``tokens`` says where the robot gets the token to join its room:
     - ``server``: from ``ai-robot-server`` at ``url`` (``https://``, or ``http://`` to
       this computer), in exchange for an assertion signed by the robot's identity
-      (``identify``). The server says which LiveKit server to join;
+      (``identify``), or from the server the robot was registered with (``serve``). The
+      server says which LiveKit server to join, and whether it knows the robot;
     - ``development``: made with the key of a development LiveKit server at ``url``
       (``wss://``, or ``ws://`` to this computer), from the environment, for the room
       ``room`` and the participant ``participant``.
@@ -181,6 +183,7 @@ class LiveKitCloud(Cloud):
         self.tokens = tokens
         schemes = ("https", "http") if tokens == "server" else ("wss", "ws")
         self.url = check_url("url", url, schemes)
+        self.server = self.url  # where the robot asks for its tokens, with tokens = "server"
         if not room or not participant:
             raise ValueError("room and participant must not be empty")
         self.room = room
@@ -206,6 +209,7 @@ class LiveKitCloud(Cloud):
         self.audio: ConversationAudio | None = None  # offered for conversations, if any
         self.session: Session | None = None  # the session whose hello succeeded
         self.identity: Identity | None = None
+        self.bound: bool | None = None  # what the server last said of the robot
         self.schema: Schema | None = None
         self._token_schema: Schema | None = None
         self._http: aiohttp.ClientSession | None = None
@@ -240,6 +244,9 @@ class LiveKitCloud(Cloud):
 
     async def identify(self, identity: Identity) -> None:
         self.identity = identity
+
+    async def serve(self, server: str) -> None:
+        self.server = check_url("server", server, ("https", "http"))
 
     async def offer(
         self,
@@ -291,20 +298,36 @@ class LiveKitCloud(Cloud):
     def opened(self, session: Session) -> None:
         """``session``'s hello exchange succeeded."""
         self.session = session
-        self._statuses.put_nowait(
-            LinkStatus(True, session.id, session.events, conversations=session.conversations)
-        )
+        self._statuses.put_nowait(self._status())
 
     def closed(self, session: Session) -> None:
         """``session`` ended: its calls in progress are cancelled, and its turn and
         response end."""
         if self.session is session:
             self.session = None
-            self._statuses.put_nowait(LinkStatus(False))
+            self._statuses.put_nowait(self._status())
         for call in session.cancel_calls():
             self._requests.put_nowait(CallCancelled(call))
         for part in session.abandon():
             self.heard(part)
+
+    def _status(self) -> LinkStatus:
+        session = self.session
+        if session is None:
+            return LinkStatus(False, bound=self.bound)
+        return LinkStatus(
+            True,
+            session.id,
+            session.events,
+            conversations=session.conversations,
+            bound=self.bound,
+        )
+
+    def _known(self, bound: bool) -> None:
+        """The server said whether it knows the robot."""
+        if bound != self.bound:
+            self.bound = bound
+            self._statuses.put_nowait(self._status())
 
     def called(self, call: ToolCall) -> None:
         self._requests.put_nowait(call)
@@ -326,6 +349,11 @@ class LiveKitCloud(Cloud):
             reached = False
             try:
                 reached = await self._stay(await self._access())
+            except NotSetUp as error:
+                self._known(False)
+                if not reported:
+                    log.warning("cannot join the cloud's room: %s", error)
+                    reported = True
             except NoToken as error:
                 if not reported:
                     log.warning("cannot join the cloud's room: %s", error)
@@ -349,7 +377,9 @@ class LiveKitCloud(Cloud):
         if self.identity is None:
             raise NoToken("no identity to prove the robot's to the server")
         assert self._http is not None and self._token_schema is not None
-        return await server_access(self._http, self.url, self.identity, self._token_schema)
+        access = await server_access(self._http, self.server, self.identity, self._token_schema)
+        self._known(True)
+        return access
 
     async def _stay(self, access: Access) -> bool:
         """One stay in the room. Returns whether a session's hello exchange succeeded."""

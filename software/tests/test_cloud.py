@@ -9,10 +9,14 @@ import contextlib
 import logging
 import math
 from collections.abc import AsyncIterator, Mapping
+from functools import partial
 from typing import Any
 
+import jwt
 import pytest
+import waiting
 
+from ai_robot.adapters.sim.binding import SimBindingStore
 from ai_robot.adapters.sim.cloud import SimCloud
 from ai_robot.adapters.sim.identity import SimIdentity
 from ai_robot.adapters.sim.screen import SimScreen
@@ -23,6 +27,7 @@ from ai_robot.core.factory import create
 from ai_robot.core.module import Module, ModuleContext, RobotInfo
 from ai_robot.messages import (
     BatteryReport,
+    BindingChanged,
     CapabilityCall,
     CapabilityCancelled,
     CapabilityOffered,
@@ -31,13 +36,16 @@ from ai_robot.messages import (
     ConversationFromCloud,
     ConversationOffered,
     ConversationToCloud,
+    RegistrationRequested,
+    RegistrationSigned,
     RobotEvent,
 )
-from ai_robot.modules.cloud import CloudModule
+from ai_robot.modules.cloud import REGISTRATION_TYPE, CloudModule
 from ai_robot.modules.screen import ScreenModule, capabilities, load_vocabulary
 from ai_robot.ports import (
     AudioFormat,
     BatteryStatus,
+    Binding,
     Capability,
     ConversationAudio,
     EventKind,
@@ -52,6 +60,9 @@ from ai_robot.ports import (
 )
 
 TIMEOUT = 2.0
+
+until = partial(waiting.until, timeout=TIMEOUT)
+
 
 # The screen module's settings, as shipped in config/base.toml.
 SCREEN = {
@@ -125,16 +136,29 @@ class Lamp(Module):
         return {"on": arguments.get("on", False)}
 
 
-def cloud_module(bus: Bus, cloud: SimCloud, timeout: float = TIMEOUT) -> CloudModule:
+def cloud_module(
+    bus: Bus,
+    cloud: SimCloud,
+    timeout: float = TIMEOUT,
+    store: SimBindingStore | None = None,
+    identity: SimIdentity | None = None,
+) -> CloudModule:
+    ports = {
+        "cloud": cloud,
+        "identity": identity or SimIdentity(),
+        "binding": store or SimBindingStore(bound=True),
+    }
     return CloudModule(
-        context("cloud", bus, {"cloud": cloud, "identity": SimIdentity()}),
-        allowed_classes=["informational"],
-        call_timeout=timeout,
+        context("cloud", bus, ports), allowed_classes=["informational"], call_timeout=timeout
     )
 
 
 @contextlib.asynccontextmanager
 async def running(*modules: Module) -> AsyncIterator[None]:
+    """Run ``modules`` as the application does: their ports open first."""
+    ports = [port for module in modules for port in module._ports.values()]
+    for port in ports:
+        await port.open()
     for module in modules:
         await module.start()
     tasks = [asyncio.create_task(module.run()) for module in modules]
@@ -148,12 +172,8 @@ async def running(*modules: Module) -> AsyncIterator[None]:
                 await task
         for module in reversed(modules):
             await module.stop()
-
-
-async def until(condition: Any, timeout: float = TIMEOUT) -> None:
-    async with asyncio.timeout(timeout):
-        while not condition():
-            await asyncio.sleep(0.01)
+        for port in reversed(ports):
+            await port.close()
 
 
 def lamp_robot(timeout: float = TIMEOUT) -> tuple[Bus, SimCloud, Lamp, CloudModule]:
@@ -422,7 +442,11 @@ def test_the_clouds_part_reaches_the_robot_in_order() -> None:
 
 
 def test_settings_are_checked() -> None:
-    ctx = context("cloud", Bus(), {"cloud": SimCloud(), "identity": SimIdentity()})
+    ctx = context(
+        "cloud",
+        Bus(),
+        {"cloud": SimCloud(), "identity": SimIdentity(), "binding": SimBindingStore(bound=True)},
+    )
     with pytest.raises(ConfigError, match=r"allowed_classes: unknown classes \['flying'\]"):
         create(CloudModule, "modules.cloud", ctx, allowed_classes=["flying"], call_timeout=1.0)
     with pytest.raises(ConfigError, match="call_timeout must be a positive number"):
@@ -488,10 +512,9 @@ def test_the_screens_capabilities_follow_the_vocabulary() -> None:
     assert list(expression["enum"]) == list(vocabulary["expressions"])
     assert list(show.input_schema["properties"]["tone"]["enum"]) == vocabulary["tones"]
     assert list(mood.input_schema["properties"]["expression"]["enum"])[-1] is None
-    assert list(scene.input_schema["properties"]["scene"]["enum"]) == [
-        *vocabulary["scenes"],
-        None,
-    ]
+    offered = [name for name, spec in vocabulary["scenes"].items() if not spec.get("robot_only")]
+    assert "setup" not in offered
+    assert list(scene.input_schema["properties"]["scene"]["enum"]) == [*offered, None]
     timer = next(
         branch["then"]["properties"]["data"]
         for branch in scene.input_schema["allOf"]
@@ -516,6 +539,19 @@ def test_scene_data_the_renderer_cannot_draw_is_refused() -> None:
     asyncio.run(main())
 
 
+def test_the_cloud_cannot_show_the_set_up_code() -> None:
+    async def main() -> None:
+        screen, cloud, module, link = screen_robot()
+        async with running(module, link):
+            await until(lambda: cloud.online)
+            fake = {"state": "code", "code": "12345678", "link": "setup:1:3F7A:12345678"}
+            data, error = await cloud.call("screen.show_scene", {"scene": "setup", "data": fake})
+            assert data is None and error is not None and error.startswith("invalid arguments")
+            assert screen.state.scene is None
+
+    asyncio.run(main())
+
+
 def test_a_tap_reaches_the_cloud() -> None:
     async def main() -> None:
         screen, cloud, module, link = screen_robot()
@@ -526,3 +562,137 @@ def test_a_tap_reaches_the_cloud() -> None:
             assert list(cloud.events) == [("screen.touched", {"x": 0.5, "y": 0.25})]
 
     asyncio.run(main())
+
+
+# ---- set-up: the registration and the binding ----
+
+
+class Unsigned(SimIdentity):
+    """An identity whose key cannot sign, as a failing TPM."""
+
+    async def sign(self, data: bytes) -> bytes:
+        raise OSError("the TPM did not answer")
+
+
+class Unsaved(SimBindingStore):
+    """A binding that cannot be saved, as on a full disk."""
+
+    async def save(self, binding: Binding) -> None:
+        raise OSError("no space left on device")
+
+
+async def signed(bus: Bus, server: str, request: str = "setup-1") -> RegistrationSigned:
+    answers = bus.subscribe(RegistrationSigned)
+    bus.publish(RegistrationRequested(request, "a-challenge-from-the-server", server))
+    return await asyncio.wait_for(answers.get(), TIMEOUT)
+
+
+def test_the_binding_is_announced_at_start() -> None:
+    async def main() -> None:
+        for bound in (True, False):
+            bus = Bus()
+            identity = SimIdentity()
+            bindings = bus.subscribe(BindingChanged)
+            store = SimBindingStore(bound=bound)
+            module = cloud_module(bus, SimCloud(), store=store, identity=identity)
+            await identity.open()
+            await module.start()
+            change = await asyncio.wait_for(bindings.get(), TIMEOUT)
+            assert change == BindingChanged(await identity.robot_id(), bound)
+
+    asyncio.run(main())
+
+
+def test_a_registration_is_a_jwt_signed_by_the_robots_key() -> None:
+    async def main() -> None:
+        bus, cloud = Bus(), SimCloud()
+        cloud.knows_robot = False  # not set up yet
+        identity = SimIdentity()
+        store = SimBindingStore(bound=False)
+        module = cloud_module(bus, cloud, store=store, identity=identity)
+        async with running(module):
+            answer = await signed(bus, "https://cloud.example")
+            assert answer.error is None and answer.registration is not None
+            header = jwt.get_unverified_header(answer.registration)
+            assert header["typ"] == REGISTRATION_TYPE and header["alg"] == "ES256"
+            assert header["jwk"] == dict(await identity.public_key())
+            claims = jwt.decode(
+                answer.registration,
+                jwt.PyJWK(header["jwk"]).key,
+                algorithms=["ES256"],
+                audience="https://cloud.example",
+            )
+            robot = await identity.robot_id()
+            assert (claims["iss"], claims["sub"]) == (robot, robot)
+            assert claims["nonce"] == "a-challenge-from-the-server"
+            assert len(claims["jti"]) >= 16 and "iat" not in claims and "exp" not in claims
+            # From now on the robot asks the server it was registered with.
+            assert store.binding == Binding("https://cloud.example", False)
+            assert cloud.server == "https://cloud.example"
+
+    asyncio.run(main())
+
+
+@pytest.mark.parametrize(
+    ("bound", "server", "identity", "error"),
+    [
+        (False, "http://cloud.example", SimIdentity, "server"),
+        (False, "ftp://cloud.example", SimIdentity, "server"),
+        (True, "https://cloud.example", SimIdentity, "bound"),
+        (False, "https://cloud.example", Unsigned, "identity"),
+    ],
+)
+def test_registrations_the_robot_refuses(
+    bound: bool, server: str, identity: type[SimIdentity], error: str
+) -> None:
+    async def main() -> None:
+        bus, cloud = Bus(), SimCloud()
+        cloud.knows_robot = bound
+        store = SimBindingStore(bound=bound)
+        module = cloud_module(bus, cloud, store=store, identity=identity())
+        async with running(module):
+            answer = await signed(bus, server)
+            assert (answer.registration, answer.error) == (None, error)
+            assert answer.detail
+            assert store.binding == Binding(None, bound) and cloud.server is None
+
+    asyncio.run(main())
+
+
+def test_the_server_says_whether_the_robot_is_bound() -> None:
+    async def main() -> None:
+        bus, cloud = Bus(), SimCloud()
+        cloud.knows_robot = False
+        store = SimBindingStore(bound=False)
+        bindings = bus.subscribe(BindingChanged)
+        module = cloud_module(bus, cloud, store=store)
+        async with running(module):
+            assert not (await asyncio.wait_for(bindings.get(), TIMEOUT)).bound  # at start
+            cloud.recognise()  # set up
+            assert (await asyncio.wait_for(bindings.get(), TIMEOUT)).bound
+            assert module.online
+            assert store.binding.bound
+            cloud.forget()  # revoked
+            assert not (await asyncio.wait_for(bindings.get(), TIMEOUT)).bound
+            assert not store.binding.bound
+            cloud.recognise()
+            assert (await asyncio.wait_for(bindings.get(), TIMEOUT)).bound
+
+    asyncio.run(main())
+
+
+def test_a_binding_that_cannot_be_saved_is_kept_in_memory(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def main() -> None:
+        bus, cloud = Bus(), SimCloud()
+        bindings = bus.subscribe(BindingChanged)
+        module = cloud_module(bus, cloud, store=Unsaved(bound=False))
+        async with running(module):
+            await asyncio.wait_for(bindings.get(), TIMEOUT)
+            assert (await asyncio.wait_for(bindings.get(), TIMEOUT)).bound
+            assert module.binding.bound
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(main())
+    assert "cannot keep the robot's binding: no space left on device" in caplog.text

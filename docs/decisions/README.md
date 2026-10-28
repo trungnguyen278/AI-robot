@@ -20,3 +20,4 @@ Each significant decision is a short file: context, decision, alternatives consi
 | [0011](0011-audio-voice-processor.md) | Audio: a USB voice processor (XMOS XVF3800) that the robot also speaks through | Proposed | 2026-10-22 |
 | [0012](0012-end-of-speech.md) | The end of the user's speech: the cloud decides, the robot falls back | Proposed | 2026-10-23 |
 | [0013](0013-listening-on-the-robot.md) | Listening on the robot: microWakeWord, Silero VAD, and PipeWire | Proposed | 2026-10-23 |
+| [0015](0015-set-up.md) | Set-up: the app over Bluetooth LE, secured by a code on the robot's screen | Proposed | 2026-10-24 |

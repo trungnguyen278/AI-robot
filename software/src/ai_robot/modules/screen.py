@@ -108,9 +108,10 @@ def capabilities(
     scene_max_seconds: float,
 ) -> list[Capability]:
     """What the cloud can ask of the screen, from the screen protocol's vocabulary, so
-    that the cloud sees exactly the expressions, colours and scenes the renderer draws.
-    A reaction lasts ``reaction_seconds`` unless the cloud says, up to
-    ``reaction_max_seconds``; a scene, up to ``scene_max_seconds``."""
+    that the cloud sees exactly the expressions, colours and scenes the renderer draws,
+    but the robot's own scenes (``robot_only``, such as set-up). A reaction lasts
+    ``reaction_seconds`` unless the cloud says, up to ``reaction_max_seconds``; a scene,
+    up to ``scene_max_seconds``."""
     expressions = dict(vocabulary["expressions"])
     looks = "; ".join(f"{name}: {look}" for name, look in expressions.items())
     tone = {
@@ -118,7 +119,11 @@ def capabilities(
         "enum": list(vocabulary["tones"]),
         "description": "A colour; the expression's own when missing",
     }
-    scenes = dict(vocabulary["scenes"])
+    scenes = {
+        name: scene
+        for name, scene in vocabulary["scenes"].items()
+        if not scene.get("robot_only", False)
+    }
     contents = "; ".join(f"{name}: {scene['description']}" for name, scene in scenes.items())
     return [
         Capability(

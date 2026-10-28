@@ -21,9 +21,12 @@ from ai_robot.core.factory import import_object
 from ai_robot.modules import MODULES
 from ai_robot.ports import PORT_TYPES
 
-# Adapters whose library is installed only where they run (pyproject.toml's extras).
+# Adapters whose library is installed only where they run (pyproject.toml's extras, and
+# dependencies for Linux only).
 EXTRAS = {
     ("identity", "tpm"): "tpm2_pytss",
+    ("setup_link", "bluez"): "dbus_fast",
+    ("network", "networkmanager"): "dbus_fast",
 }
 PROFILES = sorted(
     path.stem for path in (Path(__file__).parents[1] / "config" / "profiles").glob("*.toml")
