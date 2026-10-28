@@ -70,7 +70,7 @@ software/
 
 ## Run and test
 
-On any computer with Python 3.11 or later (Raspberry Pi OS "Trixie" ships Python 3.13, as of October 2026):
+On any computer with Python 3.11 or later (Raspberry Pi OS "Trixie" ships Python 3.13 and Ubuntu 26.04 ships 3.14, as of October 2026):
 
 ```sh
 cd software

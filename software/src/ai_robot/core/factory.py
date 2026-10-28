@@ -57,8 +57,18 @@ def _check_types(cls: type, where: str, settings: Mapping[str, Any]) -> None:
     for name, value in settings.items():
         expected = hints.get(name)
         if expected is not None and not _matches(value, expected):
-            described = getattr(expected, "__name__", None) or str(expected)
-            raise ConfigError(f"{where}: {name} must be {described}, got {value!r}")
+            raise ConfigError(f"{where}: {name} must be {_describe(expected)}, got {value!r}")
+
+
+def _describe(expected: Any) -> str:
+    """How the annotation ``expected`` reads in a message, such as ``float | None``.
+    Unions are spelt out: since Python 3.14 a union's ``__name__`` is ``Union``."""
+    if expected is type(None):
+        return "None"
+    origin = typing.get_origin(expected)
+    if origin is typing.Union or origin is types.UnionType:
+        return " | ".join(_describe(option) for option in typing.get_args(expected))
+    return getattr(expected, "__name__", None) or str(expected)
 
 
 def _matches(value: Any, expected: Any) -> bool:
