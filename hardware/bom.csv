@@ -6,7 +6,7 @@ id,item,qty,block,interface,supply,status,notes
 5,Main fuse 25-30A + holder,1,power,-,-,planned,
 6,Emergency stop switch HY57B,1,power,-,-,planned,Scope: hardware/README.md open issue 5
 7,Pololu D24V90F5 5V step-down regulator,1,power,-,3S battery,planned,5V rail for the Pi 5 and peripherals
-8,Raspberry Pi 5 8GB,1,compute,-,5V rail (GPIO header),planned,
+8,Raspberry Pi 5 8GB,1,compute,-,5V rail (GPIO header),received,
 9,Raspberry Pi Active Cooler,1,compute,Pi 5 fan connector,Pi 5,planned,
 10,Waveshare 7inch DSI LCD (C),1,face,DSI + I2C (touch),5V rail,planned,"1024x600, capacitive touch"
 11,Raspberry Pi AI Camera (IMX500),1,vision,CSI,Pi 5,planned,

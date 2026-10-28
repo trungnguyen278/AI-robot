@@ -62,6 +62,8 @@ Full parts list: [bom.csv](bom.csv) (`status`: proposed → planned → ordered 
 10. **The XVF3800 array's power.** It takes its power from the Pi's USB. At full volume its amplifier needs about 1.35 A, more than the ~600 mA the Pi's USB ports give when the Pi is powered through the header (issue 4). Measure the array's draw at the robot's speaking volume, then choose:
     - raise the Pi's USB limit, with a supply that really delivers 5 A;
     - or feed the array's USB power from the 5 V rail through a power injector.
+
+    On the bench, on Raspberry Pi's official 27 W supply, the Pi received no USB-PD offer and held its USB ports to about 600 mA (2026-10-28, [Pi 5 notes](components/raspberry-pi-5.md#checked-on-the-robots-pi)). The array is tested once the Pi reports 5 A.
 11. **Where the array and the speaker sit.** On the same part of the robot, so that moving the neck does not change the path from the speaker to the microphones. On the head, the direction of a voice is measured from the face. The array is 108 × 108 mm, and its microphones need openings.
 12. **Parts on the header, on a vibrating chassis.** The TPM plugs onto the header through a stacking header, and the UART to the body controller is wired to the header too. Decide how they hold against the tracks' vibration, with standoffs and locking connectors or with a carrier board of our own, together with the body controller ([ADR-0004](../docs/decisions/0004-pi-software-first.md)).
 

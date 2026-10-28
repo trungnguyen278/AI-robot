@@ -25,7 +25,7 @@ To take the studio elsewhere, build it as one file that opens without a server, 
 python3 ui/tools/single_file.py --out studio.html
 ```
 
-With the robot software running (`ai-robot --profile desktop`, see [software/](../software/README.md)), its screen is at <http://127.0.0.1:8770/>. On the robot, Chromium shows that address in kiosk mode, started from labwc's autostart ([Raspberry Pi's kiosk tutorial](https://www.raspberrypi.com/tutorials/how-to-use-a-raspberry-pi-in-kiosk-mode/)). Add `#round` to the address on a round display.
+With the robot software running (`ai-robot --profile desktop`, see [software/](../software/README.md)), its screen is at <http://127.0.0.1:8770/>. On the robot, Ubuntu Frame shows that address in Chromium, in kiosk mode ([ADR-0017](../docs/decisions/0017-ros-2.md); [a web kiosk with Ubuntu Frame](https://ubuntu.com/frame/docs/26/tutorial/make-a-secure-ubuntu-web-kiosk/)). Chromium is also the engine that runs the tests below. Add `#round` to the address on a round display.
 
 ## How it fits together
 

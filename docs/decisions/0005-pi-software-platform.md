@@ -1,6 +1,6 @@
 # 0005 — Pi software platform: Raspberry Pi OS, Python with C++ extensions, no ROS 2 for now
 
-- **Status:** Proposed
+- **Status:** Superseded by [0017](0017-ros-2.md)
 - **Date:** 2026-10-15
 
 ## Context

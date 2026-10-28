@@ -1,11 +1,11 @@
 # Raspberry Pi 5 (8 GB)
 
-> Last updated: 2026-10-15. Several entries rely on a copy of the product brief and on secondary sources (marked as such); re-check them against the official documentation.
+> Last updated: 2026-10-27. Several entries rely on a copy of the product brief and on secondary sources (marked as such); re-check them against the official documentation.
 
 - **Role in the robot:** the brain — audio, vision, face, networking, AI.
 - **Exact model / variant:** Raspberry Pi 5, 8 GB RAM.
 - **Quantity:** 1
-- **Connected to:** 5 V DC-DC through the header; display (DSI), camera (CSI), ReSpeaker HAT (header), ESP32-S3 (UART).
+- **Connected to:** 5 V DC-DC through the header; display (DSI), camera (CSI), XVF3800 microphone array (USB), TPM (SPI0 on the header), ESP32-S3 (UART).
 
 ## Key specifications
 
@@ -28,7 +28,7 @@
 | Function | GPIO (physical pin) | Notes |
 |---|---|---|
 | I2C1 | 2 SDA (3), 3 SCL (5) | Enable with `dtparam=i2c_arm=on` |
-| UART0 | 14 TX (8), 15 RX (10) | Full PL011 UART; the console lives on the separate debug connector. Secondary sources enable it with the `uart0-pi5` overlay — unverified |
+| UART0 | 14 TX (8), 15 RX (10) | Full PL011 UART; the console lives on the separate debug connector. Enabled with the `uart0-pi5` overlay, present in Raspberry Pi OS's and Ubuntu 26.04's kernels (checked 2026-10-28) |
 | I2S / PCM | 18 BCLK (12), 19 LRCLK (35), 20 DIN (38), 21 DOUT (40) | **The only I2S pin group on the header**; enable with `dtparam=i2s=on` or the HAT's overlay |
 | Hardware PWM | 12, 13, 18, 19 | 18/19 overlap with I2S |
 | SPI0 | 7–11 | Enable with `dtparam=spi=on` |
@@ -51,10 +51,24 @@
 
 ## Software
 
-- **OS:** 64-bit Raspberry Pi OS, currently based on Debian 13 "Trixie" (latest image seen: 2026-04-21, kernel 6.12). Re-check at install time.
+- **OS:** Ubuntu 26.04 LTS Server, 64-bit, proposed in [ADR-0017](../../docs/decisions/0017-ros-2.md) for ROS 2. Canonical certifies it on the Pi 5, which needs a bootloader EEPROM dated 2025-02-11 or later. A March 2026 Ubuntu bug report adds that 2025-12-08 is known to work, so update the EEPROM to the latest before installing.
+- **Raspberry Pi OS**, the vendor's own: 64-bit, based on Debian 13 "Trixie" (latest image seen: 2026-04-21, kernel 6.12).
+  - Its Pi 5 kernel (`kernel_2712.img`) uses 16 KB memory pages: `getconf PAGESIZE` gives 16384 on the robot's Pi, measured 2026-10-28.
+  - Some software costs much more under 16 KB pages: each ROS 2 Python process carries a 128 MB region from LTTng-UST ([ADR-0017](../../docs/decisions/0017-ros-2.md)). `kernel8.img`, shipped beside it, uses 4 KB pages *(secondary source)*, as Ubuntu's kernel does.
 - **GPIO:** `RPi.GPIO` **does not work** on the Pi 5 (GPIO lives on the RP1). Use `gpiozero` (with the `lgpio` backend), `lgpio` or `libgpiod`; `rpi-lgpio` runs legacy RPi.GPIO code.
 - **gpiochip numbering:** the header used to be `gpiochip4`; newer kernels add a `gpiochip0` alias → never hard-code it, use `gpiodetect`/`gpioinfo`.
-- **Camera:** libcamera, Picamera2, rpicam-apps.
+- **Camera:** libcamera, Picamera2, rpicam-apps. On Ubuntu, libcamera and rpicam-apps come from Ubuntu's archive, but Picamera2 and the IMX500's firmware do not ([AI Camera notes](raspberry-pi-ai-camera.md)).
+
+## Checked on the robot's Pi
+
+Measured on 2026-10-28, under Raspberry Pi OS:
+- **The board:** Raspberry Pi 5 Model B Rev 1.1, revision code `d04171` (8 GB), with the BCM2712's D0 stepping: the firmware loads its `bcm2712d0` overlay. Its bootloader EEPROM is dated 2025-12-08.
+- **Bluetooth:** HCI version 9 (Bluetooth 5.0), with LE, advertising (5 sets), secure connections and privacy; both the central and the peripheral roles.
+- **Overlays the robot needs:** all present, in Raspberry Pi OS and in Ubuntu 26.04's kernel alike: `tpm-slb9670`, `uart0-pi5`, `uart2-pi5`, `spi0-1cs`, `i2c1`, `vc4-kms-dsi-waveshare-panel`, `imx500`.
+- **Power, on Raspberry Pi's official 27 W supply:**
+  - the Pi received no USB-PD offer at boot: `usbpd_power_data_objects` is empty;
+  - so it assumed 3 A (`max_current` 3000 mA) and holds its USB ports to about 600 mA (`usb_max_current_enable=0`), too little for the XVF3800 array at volume ([hardware open issue 10](../README.md));
+  - the official supply should offer 5.1 V at 5 A. To check: a power cycle, and the plug and cable between the two.
 
 ## AI performance (estimates, see ADR-0001)
 
@@ -82,3 +96,7 @@
 - [I2S / PCM pins — pinout.xyz](https://pinout.xyz/pinout/pcm)
 - [Active Cooler fan curve — SunFounder docs](https://docs.sunfounder.com/projects/pironman5/en/latest/hardware/fans.html)
 - [Raspberry Pi OS downloads](https://www.raspberrypi.com/software/operating-systems/)
+- [Ubuntu on the Raspberry Pi](https://ubuntu.com/raspberry-pi) (the Pi 5 certified for 26.04) and [installing Ubuntu on the Raspberry Pi](https://ubuntu.com/hardware/docs/boards/how-to/ubuntu_supported/raspberry-pi/) (the minimum EEPROM dates), retrieved 2026-10-27
+- [Pi 5 boards need an EEPROM update to boot kernel 7.0](https://lists.snapcraft.io/archives/foundations-bugs/2026-March/547030.html), Launchpad bug 2146383, March 2026
+- [Changing to a 4K page size on the Raspberry Pi](https://pimylifeup.com/raspberry-pi-page-size/) — PiMyLifeUp (secondary), retrieved 2026-10-28
+- Ubuntu 26.04's Raspberry Pi kernel, at tag `Ubuntu-raspi-7.0.0-1022.22`: [its configuration](https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux-raspi/+git/resolute/plain/debian.master/config/annotations?h=Ubuntu-raspi-7.0.0-1022.22) (16 KB pages off on arm64) and [its overlays](https://git.launchpad.net/~ubuntu-kernel/ubuntu/+source/linux-raspi/+git/resolute/plain/arch/arm/boot/dts/overlays/Makefile?h=Ubuntu-raspi-7.0.0-1022.22), retrieved 2026-10-28

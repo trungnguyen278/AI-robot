@@ -1,6 +1,6 @@
 ---
 name: pi5-platform
-description: Raspberry Pi 5 (8 GB) platform knowledge and checklists for this robot — 40-pin header functions (I2C, SPI, UART, I2S, PWM), 3.3 V logic, power (5 V/5 A, USB current limit, powering through the header, halt power), thermal throttling, Wi-Fi/BLE, CSI/DSI/PCIe, Raspberry Pi OS, config.txt/EEPROM settings and GPIO libraries. Use whenever a task touches the Pi side of the hardware or OS — wiring something to the Pi, assigning GPIO pins, enabling interfaces or overlays, powering or cooling the Pi, choosing GPIO, camera or audio libraries, or deciding what runs on the Pi versus the ESP32.
+description: Raspberry Pi 5 (8 GB) platform knowledge and checklists for this robot — 40-pin header functions (I2C, SPI, UART, I2S, PWM), 3.3 V logic, power (5 V/5 A, USB current limit, powering through the header, halt power), thermal throttling, Wi-Fi/BLE, CSI/DSI/PCIe, the OS (Ubuntu 26.04 with ROS 2, ADR-0017), config.txt/EEPROM settings and GPIO libraries. Use whenever a task touches the Pi side of the hardware or OS — wiring something to the Pi, assigning GPIO pins, enabling interfaces or overlays, powering or cooling the Pi, choosing GPIO, camera or audio libraries, or deciding what runs on the Pi versus the ESP32.
 ---
 
 # Raspberry Pi 5 platform
@@ -33,6 +33,10 @@ description: Raspberry Pi 5 (8 GB) platform knowledge and checklists for this ro
 - `RPi.GPIO` **does not work on the Pi 5** (GPIO lives on the RP1 chip). Use `gpiozero`, `lgpio` or `libgpiod`; `rpi-lgpio` runs legacy RPi.GPIO code.
 - Do not hard-code `gpiochip4` or `gpiochip0`: the number changed between kernels. Find the chip with `gpiodetect`/`gpioinfo` or by label.
 - There is no 3.5 mm audio jack and no ADC. Audio goes through I2S, USB or HDMI; analog measurements such as battery voltage go through the ESP32-S3 or an ADC/INA chip.
+- The robot runs Ubuntu 26.04 rather than Raspberry Pi OS (ADR-0017). Raspberry Pi's guides assume Raspberry Pi OS, so check each step on Ubuntu:
+  - `config.txt` lives in `/boot/firmware/`, as on Raspberry Pi OS. Check that each overlay the robot needs (TPM, display) ships with Ubuntu's kernel;
+  - the bootloader EEPROM must be dated 2025-02-11 or later;
+  - Picamera2 and the IMX500's firmware are not in Ubuntu's archive (`hardware/components/raspberry-pi-ai-camera.md`).
 
 ## When the reference is missing something
 
