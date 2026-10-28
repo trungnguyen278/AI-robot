@@ -44,7 +44,7 @@
 
 - Positive: transitions between any two expressions; a face that follows a gaze and a voice and stays alive while the software is busy; any screen size or shape. The same code runs on the robot, in a browser, in tests and in the Artifact. Either side can be replaced without touching the other, and both are tested against the protocol's vocabulary.
 - Negative / accepted trade-offs: a browser on the robot (memory, start-up time). The software gets its first runtime dependency, aiohttp. The previous library's 82 categories have to be ported: 14 expressions and 5 scenes (clock, weather, timer, charging, start-up) exist so far.
-- Follow-up: measure frame rate, CPU and memory on a Pi 5 with the 7" display (`chrome://gpu`, the studio's frame-rate readout). Set up the kiosk (labwc autostart). Port the remaining scenes, have behaviors request expressions and scenes, and have vision send `LookAt`.
+- Follow-up: measure frame rate, CPU and memory on a Pi 5 with the 7" display (`chrome://gpu`, the studio's frame-rate readout). Set up the kiosk: Ubuntu Frame with Chromium, since [ADR-0017](0017-ros-2.md) moves the robot to Ubuntu (labwc's autostart was Raspberry Pi OS's way). Port the remaining scenes, have behaviors request expressions and scenes, and have vision send `LookAt`.
 
 ## References
 

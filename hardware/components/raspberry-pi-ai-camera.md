@@ -23,6 +23,10 @@
 
 - Focus is manual → set it for the main working distance before final mounting.
 - Models that exceed the IMX500's limits run on the Pi's CPU or on the server.
+- **On Ubuntu** ([ADR-0017](../../docs/decisions/0017-ros-2.md)), checked 2026-10-27:
+  - libcamera and rpicam-apps are in Ubuntu's archive, for every Pi camera since 25.04;
+  - Picamera2 is not in it, so the project packages it from Raspberry Pi's sources;
+  - the IMX500's firmware (`imx500-firmware`) cannot be in Ubuntu: its maintainers say its license does not allow redistribution. The robot fetches it from Raspberry Pi's archive during set-up and keeps it on the data partition ([ADR-0014](../../docs/decisions/0014-updates.md)). Check its license before the first robot ships.
 
 ## References (retrieved 2026-10-15)
 
@@ -31,3 +35,4 @@
 - [CNX Software](https://www.cnx-software.com/2024/10/01/raspberry-pi-ai-camera-with-sony-imx500-ai-sensor-and-rp2040-mcu/)
 - [Elektor](https://elektormagazine.com/articles/raspberry-pi-ai-camera)
 - [PiShop](https://www.pishop.us/product/raspberry-pi-ai-camera/)
+- [Using the camera on a Raspberry Pi](https://ubuntu.com/hardware/docs/boards/how-to/special_hardware/rpi-camera/), Ubuntu, and [camera modules on Ubuntu 25.04](https://discourse.ubuntu.com/t/using-camera-modules-on-a-raspberry-pi-running-ubuntu-25-04-plucky-puffin/59716), Ubuntu Discourse (retrieved 2026-10-27)

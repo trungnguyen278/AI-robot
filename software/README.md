@@ -1,6 +1,8 @@
 # software/ — robot software on the Raspberry Pi 5
 
-> **Status:** skeleton. Every port has a simulated adapter, so the whole robot already runs on any computer; real adapters are added as the hardware arrives. Platform: [ADR-0005](../docs/decisions/0005-pi-software-platform.md) (proposed).
+> **Status:** skeleton. Every port has a simulated adapter, so the whole robot already runs on any computer; real adapters are added as the hardware arrives.
+>
+> **Platform:** this code follows [ADR-0005](../docs/decisions/0005-pi-software-platform.md): one Python process with its own message bus. [ADR-0017](../docs/decisions/0017-ros-2.md), proposed, supersedes it: ROS 2 Lyrical on Ubuntu 26.04, every module a node. The [migration](../docs/architecture.md#migration) moves this code there. Its modules keep their logic, ports, adapters and tests.
 
 Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependencies:
 - [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen;
@@ -104,7 +106,7 @@ On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`. It keeps t
   EOF
   ```
 
-  BlueZ's D-Bus policy lets any user offer the set-up service. These are the policies of Debian Trixie's `network-manager` 1.52.1 and `bluez` 5.82 packages; the robot's image will carry its own rule ([ADR-0014](../docs/decisions/0014-updates.md)).
+  BlueZ's D-Bus policy lets any user offer the set-up service. These are the policies of Debian Trixie's `network-manager` 1.52.1 and `bluez` 5.82 packages, and of Ubuntu 26.04's 1.54.3 and 5.85 (checked 2026-10-27); the robot's image will carry its own rule ([ADR-0014](../docs/decisions/0014-updates.md)).
 
 On a Pi without its TPM, select the `file` identity in `config/local.toml` (see `local.example.toml`).
 
@@ -154,7 +156,7 @@ The `setup` module sets the robot up with the owner's app, over Bluetooth LE ([p
 - **The session.** The code secures it, through SPAKE2+ (`core/spake2plus.py`, checked against RFC 9383's test vectors), then AES-GCM (`core/setup_session.py`). The app scans for networks, joins one, and asks for the robot's registration, which the `cloud` module signs with the robot's key.
 - **Bound.** The robot is bound once the server it was registered with accepts it; the `binding` port keeps that, so that the robot knows it while offline (a file on the robot).
 
-On a computer, the `sim` adapters stand in: no app connects, and the simulated binding says that the robot is bound. The tests play the app through the simulated link (`tests/test_setup.py`). The `bluez` and `networkmanager` adapters are tested against fake BlueZ and NetworkManager services on a private D-Bus (`tests/test_bluez_setup.py`, `tests/test_networkmanager.py`), which needs Linux and `dbus-daemon` (`sudo apt install dbus-daemon`).
+On a computer, the `sim` adapters stand in: no app connects, and the simulated binding says that the robot is bound. The tests play the app through the simulated link (`tests/test_setup.py`). The `bluez` and `networkmanager` adapters are tested against fake BlueZ and NetworkManager services on a private D-Bus (`tests/test_bluez_setup.py`, `tests/test_networkmanager.py`), which needs Linux and `dbus-daemon` (`sudo apt install dbus-daemon`). The `bluez` link has also run a whole session on the robot's Pi, with a Windows PC as the app (2026-10-28, [dev log](../docs/devlog/2026-10.md)).
 
 ### Settings
 

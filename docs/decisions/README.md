@@ -11,7 +11,7 @@ Each significant decision is a short file: context, decision, alternatives consi
 | [0002](0002-esp32-s3-body-controller.md) | ESP32-S3 as body controller for real-time I/O only | Superseded by [0004](0004-pi-software-first.md) | 2026-10-15 |
 | [0003](0003-neutral-repo-naming.md) | Descriptive repository names without the product name | Accepted | 2026-10-15 |
 | [0004](0004-pi-software-first.md) | Raspberry Pi software first; body controller not chosen yet | Accepted | 2026-10-15 |
-| [0005](0005-pi-software-platform.md) | Pi software platform: Raspberry Pi OS, Python with C++ extensions, no ROS 2 for now | Proposed | 2026-10-15 |
+| [0005](0005-pi-software-platform.md) | Pi software platform: Raspberry Pi OS, Python with C++ extensions, no ROS 2 for now | Superseded by [0017](0017-ros-2.md) | 2026-10-15 |
 | [0006](0006-screen-renderer.md) | Screen: a browser renderer with a procedural face, driven by the Pi software | Proposed | 2026-10-16 |
 | [0007](0007-cloud-link-transport.md) | Cloud link transport: one WebSocket over TLS, opened by the robot, with the audio kept separable | Superseded by [0009](0009-cloud-link-webrtc.md) | 2026-10-16 |
 | [0008](0008-cloud-link-messages.md) | Cloud link messages: typed JSON, MCP for capabilities, binary audio frames | Proposed; the audio frames superseded by [0009](0009-cloud-link-webrtc.md) | 2026-10-16 |
@@ -20,5 +20,7 @@ Each significant decision is a short file: context, decision, alternatives consi
 | [0011](0011-audio-voice-processor.md) | Audio: a USB voice processor (XMOS XVF3800) that the robot also speaks through | Proposed | 2026-10-22 |
 | [0012](0012-end-of-speech.md) | The end of the user's speech: the cloud decides, the robot falls back | Proposed | 2026-10-23 |
 | [0013](0013-listening-on-the-robot.md) | Listening on the robot: microWakeWord, Silero VAD, and PipeWire | Proposed | 2026-10-23 |
+| [0014](0014-updates.md) | Updates: whole signed images in two slots, with RAUC | Proposed | 2026-10-24 |
 | [0015](0015-set-up.md) | Set-up: the app over Bluetooth LE, secured by a code on the robot's screen | Proposed | 2026-10-24 |
 | [0016](0016-settings.md) | Settings: declared by the modules, shown as a panel on the touch screen | Proposed | 2026-10-25 |
+| [0017](0017-ros-2.md) | ROS 2 on the robot: every module a node, the body through ros2_control, on Ubuntu | Proposed | 2026-10-27 |
