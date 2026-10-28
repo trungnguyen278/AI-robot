@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MIT
 /* The renderer's side of the screen protocol (protocol/screen/README.md): it receives
-   what to show from the robot software over a WebSocket, and reports the screen and
-   its taps. When the connection drops, the face keeps playing the last state and the
-   link reconnects; when the software serves a new revision of these files, the page
-   reloads itself to run it. */
+   what to show from the robot software over a WebSocket, and reports the screen, its
+   taps and holds, and what the owner does on a panel. When the connection drops, the
+   face keeps playing the last state, any panel goes, and the link reconnects; when
+   the software serves a new revision of these files, the page reloads itself to run
+   it. */
 
 import { EXPRESSIONS } from './expressions.js';
 import { SCENES } from './scenes/index.js';
 
 export const PROTOCOL = 1;
 
-/** Apply one message from the software to `player` (player.js). Returns whether the
-    message was understood; unknown types and fields are ignored, as the protocol
-    requires. */
-export function apply(message, player) {
+/** Apply one message from the software to `player` (player.js) and, if there is one,
+    `panel` (panel.js). Returns whether the message was understood; unknown types and
+    fields are ignored, as the protocol requires. */
+export function apply(message, player, panel = null) {
   const animator = player.animator;
   // The software's clock, so that the times it sends (a timer's end) read right.
   if (Number.isFinite(message?.time)) player.offset = message.time - Date.now() / 1000;
@@ -32,7 +33,9 @@ export function apply(message, player) {
         battery: Number.isFinite(status.battery) ? status.battery : null,
         charging: typeof status.charging === 'boolean' ? status.charging : null,
         low: typeof status.low === 'boolean' ? status.low : null,
+        muted: typeof status.muted === 'boolean' ? status.muted : null,
       };
+      panel?.show(message.panel ?? null);
       return true;
     }
     case 'look': {
@@ -55,8 +58,10 @@ export function defaultUrl() {
 }
 
 export class Link {
-  constructor(player, { url = defaultUrl(), onChange = () => {}, reload = () => location.reload() } = {}) {
+  /** `panel` draws the panels (panel.js), if this page shows them. */
+  constructor(player, { url = defaultUrl(), panel = null, onChange = () => {}, reload = () => location.reload() } = {}) {
     this.player = player;
+    this.panel = panel;
     this.url = url;
     this.onChange = onChange;
     this.reload = reload;
@@ -92,9 +97,12 @@ export class Link {
         return;
       }
       if (message?.type === 'hello') this.hello(message);
-      apply(message, this.player);
+      apply(message, this.player, this.panel);
     };
     socket.onclose = () => {
+      // Nothing done on a panel would reach the robot: it goes, and the state sent on
+      // reconnection brings it back if it is still open.
+      this.panel?.hide();
       if (this.connected) this.onChange(false);
       this.connected = false;
       setTimeout(() => this.connect(), this.delay * 1000);
@@ -121,5 +129,21 @@ export class Link {
   /** Report a tap at `x`, `y`: fractions of the screen's width and height. */
   touch(x, y) {
     this.send({ type: 'touch', x, y });
+  }
+
+  /** Report a press held still at `x`, `y`, as for `touch`. */
+  hold(x, y) {
+    this.send({ type: 'hold', x, y });
+  }
+
+  /** Report what the owner did to `item` of `panel`: `value` as the item takes it,
+      or none (`undefined`) for a button. */
+  action(panel, item, value) {
+    this.send({ type: 'action', panel, item, value });
+  }
+
+  /** Report that the owner closed `panel`, or left it untouched. */
+  close(panel) {
+    this.send({ type: 'close', panel });
   }
 }

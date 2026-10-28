@@ -20,12 +20,16 @@
 </head>
 <body>
 <canvas id="screen" aria-label="The robot's face"></canvas>
+<div id="panel"></div>
 <div id="offline" hidden></div>
 <script type="module">
   import { Animator } from './src/animator.js';
   import { Link } from './src/link.js';
+  import { PanelView } from './src/panel.js';
   import { Player } from './src/player.js';
+  import { Press } from './src/press.js';
   import { SCENES } from './src/scenes/index.js';
+  import { SETTINGS } from './src/settings.js';
 
   const canvas = document.getElementById('screen');
   const offline = document.getElementById('offline');
@@ -37,9 +41,17 @@
   const player = new Player(canvas, animator, { shape });
   player.start();
 
+  // Panels, such as the settings, over the face.
+  const panel = new PanelView(document.getElementById('panel'), {
+    shape,
+    onAction: (name, item, value) => link.action(name, item, value),
+    onClose: (name) => link.close(name),
+  });
+
   // Show the dot only when the software has been unreachable for a while.
   let timer = setTimeout(() => { offline.hidden = false; }, 2000);
   const link = new Link(player, {
+    panel,
     onChange(connected) {
       clearTimeout(timer);
       if (connected) offline.hidden = true;
@@ -48,10 +60,26 @@
   });
   link.connect();
 
-  canvas.addEventListener('pointerdown', (event) => {
+  // Taps on the face, and presses held still on it.
+  const fraction = (x, y) => {
     const box = canvas.getBoundingClientRect();
-    link.touch((event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height);
+    return [(x - box.left) / box.width, (y - box.top) / box.height];
+  };
+  const press = new Press({ ...SETTINGS.hold, onHold: (x, y) => link.hold(...fraction(x, y)) });
+  canvas.addEventListener('pointerdown', (event) => {
+    link.touch(...fraction(event.clientX, event.clientY));
+    if (event.isPrimary) press.down(event.clientX, event.clientY);
   });
+  canvas.addEventListener('pointermove', (event) => {
+    if (event.isPrimary) press.move(event.clientX, event.clientY);
+  });
+  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+    canvas.addEventListener(type, (event) => {
+      if (event.isPrimary) press.up();
+    });
+  }
+  // A long press on a touch screen would open the browser's menu.
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 </script>
 </body>
 </html>

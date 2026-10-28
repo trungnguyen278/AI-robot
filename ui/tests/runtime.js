@@ -5,8 +5,9 @@
    draw every expression and every scene (with good, missing and malformed data) on
    every screen profile, and check the animator: the same calls give the same frames,
    transitions never jump, scenes move the face smoothly and keep it still between
-   two scenes that share a corner, and protocol messages land where they should. The
-   page also shows every expression and scene, for a look. The verdict goes to
+   two scenes that share a corner, and protocol messages land where they should. They
+   work panels as an owner would, and check holds and the status row. The page also
+   shows every expression and scene, for a look. The verdict goes to
    #result as data-status="pass" or data-status="fail", with one line per failure.
 */
 
@@ -18,7 +19,9 @@ import { DEFAULT_EXPRESSION, EXPRESSIONS } from '../src/expressions.js';
 import { PROFILES, fit } from '../src/layout.js';
 import { Link, PROTOCOL, apply } from '../src/link.js';
 import { MOTIONS } from '../src/motions.js';
+import { EXAMPLE, KINDS, PanelView, TARGET } from '../src/panel.js';
 import { EYE, FACE } from '../src/pose.js';
+import { Press } from '../src/press.js';
 import { SCENES, sceneSlot, sceneTone } from '../src/scenes/index.js';
 import { CORNER } from '../src/scenes/kit.js';
 import { CODE_LENGTH, DISCRIMINATOR_LENGTH, LINK_LENGTH, STATES } from '../src/scenes/setup.js';
@@ -38,6 +41,26 @@ const check = (ok, where, message) => {
   if (!ok) fail(where, message);
 };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Timers that run only when told to, for what waits: a panel's idle time, a hold.
+function fakeTimers() {
+  const pending = new Map();
+  let last = 0;
+  return {
+    pending,
+    set: (run, ms) => {
+      last += 1;
+      pending.set(last, { run, ms });
+      return last;
+    },
+    clear: (id) => pending.delete(id),
+    runAll() {
+      const due = [...pending.values()];
+      pending.clear();
+      for (const { run } of due) run();
+    },
+  };
+}
 
 // An animator without blinks or glances, so that frames are easy to compare.
 function still(expression = DEFAULT_EXPRESSION, seed = 3) {
@@ -71,6 +94,8 @@ async function checkVocabulary() {
   check(DISCRIMINATOR_LENGTH === setup.data.discriminator.max_length, 'setup',
     'discriminator length differs from the protocol');
   check(LINK_LENGTH === setup.data.link.max_length, 'setup', 'link length differs from the protocol');
+  check(same(KINDS, Object.keys(vocabulary.panel_items)), 'panel',
+    `draws ${KINDS.join(', ')}; the protocol lists ${Object.keys(vocabulary.panel_items).join(', ')}`);
 }
 
 function checkExpressions() {
@@ -346,6 +371,17 @@ function checkProtocol() {
   apply({ type: 'state', face: {}, scene: { name: 'volcano' } }, player);
   check(player.animator.scene === null, 'state', 'an unknown scene must show none');
 
+  // The microphones, in the status row, and panels.
+  apply({ type: 'state', face: {}, status: { muted: true } }, player);
+  check(player.status.muted === true, 'state', 'the microphones flag not applied');
+  apply({ type: 'state', face: {}, status: { muted: 'off' } }, player);
+  check(player.status.muted === null, 'state', 'a malformed microphones flag must read as unknown');
+  const shown = [];
+  const panels = { show: (panel) => shown.push(panel) };
+  apply({ type: 'state', face: {}, panel: EXAMPLE }, player, panels);
+  apply({ type: 'state', face: {} }, player, panels);
+  check(shown[0] === EXAMPLE && shown[1] === null, 'state', 'a panel must show, and a missing one go');
+
   // Times from the software are read on its clock.
   apply({ type: 'hello', protocol: PROTOCOL, time: Date.now() / 1000 + 30 }, player);
   check(Math.abs(player.offset - 30) < 1, 'hello', `the software's clock is off by ${player.offset.toFixed(2)} s, not 30`);
@@ -358,6 +394,245 @@ function checkProtocol() {
   check(reloads.length === 0, 'hello', 'the same revision must not reload the page');
   link.hello({ protocol: PROTOCOL, revision: 'b' });
   check(reloads.length === 1, 'hello', 'a new revision must reload the page');
+
+  // What the renderer reports: a button's action has no value.
+  const sent = [];
+  link.socket = { readyState: WebSocket.OPEN, send: (text) => sent.push(JSON.parse(text)) };
+  link.hold(0.5, 0.25);
+  link.action('settings', 'voice.volume', 60);
+  link.action('settings', 'setup.start');
+  link.close('settings');
+  check(same(sent, [
+    { type: 'hold', x: 0.5, y: 0.25 },
+    { type: 'action', panel: 'settings', item: 'voice.volume', value: 60 },
+    { type: 'action', panel: 'settings', item: 'setup.start' },
+    { type: 'close', panel: 'settings' },
+  ]), 'link', `sent ${JSON.stringify(sent)}`);
+}
+
+// A panel with every kind of item, and items and sections a renderer must leave out.
+const EVERY_KIND = {
+  name: 'test',
+  title: 'Test',
+  sections: [
+    { title: 'One', items: [
+      { id: 'a.toggle', kind: 'toggle', label: 'Toggle', value: false, confirm: 'Sure?' },
+      { id: 'a.slider', kind: 'slider', label: 'Slider', value: 40, min: 0, max: 100, step: 10, unit: '%' },
+      { id: 'a.choice', kind: 'choice', label: 'Unit', value: 'C',
+        choices: [{ value: 'C', label: '°C' }, { value: 'F', label: '°F' }, 'not a choice'] },
+      { id: 'a.button', kind: 'button', label: 'Button', confirm: 'Really?' },
+      { id: 'a.info', kind: 'info', label: 'Info', value: 'text' },
+      { id: 'a.info', kind: 'info', label: 'The same id', value: 'again' },
+      { id: 'a.dial', kind: 'dial', label: 'An unknown kind' },
+      { kind: 'info', label: 'No id' },
+      null,
+    ] },
+    { title: 'Nothing to draw', items: [{ id: 'b.gauge', kind: 'gauge' }] },
+    'not a section',
+  ],
+};
+
+// `panel` with the item `id` given `value`, as the software would send it.
+const withValue = (panel, id, value) => ({
+  ...panel,
+  sections: panel.sections.map((section) => (Array.isArray(section?.items)
+    ? { ...section, items: section.items.map((item) => (item?.id === id ? { ...item, value } : item)) }
+    : section)),
+});
+
+// Work a panel as an owner would.
+function checkPanel() {
+  const root = document.createElement('div');
+  document.body.append(root);
+  const timers = fakeTimers();
+  const actions = [];
+  const closed = [];
+  const view = new PanelView(root, {
+    idle: 60,
+    timers,
+    onAction: (...action) => actions.push(action),
+    onClose: (name) => closed.push(name),
+  });
+  const $ = (selector) => root.querySelector(selector);
+  const $$ = (selector) => [...root.querySelectorAll(selector)];
+  const checked = (element) => element?.getAttribute('aria-checked');
+  try {
+    check(root.hidden, 'panel', 'must be hidden until there is a panel');
+    view.show(EVERY_KIND);
+    check(!root.hidden && $('h1')?.textContent === 'Test', 'panel', 'not shown with its title');
+    const kinds = $$('.item').map((row) => row.classList[1]);
+    check(same(kinds, KINDS), 'panel', `draws ${kinds.join(', ')}; each kind once, malformed items left out`);
+    check($$('section').length === 1, 'panel', 'a section with nothing to draw must be left out');
+    check($$('.choices button').length === 2, 'panel', 'a malformed choice must be left out');
+    const small = $$('button, input').filter((target) => target.getBoundingClientRect().height < TARGET);
+    check(small.length === 0, 'panel', `targets under ${TARGET} px high: ${small.map((t) => t.className || t.type).join(', ')}`);
+
+    // A toggle that asks before it is switched on.
+    const toggle = $('.toggle .switch');
+    toggle.click();
+    check(actions.length === 0 && !$('.question').hidden && $('.question p')?.textContent === 'Sure?', 'toggle',
+      'must ask before it is switched on');
+    $('.question .no').click();
+    check(actions.length === 0 && checked(toggle) === 'false' && $('.question').hidden, 'toggle',
+      'Cancel must leave it off');
+    toggle.click();
+    $('.question .yes').click();
+    check(same(actions.pop(), ['test', 'a.toggle', true]) && checked(toggle) === 'true', 'toggle',
+      'Yes must switch it on, and say so');
+    toggle.click();
+    check(same(actions.pop(), ['test', 'a.toggle', false]) && $('.question').hidden, 'toggle',
+      'switching off must not ask');
+    // The robot refuses: the panel, sent again as it was, puts the value back, in place.
+    toggle.click();
+    $('.question .yes').click();
+    actions.length = 0;
+    view.show(EVERY_KIND);
+    check($('.toggle .switch') === toggle && checked(toggle) === 'false', 'toggle',
+      'the panel sent again must update in place, and put back a refused value');
+
+    // A slider sends its value when released, and stays under the finger.
+    const slider = $('.slider input');
+    const output = $('.slider output');
+    check(slider.value === '40' && output.textContent === '40%', 'slider', `shows ${slider.value}, ${output.textContent}`);
+    slider.value = '60';
+    slider.dispatchEvent(new Event('input'));
+    check(output.textContent === '60%' && actions.length === 0, 'slider',
+      'must show its value as it moves, and send it only when released');
+    slider.dispatchEvent(new Event('change'));
+    check(same(actions.pop(), ['test', 'a.slider', 60]), 'slider', 'the value must be sent when released');
+    slider.dispatchEvent(new PointerEvent('pointerdown'));
+    view.show(withValue(EVERY_KIND, 'a.slider', 20));
+    check(slider.value === '60', 'slider', 'must stay under the finger');
+    slider.dispatchEvent(new PointerEvent('pointerup'));
+    check(slider.value === '20' && output.textContent === '20%', 'slider',
+      "a finger lifted without moving it must leave the software's value");
+
+    // A choice.
+    const [celsius, fahrenheit] = $$('.choices button');
+    check(checked(celsius) === 'true' && checked(fahrenheit) === 'false', 'choice', 'the value is not the one marked');
+    celsius.click();
+    check(actions.length === 0, 'choice', 'choosing what is chosen must send nothing');
+    fahrenheit.click();
+    check(same(actions.pop(), ['test', 'a.choice', 'F']) && checked(fahrenheit) === 'true' && checked(celsius) === 'false',
+      'choice', 'a choice must show, and be sent');
+
+    // A button that asks before it acts.
+    $('.item.button').click();
+    check(actions.length === 0 && $('.question p')?.textContent === 'Really?', 'button', 'must ask before it acts');
+    $('.question .yes').click();
+    const pressed = actions.pop();
+    check(pressed?.length === 3 && pressed[1] === 'a.button' && pressed[2] === undefined, 'button',
+      'must act without a value');
+
+    // An info line, updated in place.
+    const info = $('.info .value');
+    view.show(withValue(EVERY_KIND, 'a.info', 'new text'));
+    check($('.info .value') === info && info.textContent === 'new text', 'info', 'must update in place');
+
+    // Escape takes a question away first, then the panel.
+    $('.item.button').click();
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    check($('.question').hidden && !root.hidden && actions.length === 0, 'panel', 'Escape must take a question away first');
+
+    // Only the owner's touches keep a panel open.
+    const [armed] = timers.pending.keys();
+    check(timers.pending.size === 1 && timers.pending.get(armed).ms === 60000, 'panel', 'must close after its idle time');
+    view.show(withValue(EVERY_KIND, 'a.info', 'later'));
+    check(timers.pending.has(armed), 'panel', "the software's updates must not keep the panel open");
+    root.dispatchEvent(new PointerEvent('pointerdown'));
+    check(!timers.pending.has(armed) && timers.pending.size === 1, 'panel', 'a touch must keep it open longer');
+    timers.runAll();
+    check(same(closed, ['test']) && root.hidden && !root.firstChild, 'panel', 'left untouched, it must close, and say so');
+    view.show(EVERY_KIND);
+    $('.done').click();
+    check(same(closed, ['test', 'test']) && root.hidden, 'panel', 'Done must close it, and say so');
+    view.show(EVERY_KIND);
+    view.show(null);
+    check(closed.length === 2 && root.hidden && timers.pending.size === 0, 'panel',
+      'a state without the panel must take it away without a word');
+    for (const panel of [{ name: 'x' }, { name: '', sections: [] }, { sections: [] }, 'settings', 42]) {
+      view.show(panel);
+      check(root.hidden, 'panel', `${JSON.stringify(panel)} must show nothing`);
+    }
+
+    // A long panel keeps its place when it is updated, and when it gains an item.
+    const lines = Array.from({ length: 40 }, (_, i) => ({ id: `l.${i}`, kind: 'info', label: `Line ${i}`, value: `${i}` }));
+    const long = { name: 'long', title: 'Long', sections: [{ title: 'Lines', items: lines }] };
+    view.show(long);
+    const body = $('.body');
+    body.scrollTop = 200;
+    view.show(withValue(long, 'l.3', 'three'));
+    check(body.scrollTop === 200, 'panel', 'an update must keep the place');
+    view.show({ ...long, sections: [{ title: 'Lines', items: [...lines, { id: 'l.new', kind: 'info', label: 'New' }] }] });
+    check($('.body') !== body && $('.body').scrollTop === 200, 'panel', 'a panel drawn anew must keep the place');
+    view.show(EXAMPLE);
+    check($('.body').scrollTop === 0, 'panel', 'another panel must start at its top');
+    view.show(null);
+
+    view.setShape('round');
+    check(root.classList.contains('round'), 'panel', 'a round screen must keep the panel inside its circle');
+  } finally {
+    root.remove();
+  }
+
+  // With the browser's own timers, as on the robot.
+  const own = document.createElement('div');
+  document.body.append(own);
+  try {
+    const real = new PanelView(own);
+    real.show(EXAMPLE);
+    real.awake();
+    real.close();
+  } catch (error) {
+    fail('panel', `with the browser's timers: ${error.message}`);
+  } finally {
+    own.remove();
+  }
+}
+
+// A press held still is a hold; one that moves or ends is not.
+function checkPress() {
+  const timers = fakeTimers();
+  const holds = [];
+  const press = new Press({ ...SETTINGS.hold, timers, onHold: (x, y) => holds.push([x, y]) });
+  const { seconds, slop } = SETTINGS.hold;
+  press.down(100, 100);
+  press.move(100 + slop * 0.6, 100 + slop * 0.6);
+  check([...timers.pending.values()][0]?.ms === seconds * 1000, 'hold', 'must wait the hold time');
+  timers.runAll();
+  check(same(holds, [[100, 100]]), 'hold', 'a press within the slop must count, where it began');
+  press.down(100, 100);
+  press.move(100, 100 + slop * 1.5);
+  timers.runAll();
+  check(holds.length === 1, 'hold', 'a press that moves must not count');
+  press.down(100, 100);
+  press.up();
+  timers.runAll();
+  check(holds.length === 1 && timers.pending.size === 0, 'hold', 'a press that ends must not count');
+  try {
+    const real = new Press({ ...SETTINGS.hold, onHold: () => {} }); // the browser's own timers
+    real.down(100, 100);
+    real.up();
+  } catch (error) {
+    fail('hold', `with the browser's timers: ${error.message}`);
+  }
+}
+
+// The status row shows a struck microphone, in red, while the microphones are off.
+function checkStatusRow() {
+  for (const profile of PROFILES) {
+    const layout = fit(profile.width, profile.height, profile.shape);
+    const ctx = new OffscreenCanvas(profile.width, profile.height).getContext('2d');
+    const frame = still().frame(1);
+    const red = (muted) => {
+      drawFrame(ctx, layout, frame, { status: { battery: 50, charging: false, muted }, now: new Date(2026, 0, 1, 12) });
+      const { data } = ctx.getImageData(0, 0, profile.width, profile.height);
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i] > 150 && data[i + 1] < 120) count += 1;
+      return count;
+    };
+    check(red(false) === 0 && red(true) > 0, profile.id, 'the microphones off must show in red, and only then');
+  }
 }
 
 // Every expression and scene on the previous generation's 320 × 240 screen, for a look.
@@ -394,9 +669,12 @@ function showSheet() {
     checkSceneMotion();
     checkSceneText();
     checkProtocol();
+    checkPanel();
+    checkPress();
+    checkStatusRow();
     showSheet();
     summary = `${Object.keys(EXPRESSIONS).length} expressions · ${Object.keys(SCENES).length} scenes · `
-      + `${PROFILES.length} screens · ${MOMENTS.length} moments · protocol ${PROTOCOL}`;
+      + `${KINDS.length} panel items · ${PROFILES.length} screens · ${MOMENTS.length} moments · protocol ${PROTOCOL}`;
   } catch (error) {
     fail('tests', error.stack ?? error.message);
   }

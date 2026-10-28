@@ -39,11 +39,11 @@
 Proposed in [ADR-0005](decisions/0005-pi-software-platform.md): one Python process (asyncio) with an optional C++ extension. Modules own the ports of the hardware they use; adapters implement the ports, simulated until the real parts exist. Details, and how to run and extend it: [`software/README.md`](../software/README.md).
 
 ```
-modules    system · motion · voice · vision · screen · setup · cloud · behavior
+modules    system · settings · motion · voice · vision · screen · setup · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
 ports      audio_in · audio_out · wake_word · voice_activity · camera · screen
-           setup_link · network · cloud · identity · binding · daylight
+           setup_link · network · cloud · identity · binding · settings · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -60,6 +60,8 @@ The `cloud` module links the robot to `ai-robot-server` over the [cloud protocol
 - **Without a server.** A simulated cloud stands in for it.
 
 The `setup` module sets the robot up with the owner's app over Bluetooth LE, by the [set-up protocol](../protocol/setup/README.md) (proposed in [ADR-0015](decisions/0015-set-up.md)). A code on the robot's screen secures the session; the app gives the Wi-Fi network, which NetworkManager joins, and relays the robot's registration, which the `cloud` module signs with the robot's key. The robot is bound once its server accepts it; until then it shows the set-up screen.
+
+The `settings` module shows the robot's settings on the touch screen, as a panel the renderer draws over the face, and keeps what the owner chooses ([ADR-0016](decisions/0016-settings.md)). Each module declares its own settings on the bus and applies them, as it offers its capabilities to the cloud: the volume and the microphones are `voice`'s, what the cloud may do is `cloud`'s, set-up is `setup`'s.
 
 ## Open questions (each should become an ADR)
 

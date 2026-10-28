@@ -62,5 +62,12 @@
       }
     }
   },
-  "tones": ["cyan", "warm", "rose", "red", "blue", "green", "purple", "orange", "white"]
+  "tones": ["cyan", "warm", "rose", "red", "blue", "green", "purple", "orange", "white"],
+  "panel_items": {
+    "toggle": "On or off; it may ask before it is switched on",
+    "slider": "A number between two bounds, by steps",
+    "choice": "One of several options",
+    "button": "An action; it may ask before it acts",
+    "info": "A line to read"
+  }
 }

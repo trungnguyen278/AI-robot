@@ -16,6 +16,7 @@ from ai_robot.core.checks import positive
 from ai_robot.core.config import protocol_dir
 from ai_robot.core.data import Schema, encode
 from ai_robot.core.module import Module, ModuleContext
+from ai_robot.core.settings import SettingsHost
 from ai_robot.core.setup_session import (
     CODE_DIGITS,
     DISCRIMINATOR_DIGITS,
@@ -37,6 +38,10 @@ from ai_robot.messages import (
     SceneRequest,
     ScreenPriority,
     ScreenTouched,
+    Setting,
+    SettingKind,
+    SettingSection,
+    SettingsOpened,
 )
 from ai_robot.ports.network import JoinError, Network, NetworkState, NetworkStatus, Security
 from ai_robot.ports.setup import Connected, Disconnected, Received, SetupLink
@@ -82,9 +87,11 @@ class SetupModule(Module):
 
     - **When.** Set-up opens when the robot is unbound, as ``cloud`` says
       (``BindingChanged``): at start, or when the server stops accepting it. It also
-      opens on a tap on the screen while the robot is unbound. It closes after
-      ``window`` seconds without a session, when the app finishes, or after
-      ``attempts`` failed attempts.
+      opens from the settings (``setup.start``), and, while the robot is unbound, on a
+      tap on the screen. It closes after ``window`` seconds without a session, when the
+      app finishes, or after ``attempts`` failed attempts.
+    - **Settings** (docs/decisions/0016): the action that opens set-up, and the network
+      the robot is on, read again each time the settings open.
     - **The code.** Each opening draws a discriminator and a code; each attempt with
       the code, successful or not, draws a new code. The screen's ``setup`` scene shows
       them, and ``link`` wraps the set-up string for the QR code.
@@ -132,6 +139,19 @@ class SetupModule(Module):
         self.network = self.port("network", Network)
         self._bindings = self.bus.subscribe(BindingChanged)
         self._touches = self.bus.subscribe(ScreenTouched)
+        self._settings_opened = self.bus.subscribe(SettingsOpened)
+        self.settings = SettingsHost(self)
+        self.settings.add(
+            Setting(
+                "setup.start",
+                SettingKind.ACTION,
+                SettingSection.NETWORK,
+                "Set up with the app",
+                help="For a new Wi-Fi network or a new phone: shows a code to scan",
+                closes=True,
+            ),
+            self._start_from_settings,
+        )
         self._signatures = self.bus.subscribe(RegistrationSigned)
         self._schema: Schema | None = None
         self.robot_id: str | None = None
@@ -155,16 +175,29 @@ class SetupModule(Module):
 
     async def start(self) -> None:
         self._schema = await asyncio.to_thread(_load_schema)
+        self.settings.add(
+            Setting(
+                "setup.network",
+                SettingKind.INFO,
+                SettingSection.NETWORK,
+                "Wi-Fi",
+                await self._network_text(),
+            )
+        )
+        self.settings.offer()
 
     async def run(self) -> None:
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(self._watch_binding())
+            tasks.create_task(self._watch_settings())
             tasks.create_task(self._watch_touches())
+            tasks.create_task(self.settings.serve())
             tasks.create_task(self._watch_signatures())
             tasks.create_task(self._watch_link())
             tasks.create_task(self._watch_time())
 
     async def stop(self) -> None:
+        self.settings.close()
         if self._serving is not None:
             self._serving.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -270,6 +303,29 @@ class SetupModule(Module):
             elif was is not False:  # unbound now: set-up opens by itself
                 await self._open()
             self._show()
+
+    async def _watch_settings(self) -> None:
+        """Each time the settings open, read the network again for them."""
+        while True:
+            await self._settings_opened.get()
+            self.settings.update("setup.network", await self._network_text())
+
+    async def _start_from_settings(self, _: None) -> None:
+        await self._open()
+
+    async def _network_text(self) -> str:
+        """The network the robot is on, as the settings show it."""
+        try:
+            status = await self.network.status()
+        except (ConnectionError, OSError) as error:
+            self.log.error("set-up cannot reach the robot's network service: %s", error)
+            return "Unknown"
+        if status.state is NetworkState.CONNECTING:
+            return "Connecting"
+        if status.state is not NetworkState.CONNECTED or status.ssid is None:
+            return "Not connected"
+        name = status.ssid.decode("utf-8", errors="replace")
+        return f"{name}, no Internet" if status.internet is False else f"{name}, connected"
 
     async def _watch_touches(self) -> None:
         while True:

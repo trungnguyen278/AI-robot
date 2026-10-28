@@ -60,7 +60,19 @@ from ai_robot.ports.network import (
     Security,
     WifiNetwork,
 )
-from ai_robot.ports.screen import Screen, ScreenState, Touch
+from ai_robot.ports.screen import (
+    Action,
+    Close,
+    Hold,
+    Panel,
+    PanelItem,
+    PanelSection,
+    Screen,
+    ScreenEvent,
+    ScreenState,
+    Touch,
+)
+from ai_robot.ports.settings import SettingsStore
 from ai_robot.ports.setup import Connected, Disconnected, LinkEvent, Received, SetupLink
 
 # The port names used in the configuration ([ports.<name>]) and in Module.owns.
@@ -74,6 +86,7 @@ PORT_TYPES: dict[str, type[Port]] = {
     "cloud": Cloud,
     "identity": Identity,
     "binding": BindingStore,
+    "settings": SettingsStore,
     "setup_link": SetupLink,
     "network": Network,
     "daylight": Daylight,
@@ -87,6 +100,7 @@ PORT_TYPES: dict[str, type[Port]] = {
 
 __all__ = [
     "PORT_TYPES",
+    "Action",
     "AudioFormat",
     "AudioIn",
     "AudioOut",
@@ -96,6 +110,7 @@ __all__ = [
     "CallCancelled",
     "Camera",
     "Capability",
+    "Close",
     "Cloud",
     "CloudPart",
     "Color",
@@ -106,6 +121,7 @@ __all__ = [
     "DriveBase",
     "EventKind",
     "Frame",
+    "Hold",
     "Identity",
     "Image",
     "Interrupted",
@@ -119,6 +135,9 @@ __all__ = [
     "Network",
     "NetworkState",
     "NetworkStatus",
+    "Panel",
+    "PanelItem",
+    "PanelSection",
     "Port",
     "Pose",
     "Power",
@@ -132,8 +151,10 @@ __all__ = [
     "Safety",
     "SafetyClass",
     "Screen",
+    "ScreenEvent",
     "ScreenState",
     "Security",
+    "SettingsStore",
     "SetupLink",
     "Speech",
     "SpeechEnd",

@@ -170,11 +170,38 @@ function bolt(ctx, cx, cy, size) {
   ctx.fill();
 }
 
-// The time (faded out by `clockAlpha` while a scene shows its own) and the battery.
-// Each keeps its own place, so that neither moves when the other changes.
+// A microphone struck through, `size` high, centred on cx, cy, in `colour`.
+function micOff(ctx, cx, cy, size, colour) {
+  const w = size * 0.36; // the capsule's width
+  const top = cy - size / 2;
+  const bottom = cy + size / 2;
+  const round = top + size * 0.56 - w / 2; // the centre of the capsule's lower end
+  const reach = w * 0.95; // the holder's radius
+  ctx.save();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = Math.max(1, size * 0.11);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.roundRect(cx - w / 2, top, w, size * 0.56, w / 2);
+  ctx.moveTo(cx + reach, round);
+  ctx.arc(cx, round, reach, 0, Math.PI); // the holder, under the capsule
+  ctx.moveTo(cx, round + reach);
+  ctx.lineTo(cx, bottom); // its stem
+  ctx.moveTo(cx - w * 0.6, bottom);
+  ctx.lineTo(cx + w * 0.6, bottom); // and foot
+  ctx.moveTo(cx - size * 0.38, cy - size * 0.42);
+  ctx.lineTo(cx + size * 0.38, cy + size * 0.42); // the stroke through it
+  ctx.stroke();
+  ctx.restore();
+}
+
+// The time (faded out by `clockAlpha` while a scene shows its own), the battery and,
+// while the microphones are off, a struck microphone. Each keeps its own place, so
+// that none moves when another changes.
 function drawStatus(ctx, layout, status, rgb, now, clockAlpha) {
   const percent = batteryPercent(status);
   const low = percent !== null && status.low === true; // the robot decides, not the page
+  const muted = status.muted === true;
   const ink = rgba(rgb, 0.6);
   const warn = rgba(TONES.red.rgb, 0.85);
   const clock = (x, y) => {
@@ -191,9 +218,11 @@ function drawStatus(ctx, layout, status, rgb, now, clockAlpha) {
 
   if (layout.shape === 'round') {
     // The time left of the centre and the battery right of it; the time alone, centred.
+    // The microphone under them.
     const size = layout.radius * 0.085;
     const y = layout.cy - layout.radius * 0.8;
     const gap = size * 0.4;
+    if (muted) micOff(ctx, layout.cx, y + size * 1.4, size, warn);
     ctx.font = font(size, 600);
     ctx.textBaseline = 'middle';
     ctx.textAlign = percent === null ? 'center' : 'right';
@@ -216,6 +245,7 @@ function drawStatus(ctx, layout, status, rgb, now, clockAlpha) {
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   clock(pad, y);
+  if (muted) micOff(ctx, layout.width / 2, y, size * 1.1, warn); // in the middle of the row
   if (percent === null) {
     ctx.restore();
     return;

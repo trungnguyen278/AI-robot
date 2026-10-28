@@ -24,9 +24,13 @@ level = "INFO"
 shutdown_step_timeout = 5.0  # seconds each step of the shutdown may take before it is skipped
 
 [modules]
-# Started in this order and stopped in reverse. motion comes last, so it is the first
-# to stop: the body is made safe before anything else shuts down.
-enabled = ["system", "voice", "vision", "screen", "setup", "cloud", "behavior", "motion"]
+# Started in this order and stopped in reverse. settings comes before the modules that
+# have settings, so that they apply the owner's choices before they start working.
+# motion comes last, so it is the first to stop: the body is made safe before anything
+# else shuts down.
+enabled = [
+  "system", "settings", "voice", "vision", "screen", "setup", "cloud", "behavior", "motion",
+]
 
 [modules.system]
 battery_interval = 5.0  # seconds between battery reports
@@ -58,6 +62,9 @@ nothing_heard = 6.0  # without voice this long after a turn starts, the turn is 
 barge_in = 0.4  # voice over an answer this long interrupts it
 offline_expression = "confused"  # the face when the wake word is heard but the cloud cannot talk
 offline_seconds = 2.0  # how long it shows
+# As shipped; the owner changes them in the settings (docs/decisions/0016).
+volume = 80  # percent of full loudness for the robot's voice, by steps of 5
+microphones = true  # whether the robot listens: off, it hears nothing (PRIV-1)
 
 [modules.setup]
 # Set-up from the app, over Bluetooth LE (protocol/setup/README.md; docs/decisions/0015).
@@ -174,6 +181,15 @@ adapter = "sim"
 [ports.identity.tpm]
 # How the TCG software stack reaches the TPM: through the kernel's resource manager.
 tcti = "device:/dev/tpmrm0"
+
+# Where the robot keeps what its owner chose in its settings (docs/decisions/0016).
+# "sim" keeps them in memory; "file" keeps them in a file, on the robot's data partition.
+[ports.settings]
+adapter = "sim"
+
+[ports.settings.file]
+# In the robot's state directory (XDG's, in the home of the user who runs it).
+path = "~/.local/state/ai-robot/settings.json"
 
 # Where the robot keeps its binding: the server it was registered with at set-up, and
 # whether that server accepts it (protocol/setup/README.md). "sim" keeps it in memory, as

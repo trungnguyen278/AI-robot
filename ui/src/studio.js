@@ -6,6 +6,7 @@
 import { Animator } from './animator.js';
 import { EXPRESSIONS } from './expressions.js';
 import { PROFILES } from './layout.js';
+import { EXAMPLE, PanelView } from './panel.js';
 import { Player } from './player.js';
 import { SCENES, sceneTone } from './scenes/index.js';
 import { CONDITIONS } from './scenes/weather.js';
@@ -18,6 +19,19 @@ const animator = new Animator({ seed: 7 });
 const player = new Player($('face'), animator);
 player.status = { battery: 82, charging: false };
 player.start();
+
+// The settings over the face, at the screen's own size in pixels, scaled as the face
+// is. Nothing answers their changes here, as the robot software would.
+const panel = new PanelView($('panel'), {
+  onClose: () => {
+    $('settings').checked = false;
+  },
+});
+const overlay = $('overlay');
+let screenWidth = 1; // CSS pixels
+const scaleOverlay = () => overlay.style.setProperty('--k', String($('face').clientWidth / screenWidth));
+new ResizeObserver(scaleOverlay).observe($('face'));
+$('settings').addEventListener('change', (event) => panel.show(event.target.checked ? EXAMPLE : null));
 
 let tone = null; // null: each expression's own colour
 
@@ -130,6 +144,11 @@ function setScreen(id) {
   device.classList.toggle('round', shape === 'round');
   device.style.setProperty('--ratio', String(width / height));
   player.setShape(shape);
+  screenWidth = width;
+  overlay.style.setProperty('--w', String(width));
+  overlay.style.setProperty('--h', String(height));
+  panel.setShape(shape);
+  scaleOverlay();
 }
 screenSelect.addEventListener('change', () => setScreen(screenSelect.value));
 for (const id of ['width', 'height']) $(id).addEventListener('change', () => setScreen(CUSTOM));
@@ -187,11 +206,10 @@ $('status').addEventListener('change', (event) => {
 });
 function updateStatus() {
   const battery = Math.min(100, Math.max(0, Number($('battery').value) || 0));
-  player.status = { battery, charging: $('charging').checked, low: $('low').checked };
+  player.status = { battery, charging: $('charging').checked, low: $('low').checked, muted: $('muted').checked };
 }
 $('battery').addEventListener('input', updateStatus);
-$('charging').addEventListener('change', updateStatus);
-$('low').addEventListener('change', updateStatus);
+for (const id of ['charging', 'low', 'muted']) $(id).addEventListener('change', updateStatus);
 
 // Readout.
 const readout = $('readout');

@@ -23,12 +23,28 @@ from ai_robot.messages import (
     InteractionChanged,
     InteractionState,
     LookAt,
+    MicrophonesChanged,
+    PanelAction,
+    PanelClosed,
+    PanelRequest,
     SceneRequest,
+    ScreenHeld,
     ScreenPriority,
     ScreenTouched,
     SoundLevel,
 )
-from ai_robot.ports import Capability, EventKind, SafetyClass, Screen, ScreenState
+from ai_robot.ports import (
+    Action,
+    Capability,
+    Close,
+    EventKind,
+    Hold,
+    Panel,
+    SafetyClass,
+    Screen,
+    ScreenState,
+    Touch,
+)
 
 M = TypeVar("M", bound=Message)
 T = TypeVar("T")
@@ -283,7 +299,11 @@ class ScreenModule(Module):
     - The gaze (``LookAt``) and, while the robot listens, the microphone's loudness
       go straight to the renderer.
     - Taps on the screen are published as ``ScreenTouched``, and sent to the cloud as
-      the event ``screen.touched``.
+      the event ``screen.touched``; a press held still, as ``ScreenHeld``.
+    - Panels, such as the settings: modules ask with ``PanelRequest``, and the latest
+      one asked for is shown over the face. What the owner does on it is published as
+      ``PanelAction`` and ``PanelClosed``.
+    - The status row also shows when the microphones are off (``MicrophonesChanged``).
     - The cloud can ask for an expression, a mood or a scene (``capabilities``): a
       reaction, at ``ScreenPriority.REACTION``; a mood, at ``AMBIENT``; a scene, at
       ``REACTION``.
@@ -326,6 +346,9 @@ class ScreenModule(Module):
         self._battery: float | None = None
         self._charging: bool | None = None
         self._battery_low: bool | None = None
+        self._muted: bool | None = None
+        self._panels: dict[str, tuple[int, Panel]] = {}  # source -> (order asked, panel)
+        self._panel_order = 0
         self._level = 0.0
         self._level_sent_at = -math.inf
         self._changed = asyncio.Event()
@@ -336,6 +359,8 @@ class ScreenModule(Module):
         self.batteries = self._subscribe(BatteryReport)
         self.levels = self._subscribe(SoundLevel)
         self.gazes = self._subscribe(LookAt)
+        self.panel_requests = self._subscribe(PanelRequest)
+        self.microphones = self._subscribe(MicrophonesChanged)
         self.capabilities = CapabilityHost(self)
 
     def _subscribe(self, kind: type[M]) -> Subscription[M]:
@@ -366,8 +391,10 @@ class ScreenModule(Module):
             tasks.create_task(self._follow(self.batteries, self._on_battery))
             tasks.create_task(self._follow(self.levels, self._on_level))
             tasks.create_task(self._follow(self.gazes, self._on_gaze))
+            tasks.create_task(self._follow(self.panel_requests, self._on_panel))
+            tasks.create_task(self._follow(self.microphones, self._on_microphones))
             tasks.create_task(self._expire())
-            tasks.create_task(self._forward_taps())
+            tasks.create_task(self._forward_events())
             tasks.create_task(self.capabilities.serve())
 
     async def stop(self) -> None:
@@ -425,6 +452,20 @@ class ScreenModule(Module):
     async def _on_gaze(self, message: LookAt) -> None:
         await self.screen.look(message.target)
 
+    async def _on_panel(self, request: PanelRequest) -> None:
+        if request.panel is None:
+            self._panels.pop(request.source, None)
+        else:
+            self._panel_order += 1
+            self._panels[request.source] = (self._panel_order, request.panel)
+        # Sent even when unchanged: the renderer shows the owner's changes at once, and a
+        # panel asked for again puts back one the robot refused.
+        await self._refresh(always=True)
+
+    async def _on_microphones(self, message: MicrophonesChanged) -> None:
+        self._muted = not message.on
+        await self._refresh()
+
     def loudness(self, rms: float) -> float:
         """The voice level, from 0 to 1, of a microphone chunk of loudness ``rms``."""
         if rms <= 0:
@@ -437,8 +478,9 @@ class ScreenModule(Module):
         self._level_sent_at = self._now()
         await self.screen.voice(level)
 
-    async def _refresh(self) -> None:
-        """Send the state to the screen if it changed, and re-arm the expiry timer."""
+    async def _refresh(self, always: bool = False) -> None:
+        """Send the state to the screen if it changed (or ``always``), and re-arm the
+        expiry timer."""
         now = self._now()
         face = self.faces.winner(now)
         scene = self.scenes.winner(now)
@@ -450,11 +492,19 @@ class ScreenModule(Module):
             battery=self._battery,
             charging=self._charging,
             battery_low=self._battery_low,
+            muted=self._muted,
+            panel=self._panel(),
         )
-        if state != self.state:
+        if always or state != self.state:
             self.state = state
             await self.screen.show(state)
         self._changed.set()
+
+    def _panel(self) -> Panel | None:
+        """The panel asked for last, if any."""
+        if not self._panels:
+            return None
+        return max(self._panels.values(), key=lambda entry: entry[0])[1]
 
     async def _expire(self) -> None:
         """Refresh when the next request expires, or when the requests change."""
@@ -468,11 +518,18 @@ class ScreenModule(Module):
             if deadline is not None and self._now() >= deadline:
                 await self._refresh()
 
-    async def _forward_taps(self) -> None:
+    async def _forward_events(self) -> None:
         while True:
-            touch = await self.screen.touched()
-            self.bus.publish(ScreenTouched(touch.x, touch.y))
-            self.capabilities.emit(TOUCHED.name, {"x": touch.x, "y": touch.y})
+            event = await self.screen.event()
+            if isinstance(event, Touch):
+                self.bus.publish(ScreenTouched(event.x, event.y))
+                self.capabilities.emit(TOUCHED.name, {"x": event.x, "y": event.y})
+            elif isinstance(event, Hold):
+                self.bus.publish(ScreenHeld(event.x, event.y))
+            elif isinstance(event, Action):
+                self.bus.publish(PanelAction(event.panel, event.item, event.value))
+            elif isinstance(event, Close):
+                self.bus.publish(PanelClosed(event.panel))
 
     # ---- what the cloud can ask (``capabilities``) ----
 

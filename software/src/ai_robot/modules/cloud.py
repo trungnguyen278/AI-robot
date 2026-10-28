@@ -15,6 +15,7 @@ from ai_robot.core.checks import positive
 from ai_robot.core.data import Schema
 from ai_robot.core.jose import b64url, b64url_json
 from ai_robot.core.module import Module, ModuleContext
+from ai_robot.core.settings import SettingsHost
 from ai_robot.messages import (
     BatteryReport,
     BindingChanged,
@@ -31,6 +32,9 @@ from ai_robot.messages import (
     RegistrationRequested,
     RegistrationSigned,
     RobotEvent,
+    Setting,
+    SettingKind,
+    SettingSection,
 )
 from ai_robot.ports.binding import Binding, BindingStore
 from ai_robot.ports.body import BatteryStatus
@@ -54,6 +58,21 @@ CONVERSATION_BACKLOG = 1000
 
 # Fixed by the protocol (protocol/setup/README.md, The registration).
 REGISTRATION_TYPE = "robot-registration+jwt"
+
+# How the settings show each safety class (docs/decisions/0016): its title, and what is
+# asked before the owner allows it.
+CLASS_SETTINGS: dict[SafetyClass, tuple[str, str | None]] = {
+    SafetyClass.INFORMATIONAL: ("Show things and play sounds", None),
+    SafetyClass.PRIVACY: (
+        "Use the camera, start conversations",
+        "Let the cloud use the camera and start conversations?",
+    ),
+    SafetyClass.PHYSICAL: ("Move the robot", "Let the cloud move the robot?"),
+    SafetyClass.SYSTEM: (
+        "Restart, update, change settings",
+        "Let the cloud restart and update the robot?",
+    ),
+}
 
 
 async def registration(identity: Identity, challenge: str, server: str) -> str:
@@ -106,6 +125,9 @@ class CloudModule(Module):
       robot is bound once that server accepts it, and unbound when the server no longer
       knows it; ``binding`` keeps that across restarts, and ``BindingChanged`` tells the
       other modules (protocol/setup/README.md).
+    - Settings (docs/decisions/0016): one switch for each safety class, which the owner
+      changes at the robot only (SEC-9). The owner's choices apply before the first
+      session; ``allowed_classes`` is what they are as shipped.
     """
 
     owns = ("cloud", "identity", "binding")
@@ -122,6 +144,21 @@ class CloudModule(Module):
             )
         self.allowed = frozenset(SafetyClass(name) for name in allowed_classes)
         self.call_timeout = positive("call_timeout", call_timeout)
+        self.settings = SettingsHost(self)
+        for safety, (title, confirm) in CLASS_SETTINGS.items():
+            self.settings.add(
+                Setting(
+                    f"cloud.{safety.value}",
+                    SettingKind.VALUE,
+                    SettingSection.CLOUD,
+                    title,
+                    safety in self.allowed,
+                    schema={"type": "boolean"},
+                    confirm=confirm,
+                ),
+                self._allower(safety),
+            )
+        self._offering = False  # whether the link has had the catalogue yet
         self.link = self.port("cloud", Cloud)
         self.identity = self.port("identity", Identity)
         self.store = self.port("binding", BindingStore)
@@ -154,6 +191,10 @@ class CloudModule(Module):
     async def start(self) -> None:
         self.robot_id = await self.identity.robot_id()
         self.binding = await self.store.load()
+        about = SettingKind.INFO, SettingSection.ABOUT
+        self.settings.add(Setting("cloud.account", *about, "Owner's account", self._account()))
+        self.settings.add(Setting("cloud.robot", *about, "Identifier", self.robot_id))
+        self.settings.offer()
         await self.link.identify(self.identity)
         if self.binding.server is not None:
             try:
@@ -163,6 +204,8 @@ class CloudModule(Module):
         self.bus.publish(BindingChanged(self.robot_id, self.binding.bound))
 
     async def run(self) -> None:
+        # The owner's choices first: the cloud sees only the classes they allow (SEC-9).
+        await self.settings.apply_pending()
         # Take what the modules offered while they started, so that the first session
         # already lists it; the link connects once it knows.
         while self.offers.pending:
@@ -172,6 +215,7 @@ class CloudModule(Module):
         while self.conversation_offers.pending:
             self._on_conversation_offer(await self.conversation_offers.get())
         await self._offer()
+        self._offering = True
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(self._follow(self.offers, self._changed(self._on_offer)))
             tasks.create_task(self._follow(self.withdrawals, self._changed(self._on_withdrawal)))
@@ -184,6 +228,7 @@ class CloudModule(Module):
             tasks.create_task(self._follow(self.batteries, self._on_battery))
             tasks.create_task(self._follow(self.said, self._say))
             tasks.create_task(self._follow(self.registrations, self._register))
+            tasks.create_task(self.settings.serve())
             tasks.create_task(self._serve_calls())
             tasks.create_task(self._hear())
             tasks.create_task(self._follow_status())
@@ -193,6 +238,7 @@ class CloudModule(Module):
             task.cancel()
         for subscription in self.subscriptions:
             subscription.close()
+        self.settings.close()
 
     @staticmethod
     async def _follow(
@@ -209,6 +255,25 @@ class CloudModule(Module):
             await self._offer()
 
         return handle
+
+    # ---- settings ----
+
+    def _allower(self, safety: SafetyClass) -> Callable[[bool], Awaitable[None]]:
+        """What applies the owner's switch for ``safety``."""
+
+        async def allow(on: bool) -> None:
+            allowed = self.allowed | {safety} if on else self.allowed - {safety}
+            if allowed == self.allowed:
+                return
+            self.allowed = allowed
+            self.log.info("the owner %s the cloud %s", "allows" if on else "forbids", safety)
+            if self._offering:  # the cloud sees the new catalogue at once
+                await self._offer()
+
+        return allow
+
+    def _account(self) -> str:
+        return "Set up" if self.binding.bound else "Not set up"
 
     # ---- the catalogue ----
 
@@ -373,6 +438,7 @@ class CloudModule(Module):
         """The server said that it accepts the robot, or no longer knows it."""
         self.binding = Binding(self.binding.server, bound)
         await self._keep()
+        self.settings.update("cloud.account", self._account())
         if bound:
             self.log.info("the robot's server accepts it: it is set up")
         else:

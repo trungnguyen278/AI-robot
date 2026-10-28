@@ -39,3 +39,27 @@ def _rms_int16_python(data: memoryview) -> float:
     if not samples:
         return 0.0
     return math.sqrt(sum(sample * sample for sample in samples) / len(samples))
+
+
+def scale_int16(pcm: bytes | bytearray | memoryview, gain: float) -> bytes:
+    """Signed 16-bit little-endian PCM samples multiplied by ``gain``, from 0: each one
+    truncated towards zero, and held within 16 bits."""
+    if not (math.isfinite(gain) and gain >= 0):
+        raise ValueError(f"gain must be a finite number from 0, got {gain!r}")
+    data = memoryview(pcm).cast("B")
+    if _native is not None:
+        return _native.scale_int16(data, gain)
+    return _scale_int16_python(data, gain)
+
+
+def _scale_int16_python(data: memoryview, gain: float) -> bytes:
+    if len(data) % 2:
+        raise ValueError("PCM data must contain whole 16-bit samples")
+    samples = array("h")
+    samples.frombytes(data)
+    if sys.byteorder == "big":
+        samples.byteswap()
+    scaled = array("h", (max(-32768, min(32767, int(sample * gain))) for sample in samples))
+    if sys.byteorder == "big":
+        scaled.byteswap()
+    return scaled.tobytes()
