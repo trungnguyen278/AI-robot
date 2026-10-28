@@ -6,7 +6,7 @@ A mobile AI robot on a tracked chassis, with **two arms**, a **2-DOF neck** carr
 
 - **Brain:** Raspberry Pi 5 (8 GB) — audio, vision, face, AI and networking (built-in Wi-Fi and Bluetooth LE).
 - **Body:** a microcontroller for real-time control of servos, motors and encoders, sensors and LEDs — not chosen yet (concept v0 shows an ESP32-S3; [ADR-0004](docs/decisions/0004-pi-software-first.md)). Until then the body is simulated.
-- **Software:** ROS 2 Lyrical (LTS) on Ubuntu 26.04 LTS. Every module is a ROS 2 node, and the body is reached through ros2_control ([ADR-0017](docs/decisions/0017-ros-2.md), proposed; today's code still runs as one Python process).
+- **Software:** ROS 2 Lyrical (LTS) on Ubuntu 26.04 LTS. Every module is a ROS 2 node, and the body is reached through ros2_control ([ADR-0017](docs/decisions/0017-ros-2.md); today's code still runs as one Python process).
 
 ![Concept v0](hardware/images/concept-v0.webp)
 

@@ -18,7 +18,7 @@ Only pins that are used or planned are listed. GPIO is 3.3 V and **not 5 V toler
 - The TPM module covers pins 17 to 26, so GPIO8 (SPI0 CE0, pin 24) and GPIO25 (pin 22) stay unused ([TPM notes](components/letstrust-tpm.md)).
 - Nothing else on SPI0 may listen without a chip select.
 
-Not on the header: display → DSI port; camera → CSI port; microphones and speaker → USB, through the XVF3800 array ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md), proposed); fan → fan connector; RTC battery → BAT connector.
+Not on the header: display → DSI port; camera → CSI port; microphones and speaker → USB, through the XVF3800 array ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md)); fan → fan connector; RTC battery → BAT connector.
 
 ### I2C addresses on the Pi's I2C1 bus
 

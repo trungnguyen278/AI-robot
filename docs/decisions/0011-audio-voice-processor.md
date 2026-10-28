@@ -1,6 +1,6 @@
 # 0011 — Audio: a USB voice processor that hears past the robot's own voice
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-22
 
 ## Context

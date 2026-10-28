@@ -1,6 +1,6 @@
 # 0016 — Settings: declared by the modules, shown as a panel on the touch screen
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-25
 
 ## Context
