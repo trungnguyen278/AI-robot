@@ -32,6 +32,9 @@ from ai_robot.messages import (
     SceneRequest,
     ScreenPriority,
     ScreenTouched,
+    SettingChanged,
+    SettingOffered,
+    SettingsOpened,
 )
 from ai_robot.modules.cloud import CloudModule
 from ai_robot.modules.setup import LINK_LENGTH, SCENE, SetupModule
@@ -374,6 +377,28 @@ def test_set_up_closes_when_its_time_is_up_and_a_tap_opens_it_again() -> None:
     asyncio.run(main())
 
 
+def test_a_bound_robot_opens_set_up_when_asked_but_refuses_a_registration() -> None:
+    async def main() -> None:
+        robot = Robot()
+        app = App(robot)
+        async with running(robot):
+            robot.bind(True)
+            assert await robot.scene() is None
+            robot.bus.publish(ScreenTouched(0.5, 0.5))  # a bound robot does not open on a tap
+            robot.bus.publish(SettingChanged("setup.start"))  # from the settings
+            session = await app.open((await robot.code_shown())["code"])
+            assert (await app.ask(session, "info"))["bound"] is True
+            refusal = await app.ask(
+                session, "register", challenge="c" * 22, server="https://cloud.example"
+            )
+            assert (refusal["type"], refusal["code"]) == ("error", "bound")
+            assert (await app.ask(session, "finish"))["type"] == "finished"
+            await app.gone()
+            assert await robot.until(None) is None  # bound: nothing to show
+
+    asyncio.run(main())
+
+
 def test_a_registration_the_cloud_refuses() -> None:
     async def main() -> None:
         robot = Robot()
@@ -573,5 +598,36 @@ def test_a_network_service_that_fails_is_an_error_for_the_app() -> None:
             refusal = await app.ask(session, "networks")
             assert (refusal["type"], refusal["code"]) == ("error", "network")
             assert (await app.ask(session, "info"))["type"] == "info"  # the session goes on
+
+    asyncio.run(main())
+
+
+def test_the_settings_open_set_up_and_show_the_network() -> None:
+    async def main() -> None:
+        robot = Robot()
+        offered = robot.bus.subscribe(SettingOffered)
+        async with running(robot):
+            lines: dict[str, Any] = {}
+
+            async def read() -> None:
+                while offered.pending:
+                    setting = (await offered.get()).setting
+                    lines[setting.name] = setting
+
+            await read()
+            assert lines["setup.start"].closes  # the settings make way for the code
+            assert lines["setup.network"].value == "Not connected"
+            await robot.network.join(
+                b"Home", "correct horse", hidden=False, security=None, timeout=1
+            )
+            robot.bus.publish(SettingsOpened())  # read again when the settings open
+            async with asyncio.timeout(TIMEOUT):
+                while lines["setup.network"].value != "Home, connected":
+                    setting = (await offered.get()).setting
+                    lines[setting.name] = setting
+            robot.bind(True)
+            assert await robot.scene() is None
+            robot.bus.publish(SettingChanged("setup.start"))
+            assert (await robot.code_shown())["state"] == "code"
 
     asyncio.run(main())

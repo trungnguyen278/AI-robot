@@ -7,6 +7,8 @@ classes defined here. Each class is one topic.
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
@@ -17,7 +19,7 @@ from ai_robot.core.checks import finite, positive
 from ai_robot.core.data import frozen
 from ai_robot.ports.body import BatteryStatus
 from ai_robot.ports.cloud import Capability, CloudPart, ConversationAudio, EventKind, RobotPart
-from ai_robot.ports.screen import scene_data
+from ai_robot.ports.screen import Panel, scene_data
 
 
 class InteractionState(StrEnum):
@@ -131,6 +133,43 @@ class ScreenTouched(Message):
 
     x: float  # from 0 at the left edge to 1 at the right one
     y: float  # from 0 at the top to 1 at the bottom
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenHeld(Message):
+    """Someone held a press still on the face: the robot opens its settings. Published
+    by screen."""
+
+    x: float
+    y: float
+
+
+@dataclass(frozen=True, slots=True)
+class PanelRequest(Message):
+    """Show ``panel`` over the face, such as the settings, or withdraw it with ``None``.
+    Published by the module that describes the panel, read by screen. Each ``source``
+    holds at most one panel, and the latest one asked for is shown."""
+
+    source: str
+    panel: Panel | None
+
+
+@dataclass(frozen=True, slots=True)
+class PanelAction(Message):
+    """The owner acted on ``item`` of ``panel``: its new ``value``, or ``None`` for a
+    button. Published by screen."""
+
+    panel: str
+    item: str
+    value: Any = None
+
+
+@dataclass(frozen=True, slots=True)
+class PanelClosed(Message):
+    """The owner closed ``panel``, or left it untouched for a while. Published by
+    screen."""
+
+    panel: str
 
 
 # ---- Capabilities and events: what the cloud can ask of the robot and hear from it ----
@@ -290,3 +329,109 @@ class RegistrationSigned(Message):
     registration: str | None = None
     error: str | None = None
     detail: str = ""  # for people
+
+
+@dataclass(frozen=True, slots=True)
+class MicrophonesChanged(Message):
+    """Whether the microphones are on: off, the robot hears nothing, and the screen says
+    so. Published by voice when it starts, then on every change."""
+
+    on: bool
+
+
+# ---- Settings: what the owner sees and changes on the robot's touch screen ----
+# (docs/decisions/0016-settings.md). Each module offers its own settings, and applies
+# them; the settings module keeps what the owner chose, and draws the panel.
+
+SETTING_NAME = re.compile(r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+")  # owner.setting
+
+
+class SettingKind(StrEnum):
+    VALUE = "value"  # a value the owner chooses, as its schema allows
+    ACTION = "action"  # something the owner does, such as opening set-up
+    INFO = "info"  # a line to read
+
+
+class SettingSection(StrEnum):
+    """Where a setting shows: the sections, in this order, with their titles."""
+
+    NETWORK = "Wi-Fi and app"
+    SOUND = "Sound"
+    CLOUD = "What the cloud may do"
+    ABOUT = "About"
+
+
+def _plain_value(name: str, value: Any) -> Any:
+    """``value`` if it is a JSON scalar: a boolean, a finite number, a text or none."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"setting {name}: its value must be finite, got {value!r}")
+    if value is not None and not isinstance(value, bool | int | float | str):
+        raise ValueError(f"setting {name}: its value must be plain JSON, got {value!r}")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class Setting:
+    """Something the owner sees or changes in the robot's settings.
+
+    ``name`` starts with the owner module's name (``voice.volume``). A ``VALUE`` has a
+    JSON Schema for its value, ``schema``: a boolean; a number with a ``minimum`` and a
+    ``maximum``, by steps of ``multipleOf``; or one of ``oneOf``'s constants, each with a
+    ``title``. ``value`` is a ``VALUE``'s current value, or an ``INFO``'s text; an
+    ``ACTION`` has none.
+    """
+
+    name: str
+    kind: SettingKind
+    section: SettingSection
+    title: str
+    value: Any = None
+    schema: Mapping[str, Any] | None = None
+    help: str | None = None
+    unit: str | None = None  # shown after a number, such as "%"
+    confirm: str | None = None  # asked before a boolean is switched on, or an action runs
+    closes: bool = False  # an action that leaves the settings, such as opening set-up
+
+    def __post_init__(self) -> None:
+        if not SETTING_NAME.fullmatch(self.name):
+            raise ValueError(f"a setting's name is owner.name, in lower case: {self.name!r}")
+        if not self.title:
+            raise ValueError(f"setting {self.name} needs a title")
+        _plain_value(self.name, self.value)
+        if (self.kind is SettingKind.VALUE) != (self.schema is not None):
+            raise ValueError(f"setting {self.name}: a value, and only a value, has a schema")
+        if self.schema is not None:
+            object.__setattr__(self, "schema", frozen(f"{self.name} schema", self.schema))
+        if self.kind is SettingKind.ACTION and self.value is not None:
+            raise ValueError(f"setting {self.name}: an action has no value")
+        if self.kind is SettingKind.INFO and not isinstance(self.value, str):
+            raise ValueError(f"setting {self.name}: an info's value is its text")
+        if self.closes and self.kind is not SettingKind.ACTION:
+            raise ValueError(f"setting {self.name}: only an action closes the settings")
+
+
+@dataclass(frozen=True, slots=True)
+class SettingOffered(Message):
+    """A module offers a setting, or tells its new value or text. Read by settings."""
+
+    owner: str  # the module's name
+    setting: Setting
+
+
+@dataclass(frozen=True, slots=True)
+class SettingChanged(Message):
+    """The owner changed setting ``name`` to ``value``, or pressed it if it is an action
+    (``value`` is then ``None``). Published by settings, from the screen or from what
+    it kept; read by the setting's module, which checks the value and applies it."""
+
+    name: str
+    value: Any = None
+
+    def __post_init__(self) -> None:
+        _plain_value(self.name, self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsOpened(Message):
+    """The settings are on screen: modules refresh what their lines show. Published by
+    settings."""

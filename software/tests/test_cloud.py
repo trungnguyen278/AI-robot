@@ -39,6 +39,8 @@ from ai_robot.messages import (
     RegistrationRequested,
     RegistrationSigned,
     RobotEvent,
+    SettingChanged,
+    SettingOffered,
 )
 from ai_robot.modules.cloud import REGISTRATION_TYPE, CloudModule
 from ai_robot.modules.screen import ScreenModule, capabilities, load_vocabulary
@@ -696,3 +698,78 @@ def test_a_binding_that_cannot_be_saved_is_kept_in_memory(
     with caplog.at_level(logging.ERROR):
         asyncio.run(main())
     assert "cannot keep the robot's binding: no space left on device" in caplog.text
+
+
+# ---- settings: what the cloud may do (SEC-9) ----
+
+
+class RecordingCloud(SimCloud):
+    """A simulated cloud that remembers every catalogue it was offered."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.catalogues: list[set[str]] = []
+
+    async def offer(self, capabilities: Any, events: Any, *, conversation: Any = None) -> None:
+        self.catalogues.append({capability.name for capability in capabilities})
+        await super().offer(capabilities, events, conversation=conversation)
+
+
+def test_the_owner_chooses_what_the_cloud_may_do() -> None:
+    async def main() -> None:
+        bus = Bus()
+        cloud = RecordingCloud()
+        lamp = Lamp(context("lamp", bus, {}))
+        module = cloud_module(bus, cloud)
+        async with running(lamp, module):
+            await until(lambda: cloud.online)
+            assert set(cloud.capabilities) == {"lamp.set"}  # informational, as shipped
+            bus.publish(SettingChanged("cloud.physical", True))
+            await until(lambda: "lamp.move" in cloud.capabilities)
+            bus.publish(SettingChanged("cloud.informational", False))
+            await until(lambda: "lamp.set" not in cloud.capabilities)
+            assert (await cloud.call("lamp.set", {"on": True}))[1] == "unknown tool lamp.set"
+
+    asyncio.run(main())
+
+
+def test_kept_choices_apply_before_the_cloud_sees_anything() -> None:
+    async def main() -> None:
+        bus = Bus()
+        cloud = RecordingCloud()
+        lamp = Lamp(context("lamp", bus, {}))
+        module = cloud_module(bus, cloud)
+        bus.publish(SettingChanged("cloud.informational", False))  # as settings starts
+        async with running(lamp, module):
+            await until(lambda: cloud.online)
+            assert all("lamp.set" not in catalogue for catalogue in cloud.catalogues)
+
+    asyncio.run(main())
+
+
+def test_the_settings_say_who_the_robot_is_and_whether_it_is_set_up() -> None:
+    async def main() -> None:
+        bus = Bus()
+        cloud = SimCloud()
+        cloud.knows_robot = False
+        identity = SimIdentity()
+        offered = bus.subscribe(SettingOffered)
+        module = cloud_module(bus, cloud, store=SimBindingStore(bound=False), identity=identity)
+        async with running(module):
+            lines: dict[str, Any] = {}
+
+            async def read() -> None:
+                while offered.pending:
+                    setting = (await offered.get()).setting
+                    lines[setting.name] = setting.value
+
+            await read()
+            assert lines["cloud.robot"] == await identity.robot_id()
+            assert lines["cloud.account"] == "Not set up"
+            assert lines["cloud.physical"] is False and lines["cloud.informational"] is True
+            cloud.recognise()
+            await until(lambda: module.binding.bound)
+            await read()
+            assert lines["cloud.account"] == "Set up"
+
+    asyncio.run(main())

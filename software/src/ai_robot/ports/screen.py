@@ -12,6 +12,9 @@ from typing import Any
 from ai_robot.core.data import frozen
 from ai_robot.ports.base import Port
 
+# Fixed by the protocol (protocol/screen/vocabulary.json, panel_items).
+PANEL_KINDS = ("toggle", "slider", "choice", "button", "info")
+
 
 def scene_data(data: Mapping[str, Any]) -> Mapping[str, Any]:
     """A deep, read-only copy of a scene's ``data``, made of JSON values only
@@ -19,6 +22,92 @@ def scene_data(data: Mapping[str, Any]) -> Mapping[str, Any]:
     the publisher's job, where their meaning is known; the screen protocol lists what
     each scene takes."""
     return frozen("scene data", data)
+
+
+def _finite(name: str, value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number, got {value!r}")
+    return float(value)
+
+
+@dataclass(frozen=True, slots=True)
+class PanelItem:
+    """One item of a panel (protocol/screen/README.md, Panels). ``value`` is a toggle's
+    boolean, a slider's number, the value of the choice made, or an info's text; a
+    button has none. ``choices`` are a choice's options, as (value, label) pairs."""
+
+    id: str
+    kind: str
+    label: str
+    value: Any = None
+    help: str | None = None
+    confirm: str | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    step: float | None = None
+    unit: str | None = None
+    choices: tuple[tuple[Any, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.kind not in PANEL_KINDS:
+            raise ValueError(f"a panel item's kind is one of {PANEL_KINDS}, got {self.kind!r}")
+        if not self.id or not self.label:
+            raise ValueError("a panel item needs an id and a label")
+        if self.confirm is not None and self.kind not in ("toggle", "button"):
+            raise ValueError("only a toggle or a button asks for confirmation")
+        if self.kind == "toggle" and not isinstance(self.value, bool):
+            raise ValueError(f"toggle {self.id}: its value is a boolean")
+        if self.kind == "slider":
+            low = _finite(f"slider {self.id}: minimum", self.minimum)
+            high = _finite(f"slider {self.id}: maximum", self.maximum)
+            step = _finite(f"slider {self.id}: step", self.step)
+            value = _finite(f"slider {self.id}: value", self.value)
+            if not (low < high and step > 0 and low <= value <= high):
+                raise ValueError(f"slider {self.id}: needs minimum <= value <= maximum, step > 0")
+        if self.kind == "choice":
+            object.__setattr__(self, "choices", tuple((v, str(t)) for v, t in self.choices))
+            values = [value for value, _ in self.choices]
+            if not values or self.value not in values:
+                raise ValueError(f"choice {self.id}: its value must be one of its choices")
+        if self.kind == "button" and self.value is not None:
+            raise ValueError(f"button {self.id}: has no value")
+        if self.kind == "info" and not isinstance(self.value, str):
+            raise ValueError(f"info {self.id}: its value is a text")
+
+
+@dataclass(frozen=True, slots=True)
+class PanelSection:
+    """A titled group of a panel's items."""
+
+    title: str
+    items: tuple[PanelItem, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "items", tuple(self.items))
+
+
+@dataclass(frozen=True, slots=True)
+class Panel:
+    """A screen the owner acts on, drawn over the face: the settings, for one. ``name``
+    is what the renderer's actions name."""
+
+    name: str
+    title: str
+    sections: tuple[PanelSection, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "sections", tuple(self.sections))
+        if not self.name:
+            raise ValueError("a panel needs a name")
+        ids = [item.id for section in self.sections for item in section.items]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"panel {self.name}: two items have the same id")
+
+    def item(self, id: str) -> PanelItem | None:
+        """The item ``id``, if the panel has one."""
+        return next(
+            (item for section in self.sections for item in section.items if item.id == id), None
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +119,9 @@ class ScreenState:
     ``scene`` names a scene of the protocol, shown with ``scene_data`` (see
     ``scene_data()``) while the face watches from a corner, or is ``None``.
     ``battery`` (percent) and ``charging`` fill the status row, ``battery_low`` shows the
-    battery in red (the robot's judgement, from system); ``None`` means unknown.
+    battery in red (the robot's judgement, from system), and ``muted`` that the
+    microphones are off; ``None`` means unknown. ``panel`` is shown over the face, or
+    is ``None``.
     """
 
     expression: str = "neutral"
@@ -40,6 +131,8 @@ class ScreenState:
     battery: float | None = None
     charging: bool | None = None
     battery_low: bool | None = None
+    muted: bool | None = None
+    panel: Panel | None = None
 
     def __post_init__(self) -> None:
         if self.battery is not None and not (
@@ -55,6 +148,34 @@ class Touch:
 
     x: float
     y: float
+
+
+@dataclass(frozen=True, slots=True)
+class Hold:
+    """A press held still on the face, where it began (as for ``Touch``)."""
+
+    x: float
+    y: float
+
+
+@dataclass(frozen=True, slots=True)
+class Action:
+    """The owner acted on ``item`` of ``panel``: its new ``value`` as the item takes it,
+    or ``None`` for a button."""
+
+    panel: str
+    item: str
+    value: Any = None
+
+
+@dataclass(frozen=True, slots=True)
+class Close:
+    """The owner closed ``panel``, or left it untouched for a while."""
+
+    panel: str
+
+
+ScreenEvent = Touch | Hold | Action | Close
 
 
 class Screen(Port):
@@ -83,5 +204,6 @@ class Screen(Port):
         """Set the loudness, from 0 to 1, of the voice the face reacts to."""
 
     @abstractmethod
-    async def touched(self) -> Touch:
-        """Wait for the next tap on the screen."""
+    async def event(self) -> ScreenEvent:
+        """Wait for the next thing someone does on the screen: a tap, a press held, or
+        an action on a panel or its closing."""

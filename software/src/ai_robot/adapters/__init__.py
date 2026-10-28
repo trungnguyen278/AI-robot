@@ -64,6 +64,10 @@ ADAPTERS: dict[str, dict[str, str]] = {
         "sim": "ai_robot.adapters.sim.binding:SimBindingStore",
         "file": "ai_robot.adapters.files.binding:FileBindingStore",
     },
+    "settings": {
+        "sim": "ai_robot.adapters.sim.settings:SimSettingsStore",
+        "file": "ai_robot.adapters.files.settings:FileSettingsStore",
+    },
     "setup_link": {
         "sim": "ai_robot.adapters.sim.setup:SimSetupLink",
         "bluez": "ai_robot.adapters.bluez.setup:BluezSetupLink",

@@ -34,3 +34,7 @@ adapter = "networkmanager"
 
 [ports.binding]
 adapter = "file"
+
+# What its owner chose in its settings, kept in a file (docs/decisions/0016).
+[ports.settings]
+adapter = "file"

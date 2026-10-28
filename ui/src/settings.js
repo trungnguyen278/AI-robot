@@ -53,4 +53,13 @@ export const SETTINGS = Object.freeze({
     talk: 0.06, // how much they narrow at full voice while talking, as a fraction
     mouth: 0.8, // how far the mouth opens at full voice
   }),
+
+  hold: Object.freeze({
+    seconds: 3, // a press held this long, still, opens the settings
+    slop: 16, // CSS pixels a held press may wander, as the finger rolls, and still count
+  }),
+
+  panel: Object.freeze({
+    idle: 60, // seconds without a touch before a panel, such as the settings, closes itself
+  }),
 });

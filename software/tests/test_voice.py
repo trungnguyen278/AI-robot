@@ -27,6 +27,10 @@ from ai_robot.messages import (
     ExpressionRequest,
     InteractionChanged,
     InteractionState,
+    MicrophonesChanged,
+    SettingChanged,
+    SettingOffered,
+    SoundLevel,
 )
 from ai_robot.modules.voice import VoiceModule
 from ai_robot.ports import (
@@ -62,6 +66,8 @@ SETTINGS = {
     "barge_in": 0.2,
     "offline_expression": "confused",
     "offline_seconds": 2.0,
+    "volume": 100,
+    "microphones": True,
 }
 TIMEOUT = 2.0
 ENGINES_TIMEOUT = 30.0  # for the real engines on a whole recording, however slow the computer
@@ -462,11 +468,139 @@ def test_engines_that_take_other_audio_are_refused() -> None:
         ("barge_in", float("nan")),
         ("offline_expression", ""),
         ("offline_seconds", 0.0),
+        ("volume", 83),  # not a step of 5
+        ("volume", 120),
+        ("microphones", "yes"),
     ],
 )
 def test_settings_are_checked(setting: str, value: Any) -> None:
     with pytest.raises(ValueError, match=setting):
         Robot(**{setting: value})
+
+
+# ---- the owner's settings: the volume and the microphones ----
+
+
+async def microphones(robot: Robot) -> list[bool]:
+    """What the module said of its microphones since the last call."""
+    said = []
+    while robot.mics.pending:
+        said.append((await robot.mics.get()).on)
+    return said
+
+
+def settings_robot(**changes: Any) -> Robot:
+    robot = Robot(**changes)
+    robot.mics = robot.bus.subscribe(MicrophonesChanged)
+    robot.levels = robot.bus.subscribe(SoundLevel)
+    robot.offered = robot.bus.subscribe(SettingOffered)
+    return robot
+
+
+def test_it_offers_its_settings() -> None:
+    async def main() -> None:
+        async with running(settings_robot(volume=60)) as robot:
+            offered = {}
+            while robot.offered.pending:
+                setting = (await robot.offered.get()).setting
+                offered[setting.name] = setting
+            assert offered["voice.volume"].value == 60
+            assert offered["voice.volume"].unit == "%"
+            assert offered["voice.microphones"].value is True
+            assert await microphones(robot) == [True]
+
+    asyncio.run(main())
+
+
+def test_microphones_off_hear_nothing() -> None:
+    async def main() -> None:
+        async with running(settings_robot()) as robot:
+            await robot.online()
+            await microphones(robot)
+            robot.bus.publish(SettingChanged("voice.microphones", False))
+            await settle()
+            assert await microphones(robot) == [False]
+            while robot.levels.pending:
+                await robot.levels.get()
+            await robot.microphones.heard(WAKE, VOICE)
+            assert await robot.sent() == []  # no turn
+            assert robot.levels.pending == 0  # nothing measured
+            resets = robot.spotter.resets
+            robot.bus.publish(SettingChanged("voice.microphones", True))
+            await settle()
+            assert await microphones(robot) == [True]
+            assert robot.spotter.resets == resets + 1  # what came before is forgotten
+            await robot.microphones.heard(WAKE)
+            assert await robot.sent() == [TurnStart("t1", Trigger.WAKE_WORD)]
+
+    asyncio.run(main())
+
+
+def test_microphones_off_end_the_turn() -> None:
+    async def main() -> None:
+        async with running(settings_robot()) as robot:
+            await in_a_turn(robot)
+            robot.bus.publish(SettingChanged("voice.microphones", False))
+            await settle()
+            assert await robot.sent() == [TurnCancel("t1", "microphones off")]
+            assert await robot.state_changes() == [InteractionState.IDLE]
+
+    asyncio.run(main())
+
+
+def test_no_follow_up_while_the_microphones_are_off() -> None:
+    async def main() -> None:
+        async with running(settings_robot()) as robot:
+            await in_a_turn(robot)
+            await robot.cloud_says(SpeechEnd("t1"), ResponseStart("a1", "t1"))
+            robot.bus.publish(SettingChanged("voice.microphones", False))
+            await settle()
+            await robot.cloud_says(ResponseEnd("a1", follow_up=True))
+            await settle()
+            assert [p for p in await robot.sent() if isinstance(p, TurnStart)] == []
+
+    asyncio.run(main())
+
+
+def test_the_volume_scales_the_robots_voice() -> None:
+    async def main() -> None:
+        async with running(settings_robot(volume=50)) as robot:
+            await in_a_turn(robot)
+            await robot.cloud_says(SpeechEnd("t1"), ResponseStart("a1", "t1"))
+            await robot.cloud_says(Voice(b"\x10\x00" * 4))  # 16
+            robot.bus.publish(SettingChanged("voice.volume", 25))
+            await settle()
+            await robot.cloud_says(Voice(b"\x10\x00" * 4))
+            assert bytes(robot.speaker.played) == b"\x08\x00" * 4 + b"\x04\x00" * 4
+
+    asyncio.run(main())
+
+
+def test_a_value_its_schema_refuses_is_not_applied() -> None:
+    async def main() -> None:
+        async with running(settings_robot()) as robot:
+            while robot.offered.pending:
+                await robot.offered.get()
+            robot.bus.publish(SettingChanged("voice.volume", 7))
+            await settle()
+            assert robot.module.volume == 100
+            again = (await robot.offered.get()).setting  # offered again, as it is
+            assert (again.name, again.value) == ("voice.volume", 100)
+
+    asyncio.run(main())
+
+
+def test_kept_settings_apply_before_it_hears_anything() -> None:
+    async def main() -> None:
+        robot = settings_robot()
+        robot.bus.publish(SettingChanged("voice.microphones", False))  # as settings starts
+        async with running(robot):
+            assert await microphones(robot) == [False]  # off from the start
+            await robot.online()
+            await robot.microphones.heard(WAKE)
+            assert await robot.sent() == []
+
+    asyncio.run(main())
 
 
 def test_the_real_engines_open_and_end_a_turn_in_a_recording() -> None:

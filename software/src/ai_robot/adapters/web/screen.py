@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import time
 from pathlib import Path
 from typing import Any
@@ -20,12 +21,23 @@ from aiohttp import WSCloseCode, WSMsgType, web
 
 from ai_robot.core.checks import positive
 from ai_robot.core.data import encode
-from ai_robot.ports.screen import Screen, ScreenState, Touch
+from ai_robot.ports.screen import (
+    Action,
+    Close,
+    Hold,
+    Panel,
+    PanelItem,
+    Screen,
+    ScreenEvent,
+    ScreenState,
+    Touch,
+)
 
 log = logging.getLogger(__name__)
 
 PROTOCOL = 1
 PAGE = "screen.html"
+MAX_NAME = 64  # characters in a panel's or an item's name, as a page reports it
 
 # src/ai_robot/adapters/web/screen.py -> the ui/ folder of this checkout
 DEFAULT_UI_DIR = Path(__file__).resolve().parents[5] / "ui"
@@ -33,6 +45,48 @@ DEFAULT_UI_DIR = Path(__file__).resolve().parents[5] / "ui"
 
 def _fraction(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and 0 <= value <= 1
+
+
+def _name(value: Any) -> bool:
+    return isinstance(value, str) and 0 < len(value) <= MAX_NAME
+
+
+def _scalar(value: Any) -> bool:
+    """A value a panel's item takes: a boolean, a finite number, a text, or none."""
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return value is None or isinstance(value, bool | int | str)
+
+
+def panel_message(panel: Panel | None) -> dict[str, Any] | None:
+    """``panel`` as the protocol has it (protocol/screen/README.md, Panels)."""
+    if panel is None:
+        return None
+    return {
+        "name": panel.name,
+        "title": panel.title,
+        "sections": [
+            {"title": section.title, "items": [_item_message(item) for item in section.items]}
+            for section in panel.sections
+        ],
+    }
+
+
+def _item_message(item: PanelItem) -> dict[str, Any]:
+    message: dict[str, Any] = {"id": item.id, "kind": item.kind, "label": item.label}
+    if item.kind != "button":
+        message["value"] = item.value
+    if item.help:
+        message["help"] = item.help
+    if item.confirm:
+        message["confirm"] = item.confirm
+    if item.kind == "slider":
+        message.update(min=item.minimum, max=item.maximum, step=item.step)
+        if item.unit:
+            message["unit"] = item.unit
+    if item.kind == "choice":
+        message["choices"] = [{"value": value, "label": label} for value, label in item.choices]
+    return message
 
 
 def _revision(folder: Path) -> str:
@@ -85,7 +139,7 @@ class WebScreen(Screen):
         self.state: ScreenState | None = None  # None until the first show()
         self.gaze: tuple[float, float] | None = None
         self.pages: dict[web.WebSocketResponse, dict[str, Any]] = {}  # page -> its "ready"
-        self._touches: asyncio.Queue[Touch] = asyncio.Queue()
+        self._events: asyncio.Queue[ScreenEvent] = asyncio.Queue()
         self._runner: web.AppRunner | None = None
         self._unknown: set[tuple[str, str]] = set()
 
@@ -127,8 +181,8 @@ class WebScreen(Screen):
     async def voice(self, level: float) -> None:
         await self._broadcast({"type": "voice", "level": round(level, 3)})
 
-    async def touched(self) -> Touch:
-        return await self._touches.get()
+    async def event(self) -> ScreenEvent:
+        return await self._events.get()
 
     def _hello_message(self) -> dict[str, Any]:
         return {
@@ -148,7 +202,9 @@ class WebScreen(Screen):
                 "battery": state.battery,
                 "charging": state.charging,
                 "low": state.battery_low,
+                "muted": state.muted,
             },
+            "panel": panel_message(state.panel),
             "time": time.time(),
         }
 
@@ -198,12 +254,24 @@ class WebScreen(Screen):
                 message.get("shape"),
             )
             self._check_names()
-        elif kind == "touch":
+        elif kind in ("touch", "hold"):
             x, y = message.get("x"), message.get("y")
             if _fraction(x) and _fraction(y):
-                self._touches.put_nowait(Touch(float(x), float(y)))
+                event = Touch if kind == "touch" else Hold
+                self._events.put_nowait(event(float(x), float(y)))
             else:
-                log.warning("screen page sent a tap off the screen: %r", message)
+                log.warning("screen page sent a %s off the screen: %r", kind, message)
+        elif kind == "action":
+            panel, item, value = message.get("panel"), message.get("item"), message.get("value")
+            if _name(panel) and _name(item) and _scalar(value):
+                self._events.put_nowait(Action(panel, item, value))
+            else:
+                log.warning("screen page sent an action that is not one: %r", message)
+        elif kind == "close":
+            if _name(message.get("panel")):
+                self._events.put_nowait(Close(message["panel"]))
+            else:
+                log.warning("screen page closed no panel: %r", message)
 
     def _check_names(self) -> None:
         """Warn once per name about an expression or a scene no ready page knows. A

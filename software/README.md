@@ -16,11 +16,11 @@ Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependen
 ## How it fits together
 
 ```
-modules    system · motion · voice · vision · screen · setup · cloud · behavior
+modules    system · settings · motion · voice · vision · screen · setup · cloud · behavior
              │  talk to each other only through messages on the bus
              │  each one owns some ports
 ports      audio_in · audio_out · wake_word · voice_activity · camera · screen
-           setup_link · network · cloud · identity · binding · daylight
+           setup_link · network · cloud · identity · binding · settings · daylight
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -32,9 +32,10 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `motion` | `drive`, `joints`, `range`, `safety` | Tracks, neck and arms; obstacle and emergency-stop checks |
 | `voice` | `audio_in`, `audio_out`, `wake_word`, `voice_activity` | Conversations with the cloud: the wake word, turns, the end of speech when the cloud has not decided it, answers, barge-in; where the conversation is (the interaction state). The voice processor cancels the echo ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md) to [ADR-0013](../docs/decisions/0013-listening-on-the-robot.md)) |
 | `vision` | `camera` | People and object detection, face tracking |
-| `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery; taps |
+| `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery and whether the microphones are off; panels over the face, such as the settings; taps and holds |
+| `settings` | `settings` | The owner's settings: what the modules offer, shown as one panel on the screen; what the owner chose, kept, and handed to their modules before they run ([ADR-0016](../docs/decisions/0016-settings.md)) |
 | `setup` | `setup_link`, `network` | Set-up with the owner's app over Bluetooth LE: when it opens, the code on the screen, the session, the Wi-Fi network ([protocol/setup](../protocol/setup/README.md)) |
-| `cloud` | `cloud`, `identity`, `binding` | The link to `ai-robot-server`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)). It signs the robot's registration at set-up, and keeps whether the robot is bound |
+| `cloud` | `cloud`, `identity`, `binding` | The link to `ai-robot-server`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)). It signs the robot's registration at set-up, and keeps whether the robot is bound. Its settings say what the cloud may do, by safety class |
 | `behavior` | `daylight` | Decides what the robot does: for now, reactions to taps, the clock when nobody interacts (taps and conversations count), a sleepy face from sunset to sunrise |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.
@@ -125,6 +126,8 @@ The `voice` module holds the robot's conversations ([ADR-0012](../docs/decisions
 - **Answers** play as they come; one that asks for a follow-up opens a new turn once played.
 - **Barge-in:** voice over an answer (`barge_in`) stops it at once and opens a turn, which starts with the words that interrupted.
 
+Its settings are the volume and the microphones: with them off, the robot hears nothing, not even its wake word, and the screen shows it.
+
 On a computer the simulated adapters hear silence, so no turn starts. To talk to the robot on a computer with a microphone, select `portaudio` for `audio_in` and `audio_out`, `micro` for `wake_word` and `silero` for `voice_activity` in `config/local.toml`; without a voice processor, its own voice is not cancelled, so use headphones. The wake word is a model of `[ports.wake_word.micro] models`; the robot's own is trained for its name, once the name is chosen.
 
 ### The cloud
@@ -152,6 +155,15 @@ The `setup` module sets the robot up with the owner's app, over Bluetooth LE ([p
 - **Bound.** The robot is bound once the server it was registered with accepts it; the `binding` port keeps that, so that the robot knows it while offline (a file on the robot).
 
 On a computer, the `sim` adapters stand in: no app connects, and the simulated binding says that the robot is bound. The tests play the app through the simulated link (`tests/test_setup.py`). The `bluez` and `networkmanager` adapters are tested against fake BlueZ and NetworkManager services on a private D-Bus (`tests/test_bluez_setup.py`, `tests/test_networkmanager.py`), which needs Linux and `dbus-daemon` (`sudo apt install dbus-daemon`).
+
+### Settings
+
+The owner changes the robot's settings on its screen. A press held still on the face opens them, and so can the cloud (`settings.open`), so that "open the settings" works by voice ([ADR-0016](../docs/decisions/0016-settings.md)):
+- **Declared by their modules.** Each module offers its own settings on the bus, as it offers capabilities, and applies them. The `settings` module shows them all, as one panel the screen draws.
+- **Kept.** The `settings` port keeps what the owner chose: a file on the robot (the `file` adapter), nothing on a computer (`sim`). At start, the `settings` module hands each module its kept values before the modules run, so that a choice holds from the first moment, such as what the cloud may not do.
+- **Changed.** A change shows at once. The module that owns the setting applies it or refuses it; a refused value goes back.
+
+The settings so far: set-up with the app and the Wi-Fi network (`setup`), the volume and the microphones (`voice`), what the cloud may do, by safety class (`cloud`), and the robot's name, software, account and identifier.
 
 ### C++ extension
 
@@ -199,6 +211,13 @@ What stays in the code, named once at the top of its file:
   5. Run `serve()` in `run`, and `emit()` the events.
 
   The cloud module passes them on, and the protocol does not change.
+- **A setting the owner can change:** also in the module that owns what it changes.
+  1. Create a `SettingsHost` (`core/settings.py`) in `__init__`.
+  2. `add` each `Setting` with its handler. A value has a JSON Schema: a boolean shows as a switch, a number between two bounds as a slider, one of several constants, each with a title, as a choice. An action shows as a button, an information as a line.
+  3. `offer()` them in `start`.
+  4. In `run`, `await apply_pending()` before anything uses the values, then run `serve()`.
+
+  A handler that cannot apply a value raises `ValueError`, and the panel puts the value back.
 - **An adapter:** implement the port in `adapters/<technology>/` (for example `adapters/alsa/`), register it in `ADAPTERS` (`adapters/__init__.py`) and select it in a profile. Import its libraries only inside that folder, so that the other profiles keep working without them.
 
 ## Rules

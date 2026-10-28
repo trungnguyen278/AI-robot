@@ -10,6 +10,7 @@ from collections import deque
 from ai_robot import native
 from ai_robot.core.checks import positive, within
 from ai_robot.core.module import Module, ModuleContext
+from ai_robot.core.settings import SettingsHost
 from ai_robot.messages import (
     CloudStatus,
     ConversationFromCloud,
@@ -18,6 +19,10 @@ from ai_robot.messages import (
     ExpressionRequest,
     InteractionChanged,
     InteractionState,
+    MicrophonesChanged,
+    Setting,
+    SettingKind,
+    SettingSection,
     SoundLevel,
 )
 from ai_robot.ports import (
@@ -43,6 +48,7 @@ from ai_robot.ports.cloud import MAX_SPEECH_SECONDS
 # How this implementation works, which nobody needs to tune.
 LEAD_IN_SECONDS = 0.3  # audio from before a barge-in's voice was confirmed, sent with it
 FROM_CLOUD_BACKLOG = 1000  # unread parts of the cloud's conversation kept: far more than pile up
+VOLUME_STEP = 5  # percent between two volumes the settings offer
 
 
 class VoiceModule(Module):
@@ -64,6 +70,10 @@ class VoiceModule(Module):
 
     It publishes where the conversation is (``InteractionChanged``), and the loudness
     of what the microphones hear (``SoundLevel``).
+
+    **Settings** (docs/decisions/0016): the ``volume`` of the robot's voice, in percent,
+    and whether the ``microphones`` are on. Off, the robot hears nothing: no wake word,
+    no loudness, no turn, and the screen says so (``MicrophonesChanged``, PRIV-1).
     """
 
     owns = ("audio_in", "audio_out", "wake_word", "voice_activity")
@@ -78,6 +88,8 @@ class VoiceModule(Module):
         barge_in: float,
         offline_expression: str,
         offline_seconds: float,
+        volume: int,
+        microphones: bool,
     ) -> None:
         super().__init__(ctx)
         self.microphones = self.port("audio_in", AudioIn)
@@ -92,6 +104,34 @@ class VoiceModule(Module):
             raise ValueError("offline_expression must name an expression")
         self.offline_expression = offline_expression
         self.offline_seconds = positive("offline_seconds", offline_seconds)
+        self.volume = volume
+        self.microphones_on = microphones
+        self._said_microphones = False  # whether it told the others yet
+        self.settings = SettingsHost(self)
+        self.settings.add(
+            Setting(
+                "voice.volume",
+                SettingKind.VALUE,
+                SettingSection.SOUND,
+                "Volume",
+                volume,
+                schema={"type": "integer", "minimum": 0, "maximum": 100, "multipleOf": VOLUME_STEP},
+                unit="%",
+            ),
+            self._set_volume,
+        )
+        self.settings.add(
+            Setting(
+                "voice.microphones",
+                SettingKind.VALUE,
+                SettingSection.SOUND,
+                "Microphones",
+                microphones,
+                schema={"type": "boolean"},
+                help="Off, the robot hears nothing until they are on again",
+            ),
+            self._set_microphones,
+        )
         for port in (self.wake_word, self.voice_activity):
             if port.format != self.microphones.format:
                 raise ValueError(
@@ -132,16 +172,22 @@ class VoiceModule(Module):
         audio = ConversationAudio(self.microphones.format, self.speaker.format)
         self.bus.publish(ConversationOffered(self.name, audio))
         self.bus.publish(InteractionChanged(self.state))
+        self.settings.offer()
 
     async def run(self) -> None:
+        await self.settings.apply_pending()  # the owner's choices, before anything is heard
+        self.bus.publish(MicrophonesChanged(self.microphones_on))
+        self._said_microphones = True
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(self._listen())
             tasks.create_task(self._hear_the_cloud())
             tasks.create_task(self._follow_status())
+            tasks.create_task(self.settings.serve())
 
     async def stop(self) -> None:
         self.status.close()
         self.from_cloud.close()
+        self.settings.close()
         self._cancel_finishing()
         await self.speaker.drop()
 
@@ -150,6 +196,8 @@ class VoiceModule(Module):
     async def _listen(self) -> None:
         while True:
             chunk = await self.microphones.read()
+            if not self.microphones_on:
+                continue  # off: nothing is heard, nor measured
             self.bus.publish(SoundLevel(native.rms_int16(chunk)))
             # The engines hear everything, so that their state follows the audio.
             voiced = await self.voice_activity.voice(chunk) >= self.voice_threshold
@@ -264,7 +312,7 @@ class VoiceModule(Module):
             part = (await self.from_cloud.get()).part
             if isinstance(part, Voice):
                 if not self._muted:
-                    await self.speaker.write(part.pcm)
+                    await self.speaker.write(self._at_volume(part.pcm))
             elif isinstance(part, SpeechEnd):
                 if part.turn == self.turn and self.streaming:
                     self._speech_over()
@@ -304,7 +352,7 @@ class VoiceModule(Module):
             self.response = None
             if self.streaming:  # a turn opened meanwhile
                 return
-            if part.follow_up and self.conversations:
+            if part.follow_up and self.conversations and self.microphones_on:
                 self._open_turn(Trigger.FOLLOW_UP)
             else:
                 self._set_state(InteractionState.IDLE)
@@ -324,6 +372,31 @@ class VoiceModule(Module):
         while True:
             status = await self.status.get()
             self.conversations = status.online and status.conversations
+
+    # ---- settings ----
+
+    async def _set_volume(self, volume: int) -> None:
+        self.volume = volume
+
+    async def _set_microphones(self, on: bool) -> None:
+        if on == self.microphones_on:
+            return
+        self.microphones_on = on
+        if on:
+            # What was heard before they went off is no part of what comes now.
+            self.wake_word.reset()
+            self.voice_activity.reset()
+            self.log.info("the microphones are on")
+        else:
+            self.log.info("the microphones are off")
+            if self.turn is not None:
+                self._send(TurnCancel(self.turn, "microphones off"))
+                self._close_turn()
+        if self._said_microphones:
+            self.bus.publish(MicrophonesChanged(on))
+
+    def _at_volume(self, pcm: bytes) -> bytes:
+        return pcm if self.volume == 100 else native.scale_int16(pcm, self.volume / 100)
 
     # ---- helpers ----
 

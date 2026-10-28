@@ -25,7 +25,12 @@ from ai_robot.messages import (
     InteractionChanged,
     InteractionState,
     LookAt,
+    MicrophonesChanged,
+    PanelAction,
+    PanelClosed,
+    PanelRequest,
     SceneRequest,
+    ScreenHeld,
     ScreenPriority,
     ScreenTouched,
     SoundLevel,
@@ -36,7 +41,8 @@ from ai_robot.modules.screen import (
     Arbiter,
     ScreenModule,
 )
-from ai_robot.ports import BatteryStatus
+from ai_robot.ports import BatteryStatus, Panel, PanelItem, PanelSection
+from ai_robot.ports.screen import PANEL_KINDS
 
 VOCABULARY = Path(__file__).resolve().parents[2] / "protocol" / "screen" / "vocabulary.json"
 
@@ -320,3 +326,85 @@ def test_the_expressions_used_are_in_the_protocol() -> None:
     vocabulary = json.loads(VOCABULARY.read_text(encoding="utf-8"))
     expressions = {DEFAULT_EXPRESSION} | {e for e in INTERACTION_EXPRESSIONS.values() if e}
     assert expressions <= set(vocabulary["expressions"])
+
+
+def test_the_kinds_of_panel_items_are_the_protocols() -> None:
+    vocabulary = json.loads(VOCABULARY.read_text(encoding="utf-8"))
+    assert tuple(vocabulary["panel_items"]) == PANEL_KINDS
+
+
+def panel(name: str) -> Panel:
+    item = PanelItem(f"{name}.line", "info", "Line", "text")
+    return Panel(name, name.title(), (PanelSection("About", (item,)),))
+
+
+def test_the_latest_panel_asked_for_shows_over_the_face() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            bus.publish(PanelRequest("settings", panel("settings")))
+            await settle()
+            assert screen.state.panel == panel("settings")
+            bus.publish(PanelRequest("help", panel("help")))
+            await settle()
+            assert screen.state.panel == panel("help")
+            bus.publish(PanelRequest("help", None))
+            await settle()
+            assert screen.state.panel == panel("settings")  # the one asked for before
+            bus.publish(PanelRequest("settings", None))
+            await settle()
+            assert screen.state.panel is None
+
+    asyncio.run(main())
+
+
+def test_a_panel_asked_for_again_is_sent_again() -> None:
+    # The renderer shows a change at once; the same panel sent again puts back one
+    # the robot refused.
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            bus.publish(PanelRequest("settings", panel("settings")))
+            await settle()
+            sent = screen.updates
+            bus.publish(PanelRequest("settings", panel("settings")))
+            await settle()
+            assert screen.updates == sent + 1
+            assert screen.state.panel == panel("settings")
+
+    asyncio.run(main())
+
+
+def test_the_status_row_says_when_the_microphones_are_off() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        async with running(module):
+            assert screen.state.muted is None  # unknown until voice says
+            bus.publish(MicrophonesChanged(False))
+            await settle()
+            assert screen.state.muted is True
+            bus.publish(MicrophonesChanged(True))
+            await settle()
+            assert screen.state.muted is False
+
+    asyncio.run(main())
+
+
+def test_holds_and_what_is_done_on_a_panel_are_published() -> None:
+    async def main() -> None:
+        bus, screen, module = make()
+        holds = bus.subscribe(ScreenHeld)
+        actions = bus.subscribe(PanelAction)
+        closings = bus.subscribe(PanelClosed)
+        async with running(module):
+            screen.hold(0.5, 0.25)
+            screen.act("settings", "voice.volume", 60)
+            screen.act("settings", "setup.start")
+            screen.close_panel("settings")
+            await settle()
+            assert await holds.get() == ScreenHeld(0.5, 0.25)
+            assert await actions.get() == PanelAction("settings", "voice.volume", 60)
+            assert await actions.get() == PanelAction("settings", "setup.start")
+            assert await closings.get() == PanelClosed("settings")
+
+    asyncio.run(main())
