@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Servers that tests run on this computer: a LiveKit server, a software TPM."""
+"""Servers that tests run on this computer, such as a software TPM."""
 
 from __future__ import annotations
 

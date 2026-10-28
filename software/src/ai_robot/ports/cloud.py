@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""The link to the cloud, ``ai-cloud`` (protocol/cloud/README.md)."""
+"""The link to the cloud, ``ai-cloud`` (platform/protocols/cloud/README.md)."""
 
 from __future__ import annotations
 
@@ -18,8 +18,10 @@ from ai_robot.ports.identity import Identity
 
 # Names of capabilities and events, as MCP allows for tool names.
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
-MAX_ID = 64  # characters in the identifier of a turn or a response ($defs/id in schema.json)
-MAX_SPEECH_SECONDS = 30.0  # the robot ends a turn's speech after this long (README.md, Turns)
+# Turns, as the cloud link 2.2 had them (ai-platform's tag cloud/v2.2): characters in a
+# turn's identifier, and how long the robot lets the user speak in one (ADR-0012).
+MAX_ID = 64
+MAX_SPEECH_SECONDS = 30.0
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}  # where plain http:// and ws:// may go (SEC-1)
 
 
@@ -40,7 +42,7 @@ def check_url(name: str, url: str, schemes: tuple[str, str]) -> str:
 
 class SafetyClass(StrEnum):
     """How much a capability can affect people, which the robot enforces itself
-    whatever the cloud asks (protocol/cloud/requirements.md, SEC-8 and SEC-9)."""
+    whatever the cloud asks (platform/protocols/cloud/requirements.md, SEC-8 and SEC-9)."""
 
     INFORMATIONAL = "informational"  # the screen, sounds
     PRIVACY = "privacy"  # the camera; a turn the cloud starts by itself
@@ -134,7 +136,7 @@ class CallCancelled:
 class ConversationAudio:
     """The audio a module that holds conversations exchanges with the link: the format
     of the user's speech it gives, and of the voice it plays. The link converts to and
-    from what travels, Opus over WebRTC (protocol/cloud/README.md, Audio)."""
+    from what travels, Opus over WebRTC (platform/protocols/cloud/README.md, The room)."""
 
     speech: AudioFormat
     voice: AudioFormat
@@ -247,19 +249,44 @@ CloudPart = (
 
 
 @dataclass(frozen=True, slots=True)
+class DeviceInfo:
+    """What the robot tells the cloud of itself (platform/protocols/cloud/README.md,
+    ``hello``): its kind and model, its languages in its owner's order, its time zone (an
+    IANA name), and the safety classes its owner allows (SEC-9)."""
+
+    kind: str
+    model: str
+    languages: tuple[str, ...]
+    time_zone: str
+    allowed_classes: frozenset[SafetyClass]
+
+    def __post_init__(self) -> None:
+        if not self.languages:
+            raise ValueError("the robot has at least one language")
+        object.__setattr__(self, "languages", tuple(self.languages))
+        allowed = frozenset(SafetyClass(name) for name in self.allowed_classes)
+        object.__setattr__(self, "allowed_classes", allowed)
+
+
+@dataclass(frozen=True, slots=True)
 class LinkStatus:
     """Whether a session with the cloud is open, which events it subscribed to, and
     whether it has conversations: the robot offered them and the cloud takes them.
 
     ``bound`` is what the server last said of the robot when it asked for its tokens:
     ``True`` if it accepts it, ``False`` if it does not know it or revoked it (the robot
-    is not set up), ``None`` if it has not said, or cannot (a development server)."""
+    is not set up), ``None`` if it has not said yet.
+
+    ``update_required``: the cloud no longer speaks the robot's version of the link, or
+    no longer serves its software. The robot needs an update, and the link tries again
+    only now and then."""
 
     online: bool
     session: str | None = None
     events: frozenset[str] = frozenset()
     conversations: bool = False
     bound: bool | None = None
+    update_required: bool = False
 
 
 class Cloud(Port):
@@ -270,15 +297,15 @@ class Cloud(Port):
 
     Like every port, it inherits ``open`` and ``close`` from ``Port``, and the
     application calls them:
-    - ``open``, before the modules start, only prepares the link. The ``livekit``
-      adapter loads the protocol's schema and starts the task that joins the room; the
+    - ``open``, before the modules start, only prepares the link. The ``websocket``
+      adapter loads the protocol's schema and starts the task that connects; the
       ``sim`` adapter needs nothing, so it keeps ``Port``'s empty ``open``.
     - ``close``, after the modules stop, ends the session.
 
-    The link opens no session until ``offer`` has been called, so that the first
-    session already lists everything the robot can do. It reconnects on its own after
-    a loss; ``status`` tells when the session opens and closes, and what the server
-    says of the robot.
+    The link opens no session until ``describe`` and ``offer`` have both been called, so
+    that the first session already says what the robot is and everything it can do. It
+    reconnects on its own after a loss; ``status`` tells when the session opens and
+    closes, and what the server says of the robot.
     """
 
     @abstractmethod
@@ -292,6 +319,11 @@ class Cloud(Port):
         robot was registered with at set-up (platform/protocols/setup/README.md). Until then, the
         link asks the server of its own settings. ``ValueError`` for an address the link
         does not accept."""
+
+    @abstractmethod
+    async def describe(self, device: DeviceInfo) -> None:
+        """Say what the robot is, and what its owner chose. A change reaches the cloud
+        at once, if a session is open, and the next session in any case."""
 
     @abstractmethod
     async def offer(

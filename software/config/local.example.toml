@@ -23,25 +23,17 @@
 # latitude = 0.0
 # longitude = 0.0
 
-# Connect to a cloud server instead of the simulated one. The robot asks ai-cloud
-# for its tokens, proving who it is with the key of its identity: keep one in a file on
-# this computer. https:// in general; http:// only to this computer, for development.
+# Connect to ai-cloud instead of the simulated cloud. The robot asks it for its tokens,
+# proving who it is with the key of its identity: keep one in a file on this computer.
+# https:// in general; http:// only to this computer, for development.
 # [ports.cloud]
-# adapter = "livekit"
-# [ports.cloud.livekit]
-# url = "https://cloud.example"
+# adapter = "websocket"
+# [ports.cloud.websocket]
+# server = "https://cloud.example"
 # [ports.identity]
 # adapter = "file"
 # [ports.identity.file]
 # path = "~/.config/ai-robot/identity.json"  # made on first use; only you may read it
-#
-# To try the link with a development LiveKit server on this computer instead
-# (livekit-server --dev), the robot makes its own token with that server's key and
-# secret, from the environment variables AI_ROBOT_LIVEKIT_API_KEY and
-# AI_ROBOT_LIVEKIT_API_SECRET, never from a file. In [ports.cloud.livekit] above, set:
-#     tokens = "development"
-#     url = "ws://127.0.0.1:7880"
-#     room = "robot-desk"  # a room of its own on a server several people share
 
 # Talk to the robot with this computer's microphone and speaker. Use headphones:
 # without the robot's voice processor, nothing cancels its own voice.

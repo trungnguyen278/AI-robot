@@ -5,9 +5,8 @@
 > **Platform:** this code follows [ADR-0005](../docs/decisions/0005-pi-software-platform.md): one Python process with its own message bus. [ADR-0017](../docs/decisions/0017-ros-2.md) supersedes it: ROS 2 Lyrical on Ubuntu 26.04, every module a node. The [migration](../docs/architecture.md#migration) moves this code there. Its modules keep their logic, ports, adapters and tests.
 
 Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependencies:
-- [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen;
+- [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen, and the `websocket` adapter of the link to the cloud;
 - [jsonschema](https://python-jsonschema.readthedocs.io/), to check data against the protocols' JSON Schemas;
-- [LiveKit's Python SDK](https://docs.livekit.io/reference/python/) (`livekit`, `livekit-api`), for the link to the cloud over WebRTC;
 - [cryptography](https://cryptography.io/), for the robot's key kept in software on a development computer, and set-up's encryption;
 - [PyCryptodome](https://www.pycryptodome.org/), for set-up's SPAKE2+, which needs arithmetic on P-256 points that `cryptography` does not offer ([ADR-0015](../docs/decisions/0015-set-up.md));
 - [dbus-fast](https://github.com/bluetooth-devices/dbus-fast), on Linux only, to reach BlueZ (Bluetooth LE) and NetworkManager (Wi-Fi) over D-Bus;
@@ -37,7 +36,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery and whether the microphones are off; panels over the face, such as the settings; taps and holds |
 | `settings` | `settings` | The owner's settings: what the modules offer, shown as one panel on the screen; what the owner chose, kept, and handed to their modules before they run ([ADR-0016](../docs/decisions/0016-settings.md)) |
 | `setup` | `setup_link`, `network` | Set-up with the owner's app over Bluetooth LE: when it opens, the code on the screen, the session, the Wi-Fi network ([set-up](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/setup/README.md), in ai-platform) |
-| `cloud` | `cloud`, `identity`, `binding` | The link to `ai-cloud`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)). It signs the robot's registration at set-up, and keeps whether the robot is bound. Its settings say what the cloud may do, by safety class |
+| `cloud` | `cloud`, `identity`, `binding` | The link to `ai-cloud`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it tells the cloud the robot's languages and time zone, which `system` gives, and carries conversations, turns and answers with their audio, for `voice` ([the cloud link](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/README.md), in ai-platform). It signs the robot's registration at set-up, and keeps whether the robot is bound. Its settings say what the cloud may do, by safety class |
 | `behavior` | `daylight` | Decides what the robot does: for now, reactions to taps, the clock when nobody interacts (taps and conversations count), a sleepy face from sunset to sunrise |
 
 - **Module:** one function of the robot (`core/module.py`). It owns some ports and talks to the other modules only through the bus.
@@ -64,7 +63,7 @@ software/
 │   ├── native.py           C++ functions, with pure-Python fallbacks
 │   ├── core/               Configuration, bus, module base class, factory
 │   ├── ports/              Port interfaces
-│   ├── adapters/           Adapter registry; sim/ (simulated), portaudio/ (microphones and speaker), microwakeword/ (wake words), silero/ (voice), web/ (aiohttp: the screen served to a browser), livekit/ (the cloud link), keys/ (keys kept in software), tpm/ (keys in the robot's TPM), files/ (state kept in files), bluez/ (Bluetooth LE), networkmanager/ (Wi-Fi), sun/ (sunrise and sunset)
+│   ├── adapters/           Adapter registry; sim/ (simulated), portaudio/ (microphones and speaker), microwakeword/ (wake words), silero/ (voice), web/ (aiohttp: the screen served to a browser), websocket/ (the link to the cloud), keys/ (keys kept in software), tpm/ (keys in the robot's TPM), files/ (state kept in files), bluez/ (Bluetooth LE), networkmanager/ (Wi-Fi), sun/ (sunrise and sunset)
 │   └── modules/            Module registry and the modules
 ├── native/                 Optional C++ extension (pybind11 + scikit-build-core)
 └── tests/
@@ -136,20 +135,17 @@ On a computer the simulated adapters hear silence, so no turn starts. To talk to
 
 ### The cloud
 
-By default the robot talks to a simulated cloud (the `sim` adapter of the `cloud` port). It opens a session at once and asks for nothing, so the robot runs without a server.
+By default the robot talks to a simulated cloud (the `sim` adapter of the `cloud` port). It opens a session once the robot has said what it is, and asks for nothing, so the robot runs without a server.
 
-The real link goes through a LiveKit server (the `livekit` adapter, [ADR-0009](../docs/decisions/0009-cloud-link-webrtc.md)). The robot asks `ai-cloud` for the token that lets it join its room, and proves who it is with its `identity` port: an identifier, and a key that signs for it ([ADR-0010](../docs/decisions/0010-device-identity.md)).
+The real link is the `websocket` adapter: the control channel of the [cloud link](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/README.md) 3.0, a WebSocket to `ai-cloud` that stays open ([ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md)). Before each connection, the robot asks `ai-cloud` for an access token, and proves who it is with its `identity` port: an identifier, and a key that signs for it ([ADR-0010](../docs/decisions/0010-device-identity.md)).
 - **Its key.** On the robot, the `tpm` adapter keeps it in the robot's TPM, which makes the key and never lets it out. A factory reset clears the TPM, which gives the robot a new identity, to be set up again. On a development computer, the `file` adapter keeps it in a file of your choosing, made on first use and readable only by you; like SSH, it refuses a key file that others can open. The `sim` adapter, the default, makes a new key at each start, which no server knows.
-- **A server.** `ai-cloud` has no code yet. To try the link without it, use a development LiveKit server on this computer:
-  1. Run [LiveKit's server](https://github.com/livekit/livekit) in development mode: `livekit-server --dev`. Its key is `devkey` and its secret `secret`.
-  2. Give the robot that key and secret, with which it makes its own token: `AI_ROBOT_LIVEKIT_API_KEY=devkey` and `AI_ROBOT_LIVEKIT_API_SECRET=secret`, in the environment.
-  3. In `config/local.toml`, select the `livekit` adapter, with `tokens = "development"` and the server's address, `ws://127.0.0.1:7880` (see `local.example.toml`).
+- **Its session** outlives a lost connection. The robot numbers what it sends and keeps it until the cloud has it, pings at the pace the cloud sets, and connects again after a random wait that grows with each failure, resuming its session. If the cloud no longer speaks its version, the robot logs that it needs an update, and tries again only now and then.
+- **Conversations** are not in this link yet: its `hello` says that it holds none, so the robot streams nothing. They come with their LiveKit rooms ([ADR-0018](../docs/decisions/0018-conversations.md)).
+- **A server.** `ai-cloud` has no code yet: the link runs against the fake cloud of the tests (`tests/fake_cloud.py`).
 
-  The cloud's agent then joins the same room.
+The server is the one in `server` until the robot is set up with another: set-up registers the robot with the server the owner's app names, and the robot then uses that one.
 
-The server is the one in `url` until the robot is set up with another: set-up registers the robot with the server the owner's app names, and the robot then uses that one.
-
-The link follows the [cloud protocol](../protocol/cloud/README.md). The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of the link run against a real LiveKit server when one is found: the path to `livekit-server` in `LIVEKIT_SERVER`, or the program on the `PATH`. The tests of the `tpm` adapter run against a software TPM, with the `tpm` extra installed: the path to `swtpm` in `SWTPM`, or the program on the `PATH` (`sudo apt install swtpm`).
+The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of the `tpm` adapter run against a software TPM, with the `tpm` extra installed: the path to `swtpm` in `SWTPM`, or the program on the `PATH` (`sudo apt install swtpm`).
 
 ### Set-up
 

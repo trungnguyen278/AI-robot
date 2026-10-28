@@ -8,7 +8,7 @@
 
 ## Context
 
-- This is decision 4 of the [requirements](../../protocol/cloud/requirements.md): who decides that the user has finished speaking.
+- This is decision 4 of the [requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md): who decides that the user has finished speaking.
 - Protocol 2.1 lets either side say so with `turn.speech_end`, and the first one wins: the robot stops streaming at once. The requirements leaned towards the robot ending turns with voice activity detection, the cloud ending them earlier if it wants.
 - That cuts off whoever pauses in the middle of a sentence, and the cloud cannot get back what the robot never sent. Voice activity detection tells speech from silence; it cannot tell whether the speaker has finished their thought (LiveKit).
 - The cloud can tell better: it hears the words, and it can run a model of turn-taking.

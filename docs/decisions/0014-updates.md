@@ -9,7 +9,7 @@
 
 ## Context
 
-- This is decision 6 of the [requirements](../../protocol/cloud/requirements.md): how the robot's software is updated.
+- This is decision 6 of the [requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md): how the robot's software is updated.
 - What the requirements ask:
   - updates signed, verified on the robot before they are installed, and fetched over TLS. Installation must be able to roll back, and must not accept an older version unless the owner says so (SEC-11);
   - the cloud announces updates (IO-13), and the robot installs them only in safe states (SEC-8, system class);

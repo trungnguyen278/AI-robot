@@ -15,6 +15,7 @@ from ai_robot.ports.cloud import (
     Cloud,
     CloudPart,
     ConversationAudio,
+    DeviceInfo,
     EventKind,
     LinkStatus,
     RobotPart,
@@ -31,12 +32,13 @@ Outcome = tuple[Mapping[str, Any] | None, str | None]  # the result's data, or a
 class SimCloud(Cloud):
     """A cloud that is always there and asks for nothing on its own.
 
-    It opens a session as soon as the robot offers what it can do, and subscribes to
-    every event, which it keeps in ``events``. If the robot offers conversations, it
-    takes them, and keeps the robot's part of them in ``heard``. It calls a capability,
-    or says its own part of a conversation, only when told to (``call``, ``begin``,
-    ``say``), as tests do. Its server knows the robot, whichever it is asked to
-    ``serve``, until a test says otherwise (``forget``, ``recognise``).
+    It opens a session as soon as the robot says what it is (kept in ``device``) and
+    offers what it can do, and subscribes to every event, which it keeps in ``events``.
+    If the robot offers conversations, it takes them, and keeps the robot's part of them
+    in ``heard``. It calls a capability, or says its own part of a conversation, only
+    when told to (``call``, ``begin``, ``say``), as tests do. Its server knows the robot,
+    whichever it is asked to ``serve``, until a test says otherwise (``forget``,
+    ``recognise``).
     """
 
     def __init__(self) -> None:
@@ -46,6 +48,8 @@ class SimCloud(Cloud):
         self.heard: deque[RobotPart] = deque(maxlen=1000)
         self.online = False
         self.conversing = False
+        self.device: DeviceInfo | None = None
+        self._offered = False
         self.identity: Identity | None = None
         self.server: str | None = None  # the server the robot was registered with, if any
         self.knows_robot = True  # set it to False before the robot starts for one not set up
@@ -61,6 +65,11 @@ class SimCloud(Cloud):
     async def serve(self, server: str) -> None:
         self.server = check_url("server", server, ("https", "http"))
 
+    async def describe(self, device: DeviceInfo) -> None:
+        self.device = device
+        if not self.online and self._offered:
+            self._connect()
+
     async def offer(
         self,
         capabilities: Sequence[Capability],
@@ -72,6 +81,12 @@ class SimCloud(Cloud):
         if not self.online:
             self.event_kinds = {kind.name: kind for kind in events}
             self.conversing = conversation is not None
+            self._offered = True
+            self._connect()
+
+    def _connect(self) -> None:
+        """Open a session, once the robot has said what it is."""
+        if self.device is not None:
             self.online = self.knows_robot  # a server that does not know the robot opens no session
             self._statuses.put_nowait(self._status())
 

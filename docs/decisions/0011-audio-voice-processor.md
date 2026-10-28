@@ -5,7 +5,7 @@
 
 ## Context
 
-- What the robot must do with sound ([vision](../vision.md), [cloud requirements](../../protocol/cloud/requirements.md)):
+- What the robot must do with sound ([vision](../vision.md), [cloud requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md)):
   - hear a wake word, and a person a few metres away, over its own motors and tracks;
   - be interrupted while it speaks (barge-in, PERF-3), which needs acoustic echo cancellation (AEC): the robot must remove its own voice from what its microphones hear;
   - turn its head towards whoever speaks, which a microphone array can estimate (direction of arrival, DoA);

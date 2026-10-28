@@ -19,8 +19,7 @@ def _ignore_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AI_ROBOT_CONFIG_DIR", raising=False)
     monkeypatch.delenv("AI_ROBOT_PROFILE", raising=False)
     monkeypatch.delenv("AI_ROBOT_PROTOCOL_DIR", raising=False)
-    monkeypatch.delenv("AI_ROBOT_LIVEKIT_API_KEY", raising=False)
-    monkeypatch.delenv("AI_ROBOT_LIVEKIT_API_SECRET", raising=False)
+    monkeypatch.delenv("AI_ROBOT_PLATFORM_DIR", raising=False)
 
 
 @pytest.fixture

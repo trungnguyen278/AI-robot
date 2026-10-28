@@ -173,10 +173,10 @@ class PanelClosed(Message):
 
 
 # ---- Capabilities and events: what the cloud can ask of the robot and hear from it ----
-# (protocol/cloud/README.md). The cloud module talks to the cloud; the module that owns a
-# capability or an event offers it and serves it, so that a new one needs no change to
-# the cloud module (requirements EXT-9). ``core.capabilities.CapabilityHost`` does the
-# bookkeeping for a module.
+# (platform/protocols/cloud/README.md). The cloud module talks to the cloud; the module
+# that owns a capability or an event offers it and serves it, so that a new one needs no
+# change to the cloud module (requirements EXT-9). ``core.capabilities.CapabilityHost``
+# does the bookkeeping for a module.
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,7 +260,8 @@ class CloudStatus(Message):
     conversations: bool = False
 
 
-# ---- Conversations: turns and responses (protocol/cloud/README.md) ----
+# ---- Conversations: turns and responses, as the cloud link 2.2 had them ----
+# (ai-platform's tag cloud/v2.2).
 # The voice module holds conversations, and the cloud module carries them over the link.
 # Each direction is one topic, so that its parts arrive in order: a turn's start, its
 # speech and its end; an answer's start, text, voice and end.

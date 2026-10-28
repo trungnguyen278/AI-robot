@@ -5,7 +5,7 @@
 
 ## Context
 
-- This is decision 5 of the [requirements](../../protocol/cloud/requirements.md): how a robot proves who it is to `ai-robot-server`. They ask for:
+- This is decision 5 of the [requirements](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md): how a robot proves who it is to `ai-robot-server`. They ask for:
   - an identity per robot, made on the robot, whose private key never leaves it, with no shared or default secrets (SEC-2);
   - registration by the owner during set-up, through the app, and revocation by the owner or the server (SEC-3);
   - proof on every connection with short-lived credentials, renewed automatically (SEC-4);

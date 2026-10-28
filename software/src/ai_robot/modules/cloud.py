@@ -29,6 +29,7 @@ from ai_robot.messages import (
     ConversationOffered,
     ConversationToCloud,
     EventOffered,
+    LocaleChanged,
     RegistrationRequested,
     RegistrationSigned,
     RobotEvent,
@@ -42,6 +43,7 @@ from ai_robot.ports.cloud import (
     CallCancelled,
     Capability,
     Cloud,
+    DeviceInfo,
     EventKind,
     SafetyClass,
     ToolCall,
@@ -102,7 +104,7 @@ class Offer:
 
 
 class CloudModule(Module):
-    """Connects the robot to the cloud (protocol/cloud/README.md).
+    """Connects the robot to the cloud (platform/protocols/cloud/README.md).
 
     - Capabilities: modules offer them on the bus (``CapabilityOffered``). The cloud
       sees those whose safety class the robot's owner allows (``allowed_classes``), a
@@ -116,6 +118,9 @@ class CloudModule(Module):
       link offers them too. This module carries the module's part
       (``ConversationToCloud``) to the link, with the robot's context at the start of
       each turn, and the cloud's part back (``ConversationFromCloud``).
+    - What the robot is: its kind and model, its languages and time zone, which the
+      system module tells (``LocaleChanged``), and the classes its owner allows. The link
+      says them to the cloud, and what changes.
     - ``CloudStatus`` tells the other modules when a session opens and closes, and
       whether it has conversations.
     - The robot's ``identity`` proves who it is when the link asks the server for its
@@ -168,6 +173,7 @@ class CloudModule(Module):
         self.events: dict[str, tuple[EventKind, Schema]] = {}
         self.conversing: ConversationOffered | None = None  # the module that holds them
         self.battery: BatteryStatus | None = None
+        self.locale: LocaleChanged | None = None  # the robot's languages and time zone
         self.online = False
         self._calls: dict[str, asyncio.Task[None]] = {}  # call id -> the task answering it
         self._results: dict[str, asyncio.Future[CapabilityResult]] = {}
@@ -182,6 +188,7 @@ class CloudModule(Module):
         self.said = self._subscribe(ConversationToCloud, maxsize=CONVERSATION_BACKLOG)
         self.batteries = self._subscribe(BatteryReport)
         self.registrations = self._subscribe(RegistrationRequested)
+        self.locales = self._subscribe(LocaleChanged)
 
     def _subscribe(self, kind: type[M], maxsize: int = 100) -> Subscription[M]:
         subscription = self.bus.subscribe(kind, maxsize=maxsize)
@@ -206,8 +213,12 @@ class CloudModule(Module):
     async def run(self) -> None:
         # The owner's choices first: the cloud sees only the classes they allow (SEC-9).
         await self.settings.apply_pending()
-        # Take what the modules offered while they started, so that the first session
-        # already lists it; the link connects once it knows.
+        # Take what the modules offered while they started, and the robot's locale if the
+        # system module has said it, so that the first session already lists it all; the
+        # link connects once it knows.
+        while self.locales.pending:
+            self.locale = await self.locales.get()
+        await self._describe()
         while self.offers.pending:
             self._on_offer(await self.offers.get())
         while self.event_offers.pending:
@@ -228,6 +239,7 @@ class CloudModule(Module):
             tasks.create_task(self._follow(self.batteries, self._on_battery))
             tasks.create_task(self._follow(self.said, self._say))
             tasks.create_task(self._follow(self.registrations, self._register))
+            tasks.create_task(self._follow(self.locales, self._on_locale))
             tasks.create_task(self.settings.serve())
             tasks.create_task(self._serve_calls())
             tasks.create_task(self._hear())
@@ -267,7 +279,8 @@ class CloudModule(Module):
                 return
             self.allowed = allowed
             self.log.info("the owner %s the cloud %s", "allows" if on else "forbids", safety)
-            if self._offering:  # the cloud sees the new catalogue at once
+            if self._offering:  # the cloud learns it at once, and sees the new catalogue
+                await self._describe()
                 await self._offer()
 
         return allow
@@ -320,6 +333,24 @@ class CloudModule(Module):
             )
             return
         self.conversing = message
+
+    async def _on_locale(self, message: LocaleChanged) -> None:
+        self.locale = message
+        await self._describe()
+
+    async def _describe(self) -> None:
+        """Tell the link what the robot is, once the system module has said its locale."""
+        if self.locale is None:
+            return
+        await self.link.describe(
+            DeviceInfo(
+                self.robot.kind,
+                self.robot.model,
+                self.locale.languages,
+                self.locale.time_zone,
+                self.allowed,
+            )
+        )
 
     async def _offer(self) -> None:
         await self.link.offer(

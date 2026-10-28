@@ -5,7 +5,7 @@
 
 ## Context
 
-- The robot's core AI runs in `ai-robot-server`. The link between them carries speech both ways, control messages and capability calls. Its requirements are in [`protocol/cloud/requirements.md`](../../protocol/cloud/requirements.md), and this is their decision 1:
+- The robot's core AI runs in `ai-robot-server`. The link between them carries speech both ways, control messages and capability calls. Its requirements are in [`protocol/cloud/requirements.md`](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/requirements.md), and this is their decision 1:
   - the robot opens the connection, outbound only (SES-1);
   - everything is encrypted (SEC-1);
   - both sides detect a dead connection (SES-3), and the robot reconnects with backoff (SES-4).

@@ -36,6 +36,7 @@ from ai_robot.messages import (
     ConversationFromCloud,
     ConversationOffered,
     ConversationToCloud,
+    LocaleChanged,
     RegistrationRequested,
     RegistrationSigned,
     RobotEvent,
@@ -50,6 +51,7 @@ from ai_robot.ports import (
     Binding,
     Capability,
     ConversationAudio,
+    DeviceInfo,
     EventKind,
     ResponseEnd,
     ResponseStart,
@@ -144,15 +146,20 @@ def cloud_module(
     timeout: float = TIMEOUT,
     store: SimBindingStore | None = None,
     identity: SimIdentity | None = None,
+    locale: bool = True,
 ) -> CloudModule:
+    """The cloud module, told the robot's ``locale`` as the system module tells it."""
     ports = {
         "cloud": cloud,
         "identity": identity or SimIdentity(),
         "binding": store or SimBindingStore(bound=True),
     }
-    return CloudModule(
+    module = CloudModule(
         context("cloud", bus, ports), allowed_classes=["informational"], call_timeout=timeout
     )
+    if locale:
+        bus.publish(LocaleChanged(("vi",), "UTC"))
+    return module
 
 
 @contextlib.asynccontextmanager
@@ -726,9 +733,41 @@ def test_the_owner_chooses_what_the_cloud_may_do() -> None:
             assert set(cloud.capabilities) == {"lamp.set"}  # informational, as shipped
             bus.publish(SettingChanged("cloud.physical", True))
             await until(lambda: "lamp.move" in cloud.capabilities)
+            assert cloud.device is not None
+            assert cloud.device.allowed_classes == {SafetyClass.INFORMATIONAL, SafetyClass.PHYSICAL}
             bus.publish(SettingChanged("cloud.informational", False))
             await until(lambda: "lamp.set" not in cloud.capabilities)
             assert (await cloud.call("lamp.set", {"on": True}))[1] == "unknown tool lamp.set"
+
+    asyncio.run(main())
+
+
+def test_the_cloud_learns_what_the_robot_is_and_its_locale() -> None:
+    async def main() -> None:
+        bus, cloud, lamp, module = lamp_robot()
+        async with running(lamp, module):
+            await until(lambda: cloud.online)
+            assert cloud.device == DeviceInfo(
+                "robot", "concept-v0", ("vi",), "UTC", {SafetyClass.INFORMATIONAL}
+            )
+            bus.publish(LocaleChanged(("en", "vi"), "Asia/Ho_Chi_Minh"))
+            await until(lambda: cloud.device is not None and cloud.device.languages[0] == "en")
+            assert cloud.device.time_zone == "Asia/Ho_Chi_Minh"
+
+    asyncio.run(main())
+
+
+def test_no_session_opens_before_the_robot_knows_its_locale() -> None:
+    async def main() -> None:
+        bus = Bus()
+        cloud = SimCloud()
+        lamp = Lamp(context("lamp", bus, {}))
+        module = cloud_module(bus, cloud, locale=False)
+        async with running(lamp, module):
+            await asyncio.sleep(0.1)
+            assert not cloud.online and cloud.device is None
+            bus.publish(LocaleChanged(("vi",), "UTC"))  # the system module, starting late
+            await until(lambda: cloud.online)
 
     asyncio.run(main())
 
