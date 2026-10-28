@@ -40,13 +40,13 @@ from ai_robot.ports.cloud import (
     Cloud,
     CloudPart,
     ConversationAudio,
+    ConversationEnd,
+    ConversationRequest,
     DeviceInfo,
     EventKind,
     LinkStatus,
     RobotPart,
     ToolCall,
-    TurnCancel,
-    TurnStart,
     check_url,
 )
 from ai_robot.ports.identity import Identity
@@ -76,7 +76,8 @@ class WebSocketCloud(Cloud):
     computer), until set-up names the one it was registered with (``serve``). The robot
     proves its identity (``identify``) to get its access tokens.
 
-    This link holds no conversations: its ``hello`` says so, and a turn ends at once.
+    This link holds no conversations: its ``hello`` says so, and a request for one ends
+    at once.
 
     The other settings, in seconds unless they say, are explained in
     ``config/base.toml`` (``[ports.cloud.websocket]``).
@@ -114,6 +115,7 @@ class WebSocketCloud(Cloud):
         self.capabilities: dict[str, Capability] = {}
         self.event_kinds: list[EventKind] = []
         self.device: DeviceInfo | None = None
+        self.may_listen = True  # whether the robot's microphones are on
         self.identity: Identity | None = None
         self.bound: bool | None = None  # what the server last said of the robot
         self.update_required = False
@@ -179,6 +181,9 @@ class WebSocketCloud(Cloud):
                 session.changed(changes)
         # Otherwise the next hello says it.
 
+    async def listening(self, allowed: bool) -> None:
+        self.may_listen = allowed
+
     async def offer(
         self,
         capabilities: Sequence[Capability],
@@ -218,8 +223,8 @@ class WebSocketCloud(Cloud):
         return await self._statuses.get()
 
     async def converse(self, part: RobotPart) -> None:
-        if isinstance(part, TurnStart):
-            self._heard.put_nowait(TurnCancel(part.turn, "no conversations"))
+        if isinstance(part, ConversationRequest):
+            self._heard.put_nowait(ConversationEnd(part.conversation, "unavailable"))
 
     async def conversation(self) -> CloudPart:
         return await self._heard.get()

@@ -33,9 +33,18 @@ def _device(device: str) -> str | None:
 class PortAudioIn(AudioIn):
     """Microphones: the input ``device``, in chunks of ``chunk_ms`` milliseconds."""
 
-    def __init__(self, *, device: str, sample_rate: int, channels: int, chunk_ms: int) -> None:
+    def __init__(
+        self,
+        *,
+        device: str,
+        sample_rate: int,
+        channels: int,
+        chunk_ms: int,
+        echo_cancelled: bool,
+    ) -> None:
         self.device = _device(device)
         self._format = AudioFormat(sample_rate, channels)
+        self._echo_cancelled = echo_cancelled
         self._frames = sample_rate * positive("chunk_ms", chunk_ms) // 1000
         if self._frames < 1:
             raise ValueError(f"chunk_ms is shorter than a frame at {sample_rate} Hz")
@@ -49,6 +58,10 @@ class PortAudioIn(AudioIn):
     @property
     def format(self) -> AudioFormat:
         return self._format
+
+    @property
+    def echo_cancelled(self) -> bool:
+        return self._echo_cancelled
 
     async def open(self) -> None:
         self._loop = asyncio.get_running_loop()

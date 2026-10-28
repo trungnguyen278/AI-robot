@@ -15,13 +15,14 @@ from ai_robot.ports.cloud import (
     Cloud,
     CloudPart,
     ConversationAudio,
+    ConversationEnd,
+    ConversationRequest,
+    ConversationStart,
     DeviceInfo,
     EventKind,
     LinkStatus,
     RobotPart,
     ToolCall,
-    TurnCancel,
-    TurnStart,
     check_url,
 )
 from ai_robot.ports.identity import Identity
@@ -34,9 +35,10 @@ class SimCloud(Cloud):
 
     It opens a session as soon as the robot says what it is (kept in ``device``) and
     offers what it can do, and subscribes to every event, which it keeps in ``events``.
-    If the robot offers conversations, it takes them, and keeps the robot's part of them
-    in ``heard``. It calls a capability, or says its own part of a conversation, only
-    when told to (``call``, ``begin``, ``say``), as tests do. Its server knows the robot,
+    If the robot offers conversations, it takes them: it starts each one the robot asks
+    for, and keeps the robot's part of them in ``heard``. It calls a capability, opens a
+    conversation or says its own part of one only when told to (``call``, ``begin``,
+    ``open_conversation``, ``say``), as tests do. Its server knows the robot,
     whichever it is asked to ``serve``, until a test says otherwise (``forget``,
     ``recognise``).
     """
@@ -49,6 +51,7 @@ class SimCloud(Cloud):
         self.online = False
         self.conversing = False
         self.device: DeviceInfo | None = None
+        self.may_listen = True  # whether the robot's microphones are on
         self._offered = False
         self.identity: Identity | None = None
         self.server: str | None = None  # the server the robot was registered with, if any
@@ -69,6 +72,9 @@ class SimCloud(Cloud):
         self.device = device
         if not self.online and self._offered:
             self._connect()
+
+    async def listening(self, allowed: bool) -> None:
+        self.may_listen = allowed
 
     async def offer(
         self,
@@ -131,13 +137,20 @@ class SimCloud(Cloud):
         self._statuses.put_nowait(self._status())
 
     async def converse(self, part: RobotPart) -> None:
-        if self.conversing:
-            self.heard.append(part)
-        elif isinstance(part, TurnStart):
-            self._said.put_nowait(TurnCancel(part.turn, "no conversations"))
+        if not (self.online and self.conversing):
+            if isinstance(part, ConversationRequest):
+                self._said.put_nowait(ConversationEnd(part.conversation, "unavailable"))
+            return
+        self.heard.append(part)
+        if isinstance(part, ConversationRequest):
+            self._said.put_nowait(ConversationStart(part.conversation, listen=True))
 
     async def conversation(self) -> CloudPart:
         return await self._said.get()
+
+    def open_conversation(self, conversation: str, *, listen: bool) -> None:
+        """Open a conversation, as the cloud would for a reminder."""
+        self._said.put_nowait(ConversationStart(conversation, listen))
 
     def say(self, *parts: CloudPart) -> None:
         """Say ``parts`` of a conversation, as the cloud would."""

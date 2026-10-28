@@ -30,6 +30,7 @@ from ai_robot.messages import (
     ConversationToCloud,
     EventOffered,
     LocaleChanged,
+    MicrophonesChanged,
     RegistrationRequested,
     RegistrationSigned,
     RobotEvent,
@@ -43,11 +44,11 @@ from ai_robot.ports.cloud import (
     CallCancelled,
     Capability,
     Cloud,
+    ConversationRequest,
     DeviceInfo,
     EventKind,
     SafetyClass,
     ToolCall,
-    TurnStart,
     check_url,
 )
 from ai_robot.ports.identity import Identity
@@ -116,8 +117,10 @@ class CloudModule(Module):
       the link sends those the cloud subscribed to.
     - Conversations: once a module offers to hold them (``ConversationOffered``), the
       link offers them too. This module carries the module's part
-      (``ConversationToCloud``) to the link, with the robot's context at the start of
-      each turn, and the cloud's part back (``ConversationFromCloud``).
+      (``ConversationToCloud``) to the link, with the robot's context in each request,
+      and the cloud's part back (``ConversationFromCloud``). It tells the link whether
+      the microphones are on (``MicrophonesChanged``): while they are off, the cloud
+      cannot open a conversation to listen.
     - What the robot is: its kind and model, its languages and time zone, which the
       system module tells (``LocaleChanged``), and the classes its owner allows. The link
       says them to the cloud, and what changes.
@@ -189,6 +192,7 @@ class CloudModule(Module):
         self.batteries = self._subscribe(BatteryReport)
         self.registrations = self._subscribe(RegistrationRequested)
         self.locales = self._subscribe(LocaleChanged)
+        self.microphones = self._subscribe(MicrophonesChanged)
 
     def _subscribe(self, kind: type[M], maxsize: int = 100) -> Subscription[M]:
         subscription = self.bus.subscribe(kind, maxsize=maxsize)
@@ -240,6 +244,7 @@ class CloudModule(Module):
             tasks.create_task(self._follow(self.said, self._say))
             tasks.create_task(self._follow(self.registrations, self._register))
             tasks.create_task(self._follow(self.locales, self._on_locale))
+            tasks.create_task(self._follow(self.microphones, self._on_microphones))
             tasks.create_task(self.settings.serve())
             tasks.create_task(self._serve_calls())
             tasks.create_task(self._hear())
@@ -507,14 +512,17 @@ class CloudModule(Module):
     async def _on_battery(self, message: BatteryReport) -> None:
         self.battery = message.status
 
+    async def _on_microphones(self, message: MicrophonesChanged) -> None:
+        await self.link.listening(message.on)
+
     async def _say(self, message: ConversationToCloud) -> None:
         part = message.part
-        if isinstance(part, TurnStart):
+        if isinstance(part, ConversationRequest):
             part = replace(part, context=self._context())
         await self.link.converse(part)
 
     def _context(self) -> dict[str, Any]:
-        """The robot's situation, for the cloud, at the start of a turn (IO-4)."""
+        """The robot's situation, for the cloud, when it asks for a conversation (IO-4)."""
         battery = self.battery
         percent = None if battery is None else battery.percent
         if percent is not None:  # a reading may stray: keep the message valid

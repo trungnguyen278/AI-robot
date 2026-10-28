@@ -106,7 +106,7 @@ The screen is the exception that is real already: the `screen` module decides wh
 
 The `cloud` module links the robot to `ai-cloud` over the [cloud link](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/README.md), which ai-platform defines.
 - **Version 3.0** keeps a WebSocket open to `ai-cloud` for the session, and joins a LiveKit room only to talk, one for each conversation ([ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md)).
-- **The robot implements the control channel** (the `websocket` adapter): its session, the cloud's calls and the robot's events. It holds no conversations yet: they come with their LiveKit rooms ([ADR-0009](decisions/0009-cloud-link-webrtc.md)).
+- **The robot implements the control channel** (the `websocket` adapter): its session, the cloud's calls and the robot's events. `voice` holds conversations, against the simulated cloud for now; the link carries them once their LiveKit rooms come ([ADR-0009](decisions/0009-cloud-link-webrtc.md)).
 - The messages follow [ADR-0008](decisions/0008-cloud-link-messages.md).
 - **Capabilities.** The cloud drives the robot through MCP tools, which the modules offer on the bus: each module offers the capabilities of what it owns, such as the screen's expressions and scenes. The robot checks every call against the capability's schema and safety class.
 - **Events.** Modules declare events, and the cloud subscribes to those it wants.

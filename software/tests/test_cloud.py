@@ -37,6 +37,7 @@ from ai_robot.messages import (
     ConversationOffered,
     ConversationToCloud,
     LocaleChanged,
+    MicrophonesChanged,
     RegistrationRequested,
     RegistrationSigned,
     RobotEvent,
@@ -51,15 +52,16 @@ from ai_robot.ports import (
     Binding,
     Capability,
     ConversationAudio,
+    ConversationEnd,
+    ConversationRequest,
+    ConversationStart,
     DeviceInfo,
     EventKind,
     ResponseEnd,
     ResponseStart,
     SafetyClass,
     Speech,
-    SpeechEnd,
     Trigger,
-    TurnStart,
     Voice,
 )
 
@@ -388,22 +390,22 @@ def test_the_robots_part_reaches_the_cloud_in_order_with_its_context() -> None:
         bus, cloud, talker, module = talking_robot()
         async with running(talker, module):
             await until(lambda: cloud.online)
-            bus.publish(ConversationToCloud(TurnStart("t1", Trigger.WAKE_WORD)))
+            bus.publish(ConversationToCloud(ConversationRequest("c1", Trigger.WAKE_WORD)))
             await until(lambda: cloud.heard)
             assert cloud.heard[0].context == {"battery": None, "charging": None}  # type: ignore[union-attr]
             bus.publish(BatteryReport(BatteryStatus(voltage=7.4, percent=63.0, charging=True)))
             await until(lambda: module.battery is not None)
             # Published at once, more than a bus queue holds by default: none is lost.
             parts = [
-                TurnStart("t2", Trigger.TAP),
-                *(Speech("t2", bytes([n % 256]) * 640) for n in range(300)),
-                SpeechEnd("t2"),
+                ConversationRequest("c2", Trigger.TOUCH),
+                *(Speech("c2", bytes([n % 256]) * 640) for n in range(300)),
+                ConversationEnd("c2", "idle"),
             ]
             for part in parts:
                 bus.publish(ConversationToCloud(part))
             await until(lambda: len(cloud.heard) == 1 + len(parts))
             assert list(cloud.heard)[1:] == [
-                TurnStart("t2", Trigger.TAP, {"battery": 63.0, "charging": True}),
+                ConversationRequest("c2", Trigger.TOUCH, {"battery": 63.0, "charging": True}),
                 *parts[1:],
             ]
 
@@ -437,15 +439,47 @@ def test_the_clouds_part_reaches_the_robot_in_order() -> None:
             reader = asyncio.create_task(read())
             # Many parts at once, far more than the queue holds: none is lost.
             answer = [
-                ResponseStart("a1", None),
-                *(Voice(bytes([n % 256]) * 640) for n in range(500)),
-                ResponseEnd("a1", follow_up=False),
+                ConversationStart("c1", listen=False),
+                ResponseStart("c1", "a1", None, "vi"),
+                *(Voice("c1", bytes([n % 256]) * 640) for n in range(500)),
+                ResponseEnd("c1", "a1"),
             ]
             cloud.say(*answer)
             await until(lambda: len(received) == len(answer))
             reader.cancel()
             assert received == answer
             assert heard.dropped == 0
+
+    asyncio.run(main())
+
+
+def test_the_cloud_starts_what_the_robot_asks_for_and_learns_its_microphones() -> None:
+    async def main() -> None:
+        bus, cloud, talker, module = talking_robot()
+        heard = bus.subscribe(ConversationFromCloud)
+        async with running(talker, module):
+            await until(lambda: cloud.online)
+            bus.publish(ConversationToCloud(ConversationRequest("c1", Trigger.WAKE_WORD)))
+            assert (await asyncio.wait_for(heard.get(), TIMEOUT)).part == ConversationStart(
+                "c1", listen=True
+            )
+            assert cloud.may_listen
+            bus.publish(MicrophonesChanged(False))
+            await until(lambda: not cloud.may_listen)
+
+    asyncio.run(main())
+
+
+def test_without_conversations_a_request_ends_at_once() -> None:
+    async def main() -> None:
+        bus, cloud, lamp, module = lamp_robot()  # no module holds conversations
+        heard = bus.subscribe(ConversationFromCloud)
+        async with running(lamp, module):
+            await until(lambda: cloud.online)
+            bus.publish(ConversationToCloud(ConversationRequest("c1", Trigger.WAKE_WORD)))
+            assert (await asyncio.wait_for(heard.get(), TIMEOUT)).part == ConversationEnd(
+                "c1", "unavailable"
+            )
 
     asyncio.run(main())
 

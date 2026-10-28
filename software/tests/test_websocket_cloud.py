@@ -23,14 +23,14 @@ from ai_robot.adapters.websocket.cloud import WebSocketCloud
 from ai_robot.ports import (
     CallCancelled,
     Capability,
+    ConversationEnd,
+    ConversationRequest,
     DeviceInfo,
     EventKind,
     LinkStatus,
     SafetyClass,
     ToolCall,
     Trigger,
-    TurnCancel,
-    TurnStart,
 )
 
 SWITCH = {
@@ -693,9 +693,11 @@ def test_this_link_holds_no_conversations() -> None:
             end = {"type": "conversation.end", "conversation": start["conversation"]}
             await side.send({**end, "reason": "done"})
             assert (await side.next("error"))["code"] == "unknown_conversation"
-            await link.converse(TurnStart("t1", Trigger.WAKE_WORD))
-            assert await asyncio.wait_for(link.conversation(), TIMEOUT) == TurnCancel(
-                "t1", "no conversations"
+            await link.converse(ConversationRequest("c1", Trigger.WAKE_WORD))
+            assert await asyncio.wait_for(link.conversation(), TIMEOUT) == ConversationEnd(
+                "c1", "unavailable"
             )
+            await link.listening(False)
+            assert link.may_listen is False
 
     run(main)

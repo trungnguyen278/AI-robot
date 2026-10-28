@@ -132,10 +132,10 @@ def test_the_conversation_drives_the_face() -> None:
         async with running(module):
             for state, expression in [
                 (InteractionState.TRIGGERED, "listening"),
+                (InteractionState.ATTENTIVE, "listening"),
                 (InteractionState.LISTENING, "listening"),
                 (InteractionState.PROCESSING, "thinking"),
                 (InteractionState.SPEAKING, "speaking"),
-                (InteractionState.CANCELLING, DEFAULT_EXPRESSION),
                 (InteractionState.IDLE, DEFAULT_EXPRESSION),
             ]:
                 bus.publish(InteractionChanged(state))
@@ -242,6 +242,12 @@ def test_the_voice_follows_the_microphone_only_while_listening() -> None:
             bus.publish(InteractionChanged(InteractionState.PROCESSING))
             await settle()
             assert screen.level == 0.0
+            bus.publish(InteractionChanged(InteractionState.ATTENTIVE))  # between turns
+            async with asyncio.timeout(2.0):  # the next level the voice's rate lets through
+                while screen.level == 0.0:
+                    bus.publish(SoundLevel(rms=3277.0))
+                    await asyncio.sleep(0.01)
+            assert screen.level == pytest.approx(0.75, abs=0.01)
 
     asyncio.run(main())
 

@@ -8,7 +8,7 @@ from ai_robot.adapters.sim.audio import SimAudioIn, SimAudioOut
 
 def test_the_microphones_deliver_chunks_in_real_time() -> None:
     async def scenario() -> None:
-        microphones = SimAudioIn(sample_rate=16000, channels=1, chunk_ms=20)
+        microphones = SimAudioIn(sample_rate=16000, channels=1, chunk_ms=20, echo_cancelled=False)
         loop = asyncio.get_running_loop()
         began = loop.time()
         chunks = [await microphones.read() for _ in range(5)]

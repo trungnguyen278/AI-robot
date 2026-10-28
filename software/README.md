@@ -31,7 +31,7 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 |---|---|---|
 | `system` | `power`, `lights`, `time_zone` | Battery reports, with whether the battery is low; status light; the charging scene when plugged in; the robot's languages, a setting, and its time zone, the system's, both of which set-up can give; planned: clean shutdown on low battery |
 | `motion` | `drive`, `joints`, `range`, `safety` | Tracks, neck and arms; obstacle and emergency-stop checks |
-| `voice` | `audio_in`, `audio_out`, `wake_word`, `voice_activity` | Conversations with the cloud: the wake word, turns, the end of speech when the cloud has not decided it, answers, barge-in; where the conversation is (the interaction state). The voice processor cancels the echo ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md) to [ADR-0013](../docs/decisions/0013-listening-on-the-robot.md)) |
+| `voice` | `audio_in`, `audio_out`, `wake_word`, `voice_activity` | Conversations with the cloud: the wake word opens them, the robot streams what it hears and plays the answers, barge-in, the limits that end them; where the conversation is (the interaction state). The voice processor cancels the echo ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md), [ADR-0013](../docs/decisions/0013-listening-on-the-robot.md), [ADR-0018](../docs/decisions/0018-conversations.md)) |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery and whether the microphones are off; panels over the face, such as the settings; taps and holds |
 | `settings` | `settings` | The owner's settings: what the modules offer, shown as one panel on the screen; what the owner chose, kept, and handed to their modules before they run ([ADR-0016](../docs/decisions/0016-settings.md)) |
@@ -124,14 +124,15 @@ While the robot runs, its screen is at <http://127.0.0.1:8770/>: open it in a br
 
 ### Voice
 
-The `voice` module holds the robot's conversations ([ADR-0012](../docs/decisions/0012-end-of-speech.md), [ADR-0013](../docs/decisions/0013-listening-on-the-robot.md)):
-- **A turn** starts with the wake word, when the cloud takes conversations; without the cloud, the face shows that the robot cannot talk. The robot streams what it hears until the cloud ends the speech. It ends the speech itself only after a silence (`end_silence`) or 30 s, and cancels a turn in which nobody speaks (`nothing_heard`).
-- **Answers** play as they come; one that asks for a follow-up opens a new turn once played.
-- **Barge-in:** voice over an answer (`barge_in`) stops it at once and opens a turn, which starts with the words that interrupted.
+The `voice` module holds the robot's conversations ([ADR-0013](../docs/decisions/0013-listening-on-the-robot.md), [ADR-0018](../docs/decisions/0018-conversations.md)):
+- **Opening.** The wake word opens a conversation, when the cloud takes them; without the cloud, or when the conversation cannot start, the face shows that the robot cannot talk. The cloud may open one too, to listen or only to talk; a wake word ends one that does not listen, and opens another.
+- **Listening.** The robot streams what it hears for the whole conversation. The cloud takes the turns, and the face shows them: listening, thinking, speaking, and attentive between them.
+- **Barge-in:** voice over an answer (`barge_in`) stops it at once, and tells the cloud, which already has the words. Without a voice processor that cancels the echo (`echo_cancelled` of `[ports.audio_in]`), the robot streams nothing while it speaks, and no voice interrupts it.
+- **Limits.** The robot ends a conversation when nobody has spoken since it opened (`nothing_heard`), after a silence of `idle` seconds, after `longest` seconds, or when its microphones go off. Speech that the cloud drops as not meant for the robot counts as silence.
 
-Its settings are the volume and the microphones: with them off, the robot hears nothing, not even its wake word, and the screen shows it.
+Its settings are the volume, the microphones (off, the robot hears nothing, not even its wake word, and the screen shows it), and the silence that ends a conversation, which trades privacy for ease.
 
-On a computer the simulated adapters hear silence, so no turn starts. To talk to the robot on a computer with a microphone, select `portaudio` for `audio_in` and `audio_out`, `micro` for `wake_word` and `silero` for `voice_activity` in `config/local.toml`; without a voice processor, its own voice is not cancelled, so use headphones. The wake word is a model of `[ports.wake_word.micro] models`; the robot's own is trained for its name, once the name is chosen.
+On a computer the simulated adapters hear silence, so no conversation opens. To talk to the robot on a computer with a microphone, select `portaudio` for `audio_in` and `audio_out`, `micro` for `wake_word` and `silero` for `voice_activity` in `config/local.toml`; without a voice processor, its own voice is not cancelled, so use headphones. The wake word is a model of `[ports.wake_word.micro] models`; the robot's own is trained for its name, once the name is chosen.
 
 ### The cloud
 

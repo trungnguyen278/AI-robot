@@ -78,7 +78,14 @@ def microphones(
 
     monkeypatch.setattr(audio.sounddevice, "RawInputStream", stream)
     adapter = PortAudioIn(
-        **{"device": "default", "sample_rate": 16000, "channels": 1, "chunk_ms": 20, **settings}
+        **{
+            "device": "default",
+            "sample_rate": 16000,
+            "channels": 1,
+            "chunk_ms": 20,
+            "echo_cancelled": False,
+            **settings,
+        }
     )
     adapter.streams = streams  # type: ignore[attr-defined]
     return adapter
@@ -158,7 +165,13 @@ def test_a_reader_that_falls_behind_loses_the_oldest_audio(
 
 @pytest.mark.parametrize(("setting", "value"), [("device", ""), ("chunk_ms", 0)])
 def test_microphone_settings_are_checked(setting: str, value: Any) -> None:
-    settings = {"device": "default", "sample_rate": 16000, "channels": 1, "chunk_ms": 20}
+    settings = {
+        "device": "default",
+        "sample_rate": 16000,
+        "channels": 1,
+        "chunk_ms": 20,
+        "echo_cancelled": False,
+    }
     with pytest.raises(ValueError, match=setting):
         PortAudioIn(**{**settings, setting: value})
 
