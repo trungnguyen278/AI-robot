@@ -1,6 +1,6 @@
 # Screen protocol
 
-Between the robot software (`software/`: the `screen` module and the `web` adapter of its `screen` port) and the screen renderer (`ui/`: a page in a browser). Version **1**, proposed in [ADR-0006](../../docs/decisions/0006-screen-renderer.md).
+Between the robot software (`software/`: the `screen` module and the `web` adapter of its `screen` port) and the screen renderer (`ui/`: a page in a browser). Version **1** ([ADR-0006](../../docs/decisions/0006-screen-renderer.md)).
 
 The software decides **what** the screen shows; the renderer decides **how**. The renderer runs the animation on its own (transitions, blinking, glances, breathing), so the face stays alive while the software is busy, and it lays the face out for whatever screen it runs on. The software therefore sends changes, never frames.
 
@@ -62,7 +62,7 @@ The scenes and their data:
 |---|---|
 | `charging` | none: shows the battery from `status`. The software shows it for a few seconds when the robot is plugged in. |
 | `clock` | none: the time of day on the software's clock |
-| `setup` | `state`: `code` (the code and its QR code), `connected` (an app is setting the robot up), `connecting` (set up, waiting for the server) or `closed` (not set up: a tap opens set-up). With `code`: `code` (8 digits), `discriminator` (4 hexadecimal digits) and `link` (what the QR code holds, up to 256 characters). See the [set-up protocol](../setup/README.md). |
+| `setup` | `state`: `code` (the code and its QR code), `connected` (an app is setting the robot up), `connecting` (set up, waiting for the server) or `closed` (not set up: a tap opens set-up). With `code`: `code` (8 digits), `discriminator` (4 hexadecimal digits) and `link` (what the QR code holds, up to 256 characters). See the [set-up protocol](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/setup/README.md), in ai-platform. |
 | `timer` | `ends_at` (Unix time in seconds, on the software's clock, when it rings), `duration` (seconds), `label` (optional, up to 16 characters). The renderer counts down on its own, so the timer is sent once; at zero it pulses until the scene is taken away. |
 | `weather` | `condition` (`clear`, `partly-cloudy`, `cloudy`, `rain`, `storm`, `snow`, `fog`), `temperature`, `unit` (`C` or `F`), `night` (optional, `true` for the moon), `place` (optional, up to 18 characters) |
 

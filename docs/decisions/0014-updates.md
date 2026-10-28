@@ -5,6 +5,7 @@
 - **Revised:**
   - 2026-10-27, for Ubuntu ([ADR-0017](0017-ros-2.md)): the image, its builder and the data partition's contents;
   - 2026-10-28: where updates come from, as Home Assistant OS does it (decision 7).
+- **Amended by:** [ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md): the channel file's format is defined in ai-platform, with a version of its own ([ai-platform ADR-0003](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0003-compatibility.md))
 
 ## Context
 

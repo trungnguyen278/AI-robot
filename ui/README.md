@@ -1,6 +1,6 @@
 # ui/ — the robot's screen
 
-> **Status:** the face works on any screen and the robot software drives it: 14 expressions, 6 scenes (clock, weather, timer, charging, set-up, start-up) and the settings panel. 30 of the previous library's 33 scene categories are still to port. Architecture: [ADR-0006](../docs/decisions/0006-screen-renderer.md) (proposed).
+> **Status:** the face works on any screen and the robot software drives it: 14 expressions, 6 scenes (clock, weather, timer, charging, set-up, start-up) and the settings panel. 30 of the previous library's 33 scene categories are still to port. Architecture: [ADR-0006](../docs/decisions/0006-screen-renderer.md).
 
 The renderer that draws the robot's face. On the robot, a full-screen browser shows `screen.html`, served and driven by the robot software over the [screen protocol](../protocol/screen/README.md). The software says **what** to show: an expression, a scene, the gaze, the voice level, the battery, and panels such as the settings. The renderer decides **how**: it blends from one expression to the next and keeps the face alive on its own, with blinking, glances and breathing. A scene (the time, the weather, a timer…) fills the screen while the face watches from a corner, keeping its expression. A panel is drawn in HTML over the face, and the owner works it by touch ([ADR-0016](../docs/decisions/0016-settings.md)); a press held still on the face asks the robot for its settings.
 

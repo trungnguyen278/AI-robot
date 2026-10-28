@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 """The link that apps set the robot up through: Bluetooth LE on the robot
-(protocol/setup/README.md; docs/decisions/0015-set-up.md)."""
+(platform/protocols/setup/README.md; docs/decisions/0015-set-up.md)."""
 
 from __future__ import annotations
 

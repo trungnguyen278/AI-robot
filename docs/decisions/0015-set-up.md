@@ -2,6 +2,9 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-24
+- **Amended by:**
+  - [ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md): the protocol is defined in ai-platform, in `protocols/setup/`, which this repository pins at `platform/` (decision 7);
+  - [ai-platform ADR-0005](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0005-homes.md): the registration binds the robot into a home that the app chooses, rather than to the owner's account, and the cloud issues the challenge for that home (decision 4)
 
 ## Context
 
@@ -50,7 +53,7 @@
    - While unbound, it shows the set-up screen and refuses all but set-up (PROV-3).
    - A bound robot refuses a new registration. A new owner needs a factory reset, which clears the TPM and so gives the robot a new key (PROV-4, [ADR-0014](0014-updates.md)).
 6. **The Wi-Fi network goes to NetworkManager**, the system's network service, through its D-Bus interface. It keeps the password readable by root only, and reconnects by itself.
-7. **The protocol is defined in [`protocol/setup/`](../../protocol/setup/README.md).** That covers the Bluetooth service, how messages are split to fit it, the exchange, and the messages.
+7. **The protocol is defined in [`protocol/setup/`](https://github.com/trungnguyen278/ai-robot/blob/5856c9db68a007cbe1ea7e513e51cdb99ad6f676/protocol/setup/README.md).** That covers the Bluetooth service, how messages are split to fit it, the exchange, and the messages.
 
 ## Alternatives considered
 

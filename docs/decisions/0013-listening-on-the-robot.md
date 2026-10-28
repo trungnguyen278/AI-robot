@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-23
+- **Amended by:** [ADR-0018](0018-conversations.md): the wake word opens a conversation of many turns, not a single turn
 
 ## Context
 

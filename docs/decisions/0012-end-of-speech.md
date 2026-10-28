@@ -2,7 +2,9 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-23
-- **Amended by:** [ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md): in a conversation of many turns, the cloud still ends each turn, and the robot's fallback ends the conversation after a silence, not a turn
+- **Amended by:**
+  - [ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md): in a conversation of many turns, the cloud still ends each turn, and the robot's fallback ends the conversation after a silence, not a turn;
+  - [ADR-0018](0018-conversations.md): the robot no longer ends the user's speech, nor cancels a turn; the conversation's own limits, `nothing_heard`, `idle` and `longest`, take the place of its fallbacks
 
 ## Context
 
