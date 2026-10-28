@@ -31,7 +31,8 @@ ai-robot/
 ├── software/    Robot software on the Raspberry Pi 5 (Python + C++)
 ├── ui/          The screen renderer: the robot's face, in a browser, on any screen
 ├── firmware/    Microcontroller modules (body-controller: microcontroller not chosen yet)
-├── protocol/    Protocols between components (Pi ⇄ body, software ⇄ screen, robot ⇄ cloud)
+├── protocol/    Protocols inside the robot (Pi ⇄ body, software ⇄ screen), and the cloud link's old copy
+├── platform/    ai-platform, pinned: the protocols shared with the cloud and the app
 ├── hardware/    Bill of materials, power tree, pin map, component notes, CAD
 ├── docs/        Vision, architecture, decision records (ADRs), dev log
 ├── tools/       Utility scripts
@@ -39,6 +40,8 @@ ai-robot/
 ```
 
 Each folder is an independent component with its own README; see [Contributing](CONTRIBUTING.md#adding-or-removing-a-component) for how to add or remove one.
+
+`platform/` is a git submodule: clone with `git clone --recurse-submodules`, or run `git submodule update --init` after a plain clone.
 
 ## Documentation
 
@@ -53,7 +56,7 @@ Each folder is an independent component with its own README; see [Contributing](
 | Repository | Role | Status |
 |---|---|---|
 | [ai-cloud](https://github.com/trungnguyen278/ai-cloud) | The cloud side of the project's AI devices: their AI, tokens, set-up and updates | Architecture and decisions; no code yet |
-| [ai-platform](https://github.com/trungnguyen278/ai-platform) | What the repositories share: the protocols between them, and the decisions that span them ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)) | In use: the cloud link 3.0, set-up 1.0 |
+| [ai-platform](https://github.com/trungnguyen278/ai-platform) | What the repositories share: the protocols between them, and the decisions that span them ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)) | In use, pinned at `platform/`: the cloud link 3.0, set-up 2.0 |
 | `ai-app` | The owner's app: set-up, settings, remote control | Not created yet |
 | [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Superseded — see [docs/legacy.md](docs/legacy.md) |
 

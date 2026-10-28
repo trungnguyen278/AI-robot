@@ -170,7 +170,7 @@ class Robot:
             name="voice",
             bus=self.bus,
             ports=ports,
-            robot=RobotInfo(display_name="Robot"),
+            robot=RobotInfo(display_name="Robot", kind="robot", model="concept-v0"),
             log=logging.getLogger("test.voice"),
         )
         self.to_cloud = self.bus.subscribe(ConversationToCloud, maxsize=10_000)
@@ -454,7 +454,9 @@ def test_engines_that_take_other_audio_are_refused() -> None:
         "wake_word": Spotter(AudioFormat(48000, 1)),
         "voice_activity": Detector(),
     }
-    ctx = ModuleContext("voice", Bus(), ports, RobotInfo("Robot"), logging.getLogger("test"))
+    ctx = ModuleContext(
+        "voice", Bus(), ports, RobotInfo("Robot", "robot", "concept-v0"), logging.getLogger("test")
+    )
     with pytest.raises(ValueError, match="Spotter takes"):
         VoiceModule(ctx, **SETTINGS)
 

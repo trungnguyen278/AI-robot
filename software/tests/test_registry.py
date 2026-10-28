@@ -27,6 +27,7 @@ EXTRAS = {
     ("identity", "tpm"): "tpm2_pytss",
     ("setup_link", "bluez"): "dbus_fast",
     ("network", "networkmanager"): "dbus_fast",
+    ("time_zone", "timedated"): "dbus_fast",
 }
 PROFILES = sorted(
     path.stem for path in (Path(__file__).parents[1] / "config" / "profiles").glob("*.toml")

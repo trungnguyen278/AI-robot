@@ -56,8 +56,8 @@ M = TypeVar("M", bound=Message)
 # since the link takes each part as it comes, and drops those of a session that is gone.
 CONVERSATION_BACKLOG = 1000
 
-# Fixed by the protocol (protocol/setup/README.md, The registration).
-REGISTRATION_TYPE = "robot-registration+jwt"
+# Fixed by the protocol (platform/protocols/setup/README.md, The registration).
+REGISTRATION_TYPE = "device-registration+jwt"
 
 # How the settings show each safety class (docs/decisions/0016): its title, and what is
 # asked before the owner allows it.
@@ -77,7 +77,7 @@ CLASS_SETTINGS: dict[SafetyClass, tuple[str, str | None]] = {
 
 async def registration(identity: Identity, challenge: str, server: str) -> str:
     """The robot's registration with ``server`` for ``challenge``: a JWT signed with
-    ES256 by its key, which carries the public key (protocol/setup/README.md)."""
+    ES256 by its key, which carries the public key (platform/protocols/setup/README.md)."""
     robot = await identity.robot_id()
     header = {"alg": "ES256", "typ": REGISTRATION_TYPE, "jwk": dict(await identity.public_key())}
     claims = {
@@ -124,7 +124,7 @@ class CloudModule(Module):
       ``RegistrationSigned``), then asks the server it names for the robot's tokens. The
       robot is bound once that server accepts it, and unbound when the server no longer
       knows it; ``binding`` keeps that across restarts, and ``BindingChanged`` tells the
-      other modules (protocol/setup/README.md).
+      other modules (platform/protocols/setup/README.md).
     - Settings (docs/decisions/0016): one switch for each safety class, which the owner
       changes at the robot only (SEC-9). The owner's choices apply before the first
       session; ``allowed_classes`` is what they are as shipped.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 """Where the robot keeps its binding: the server it was registered with, and whether that
-server accepts it (protocol/setup/README.md, The registration)."""
+server accepts it (platform/protocols/setup/README.md, The registration)."""
 
 from __future__ import annotations
 

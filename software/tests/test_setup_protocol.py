@@ -10,14 +10,14 @@ from typing import Any
 import jwt
 import pytest
 
-from ai_robot.core.config import protocol_dir
+from ai_robot.core.config import platform_dir
 from ai_robot.core.data import Schema
 from ai_robot.core.jose import b64url, b64url_decode
 from ai_robot.core.setup_session import Records, _context, _session_keys
 from ai_robot.core.spake2plus import Prover, Verifier, decode, record, stretch
 from ai_robot.modules.cloud import REGISTRATION_TYPE
 
-PROTOCOL = protocol_dir() / "setup"
+PROTOCOL = platform_dir() / "setup"
 
 
 def load(name: str) -> Any:
@@ -26,14 +26,14 @@ def load(name: str) -> Any:
 
 def schema(side: str) -> Schema:
     root = load("schema.json")
-    return Schema("protocol/setup/schema.json", {**root, "$ref": f"#/$defs/from_{side}"})
+    return Schema("platform/protocols/setup/schema.json", {**root, "$ref": f"#/$defs/from_{side}"})
 
 
 EXAMPLE = load("examples/session.json")
 
 
 def test_every_message_of_the_example_follows_the_schema() -> None:
-    schemas = {"app": schema("app"), "robot": schema("robot")}
+    schemas = {"app": schema("app"), "device": schema("device")}
     for step in EXAMPLE["messages"]:
         assert schemas[step["from"]].problem(step["message"]) is None, step
 
@@ -42,11 +42,11 @@ def test_the_examples_exchange_replays() -> None:
     exchange = EXAMPLE["exchange"]
     messages = [step["message"] for step in EXAMPLE["messages"]]
     app_hello = exchange["app_hello"].encode("utf-8")
-    robot_hello = exchange["robot_hello"].encode("utf-8")
-    assert json.loads(app_hello) == messages[0] and json.loads(robot_hello) == messages[1]
+    device_hello = exchange["device_hello"].encode("utf-8")
+    assert json.loads(app_hello) == messages[0] and json.loads(device_hello) == messages[1]
     w0, w1 = stretch(exchange["code"].encode("ascii"), b64url_decode(exchange["salt"]))
     assert (f"{w0:064x}", f"{w1:064x}") == (exchange["w0"], exchange["w1"])
-    context = _context(app_hello, robot_hello)
+    context = _context(app_hello, device_hello)
     assert context.hex() == exchange["context"]
 
     prover = Prover(context, w0, w1, scalar=int(exchange["x"], 16))
@@ -58,9 +58,9 @@ def test_the_examples_exchange_replays() -> None:
     assert b64url(confirm) == messages[4]["confirm"]
     assert verifier.finish(confirm) == shared
 
-    app_key, robot_key = _session_keys(shared)
-    assert (app_key.hex(), robot_key.hex()) == (exchange["app_key"], exchange["robot_key"])
-    first = Records(app_key, robot_key).seal(json.dumps(messages[5]).encode("utf-8"))
+    app_key, device_key = _session_keys(shared)
+    assert (app_key.hex(), device_key.hex()) == (exchange["app_key"], exchange["device_key"])
+    first = Records(app_key, device_key).seal(json.dumps(messages[5]).encode("utf-8"))
     assert b64url(first) == exchange["first_encrypted"]
 
 
@@ -83,25 +83,29 @@ def test_the_examples_registration_is_signed_by_the_key_it_carries() -> None:
 @pytest.mark.parametrize(
     ("side", "message"),
     [
-        ("app", {"type": "hello", "id": "a1"}),
-        ("app", {"type": "hello", "id": "a1", "protocol": "one"}),
-        ("app", {"type": "share", "id": "a2", "share": "too short"}),
-        ("app", {"type": "join", "id": "a5", "ssid": "Home", "ssid_hex": "486f6d65"}),
-        ("app", {"type": "join", "id": "a5"}),
-        ("app", {"type": "join", "id": "a5", "ssid": "Home", "hidden": True}),
-        ("app", {"type": "join", "id": "a5", "ssid": "Home", "password": ""}),
-        ("app", {"type": "register", "id": "a6", "challenge": "short", "server": "https://x"}),
-        ("app", {"type": "register", "id": "a6", "challenge": "c" * 22, "server": "ftp://x"}),
-        ("robot", {"type": "hello", "id": "r1", "reply_to": "a1", "protocol": "1.0"}),
-        ("robot", {"type": "info", "id": "r2", "reply_to": "a4", "bound": False}),
-        ("robot", {"type": "joined", "id": "r3", "reply_to": "a5", "network": {"state": "up"}}),
+        ("app", {"type": "hello", "seq": 1}),
+        ("app", {"type": "hello", "seq": 1, "protocol": "one"}),
+        ("app", {"type": "hello", "id": "a1", "protocol": "2.0"}),
+        ("app", {"type": "share", "seq": 2, "share": "too short"}),
+        ("app", {"type": "join", "seq": 5, "ssid": "Home", "ssid_hex": "486f6d65"}),
+        ("app", {"type": "join", "seq": 5}),
+        ("app", {"type": "join", "seq": 5, "ssid": "Home", "hidden": True}),
+        ("app", {"type": "join", "seq": 5, "ssid": "Home", "password": ""}),
+        ("app", {"type": "configure", "seq": 6}),
+        ("app", {"type": "configure", "seq": 6, "languages": []}),
+        ("app", {"type": "register", "seq": 7, "challenge": "short", "server": "https://x"}),
+        ("app", {"type": "register", "seq": 7, "challenge": "c" * 22, "server": "ftp://x"}),
+        ("device", {"type": "hello", "seq": 1, "reply_to": 1, "protocol": "2.0"}),
+        ("device", {"type": "info", "seq": 2, "reply_to": 4, "bound": False}),
+        ("device", {"type": "joined", "seq": 3, "reply_to": 5, "network": {"state": "up"}}),
         (
-            "robot",
-            {"type": "joined", "id": "r3", "reply_to": "a5", "network": {"state": "connected"}},
+            "device",
+            {"type": "joined", "seq": 3, "reply_to": 5, "network": {"state": "connected"}},
         ),
-        ("robot", {"type": "networks", "id": "r4", "reply_to": "a5", "networks": [{"ssid": "x"}]}),
-        ("robot", {"type": "error", "id": "r5", "code": "Busy!", "message": ""}),
-        ("robot", {"type": "finished", "id": "r6"}),
+        ("device", {"type": "networks", "seq": 4, "reply_to": 5, "networks": [{"ssid": "x"}]}),
+        ("device", {"type": "configured", "seq": 5, "reply_to": 6, "languages": ["vi"]}),
+        ("device", {"type": "error", "seq": 5, "code": "Busy!", "message": ""}),
+        ("device", {"type": "finished", "seq": 6}),
     ],
 )
 def test_messages_that_break_the_schema_are_caught(side: str, message: dict[str, Any]) -> None:
@@ -109,4 +113,4 @@ def test_messages_that_break_the_schema_are_caught(side: str, message: dict[str,
 
 
 def test_a_message_of_a_newer_minor_version_passes() -> None:
-    assert schema("app").problem({"type": "dance", "id": "a9", "steps": 3}) is None
+    assert schema("app").problem({"type": "dance", "seq": 9, "steps": 3}) is None

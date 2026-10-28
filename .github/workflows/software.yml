@@ -7,14 +7,14 @@ on:
       - "software/**"
       - "protocol/screen/**"
       - "protocol/cloud/**"
-      - "protocol/setup/**"
+      - "platform"
       - ".github/workflows/software.yml"
   pull_request:
     paths:
       - "software/**"
       - "protocol/screen/**"
       - "protocol/cloud/**"
-      - "protocol/setup/**"
+      - "platform"
       - ".github/workflows/software.yml"
 
 permissions:
@@ -39,6 +39,8 @@ jobs:
         working-directory: software
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: true  # ai-platform, at platform/: the protocols shared with ai-cloud
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}

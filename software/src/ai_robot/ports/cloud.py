@@ -289,7 +289,7 @@ class Cloud(Port):
     @abstractmethod
     async def serve(self, server: str) -> None:
         """Ask ``server`` for the robot's tokens from now on: the ``ai-cloud`` the
-        robot was registered with at set-up (protocol/setup/README.md). Until then, the
+        robot was registered with at set-up (platform/protocols/setup/README.md). Until then, the
         link asks the server of its own settings. ``ValueError`` for an address the link
         does not accept."""
 

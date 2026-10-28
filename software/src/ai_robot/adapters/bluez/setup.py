@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""The set-up link over Bluetooth LE, through BlueZ (protocol/setup/README.md, The
+"""The set-up link over Bluetooth LE, through BlueZ (platform/protocols/setup/README.md, The
 Bluetooth service): a GATT service and an advertisement, on D-Bus.
 
 BlueZ's GATT server calls this application over D-Bus: ``WriteValue`` for each fragment an
@@ -29,7 +29,7 @@ from ai_robot.ports.setup import Connected, Disconnected, LinkEvent, Received, S
 
 log = logging.getLogger(__name__)
 
-# Fixed by the protocol (protocol/setup/README.md, The Bluetooth service).
+# Fixed by the protocol (platform/protocols/setup/README.md, The Bluetooth service).
 SERVICE_UUID = "eaf35dcb-e774-4881-b0c6-4990127a1289"
 REQUEST_UUID = "eaf35dcc-e774-4881-b0c6-4990127a1289"
 ANSWER_UUID = "eaf35dcd-e774-4881-b0c6-4990127a1289"

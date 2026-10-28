@@ -71,7 +71,7 @@ def context(bus: Bus, daylight: Daylight) -> ModuleContext:
         name="behavior",
         bus=bus,
         ports={"daylight": daylight},
-        robot=RobotInfo(display_name="Robot"),
+        robot=RobotInfo(display_name="Robot", kind="robot", model="concept-v0"),
         log=logging.getLogger("test"),
     )
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Messages split into Bluetooth fragments, and joined again (protocol/setup/README.md,
+"""Messages split into Bluetooth fragments, and joined again (platform/protocols/setup/README.md,
 The Bluetooth service)."""
 
 from __future__ import annotations

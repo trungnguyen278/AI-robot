@@ -22,7 +22,7 @@ modules    system · settings · motion · voice · vision · screen · setup ·
              │  talk to each other only through messages on the bus
              │  each one owns some ports
 ports      audio_in · audio_out · wake_word · voice_activity · camera · screen
-           setup_link · network · cloud · identity · binding · settings · daylight
+           setup_link · network · cloud · identity · binding · settings · daylight · time_zone
            drive · joints · range · power · lights · safety
              │  implemented by
 adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
@@ -30,13 +30,13 @@ adapters   sim (any computer, CI)  |  real (on the robot), chosen per profile
 
 | Module | Owns ports | Responsibility (planned) |
 |---|---|---|
-| `system` | `power`, `lights` | Battery reports, with whether the battery is low; status light; the charging scene when plugged in; planned: clean shutdown on low battery |
+| `system` | `power`, `lights`, `time_zone` | Battery reports, with whether the battery is low; status light; the charging scene when plugged in; the robot's languages, a setting, and its time zone, the system's, both of which set-up can give; planned: clean shutdown on low battery |
 | `motion` | `drive`, `joints`, `range`, `safety` | Tracks, neck and arms; obstacle and emergency-stop checks |
 | `voice` | `audio_in`, `audio_out`, `wake_word`, `voice_activity` | Conversations with the cloud: the wake word, turns, the end of speech when the cloud has not decided it, answers, barge-in; where the conversation is (the interaction state). The voice processor cancels the echo ([ADR-0011](../docs/decisions/0011-audio-voice-processor.md) to [ADR-0013](../docs/decisions/0013-listening-on-the-robot.md)) |
 | `vision` | `camera` | People and object detection, face tracking |
 | `screen` | `screen` | What the screen shows: the expression and the scene asked with the highest priority, the gaze, the voice, the battery and whether the microphones are off; panels over the face, such as the settings; taps and holds |
 | `settings` | `settings` | The owner's settings: what the modules offer, shown as one panel on the screen; what the owner chose, kept, and handed to their modules before they run ([ADR-0016](../docs/decisions/0016-settings.md)) |
-| `setup` | `setup_link`, `network` | Set-up with the owner's app over Bluetooth LE: when it opens, the code on the screen, the session, the Wi-Fi network ([protocol/setup](../protocol/setup/README.md)) |
+| `setup` | `setup_link`, `network` | Set-up with the owner's app over Bluetooth LE: when it opens, the code on the screen, the session, the Wi-Fi network ([set-up](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/setup/README.md), in ai-platform) |
 | `cloud` | `cloud`, `identity`, `binding` | The link to `ai-cloud`, which the robot's identity proves: the cloud calls the capabilities the modules offer, and hears the events they declare; it carries conversations, turns and answers with their audio, for `voice` ([protocol/cloud](../protocol/cloud/README.md)). It signs the robot's registration at set-up, and keeps whether the robot is bound. Its settings say what the cloud may do, by safety class |
 | `behavior` | `daylight` | Decides what the robot does: for now, reactions to taps, the clock when nobody interacts (taps and conversations count), a sleepy face from sunset to sunrise |
 
@@ -91,7 +91,7 @@ On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`. It keeps t
 - PortAudio, for the microphones and the speaker: `sudo apt install libportaudio2`;
 - the voice processor as PipeWire's default input and output, so that everything the robot plays reaches its echo canceller: find its two devices with `wpctl status`, then `wpctl set-default <id>` for each;
 - access to `/dev/tpmrm0` for the user who runs the robot, through the `tss` group: `sudo usermod -aG tss "$USER"`, then log in again;
-- for set-up, the Wi-Fi through NetworkManager. Its polkit policy lets a user in a desktop session scan and join networks, and Debian's own rule lets the `netdev` and `sudo` groups save them. A robot run from SSH, or as a service, needs a rule of its own for the user who runs it, which this writes:
+- for set-up, the Wi-Fi through NetworkManager, and the time zone through systemd-timedated. NetworkManager's polkit policy lets a user in a desktop session scan and join networks, and Debian's own rule lets the `netdev` and `sudo` groups save them; timedated asks an administrator before it sets the time zone (`org.freedesktop.timedate1.set-timezone`). A robot run from SSH, or as a service, needs a rule of its own for the user who runs it, which this writes:
 
   ```sh
   sudo tee /etc/polkit-1/rules.d/50-ai-robot.rules > /dev/null <<EOF
@@ -99,22 +99,24 @@ On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`. It keeps t
       if (subject.user == "$USER" && (
               action.id == "org.freedesktop.NetworkManager.network-control" ||
               action.id == "org.freedesktop.NetworkManager.wifi.scan" ||
-              action.id == "org.freedesktop.NetworkManager.settings.modify.system")) {
+              action.id == "org.freedesktop.NetworkManager.settings.modify.system" ||
+              action.id == "org.freedesktop.timedate1.set-timezone")) {
           return polkit.Result.YES;
       }
   });
   EOF
   ```
 
-  BlueZ's D-Bus policy lets any user offer the set-up service. These are the policies of Debian Trixie's `network-manager` 1.52.1 and `bluez` 5.82 packages, and of Ubuntu 26.04's 1.54.3 and 5.85 (checked 2026-10-27); the robot's image will carry its own rule ([ADR-0014](../docs/decisions/0014-updates.md)).
+  BlueZ's D-Bus policy lets any user offer the set-up service. These are the policies of Debian Trixie's `network-manager` 1.52.1 and `bluez` 5.82 packages, and of Ubuntu 26.04's 1.54.3 and 5.85 (checked 2026-10-27), and systemd's own for timedated (checked 2026-10-28); the robot's image will carry its own rule ([ADR-0014](../docs/decisions/0014-updates.md)).
 
 On a Pi without its TPM, select the `file` identity in `config/local.toml` (see `local.example.toml`).
 
 `ai-robot --help` lists the options; `--duration SECONDS` stops the robot after a while, which is handy for quick checks. The environment variables are listed in [`.env.example`](.env.example).
 
-Install with `-e` from this checkout: the configuration is then read from `software/config`, and the protocols' definitions from `protocol/`. With any other kind of install, point:
+Install with `-e` from this checkout, cloned with its submodule (`git clone --recurse-submodules`, or `git submodule update --init` after a plain clone): the configuration is then read from `software/config`, the robot's own protocols from `protocol/`, and those it shares with the cloud and the app from ai-platform, pinned at `platform/`. With any other kind of install, point:
 - `--config-dir` or `AI_ROBOT_CONFIG_DIR` at a configuration directory;
 - `AI_ROBOT_PROTOCOL_DIR` at the `protocol` folder;
+- `AI_ROBOT_PLATFORM_DIR` at ai-platform's `protocols` folder;
 - the screen's `ui_dir` setting at the `ui` folder.
 
 ### The screen

@@ -14,11 +14,15 @@ from typing import Any, TypeVar
 import jwt
 import pytest
 
+from ai_robot import software_version
 from ai_robot.adapters.sim.binding import SimBindingStore
+from ai_robot.adapters.sim.body import SimLights, SimPower
 from ai_robot.adapters.sim.cloud import SimCloud
 from ai_robot.adapters.sim.identity import SimIdentity
 from ai_robot.adapters.sim.network import ADDRESS, SimNetwork
+from ai_robot.adapters.sim.settings import SimSettingsStore
 from ai_robot.adapters.sim.setup import SimSetupLink
+from ai_robot.adapters.sim.time_zone import SimTimeZone
 from ai_robot.core.bus import Bus, Message, Subscription
 from ai_robot.core.config import ConfigError, protocol_dir
 from ai_robot.core.factory import create
@@ -27,6 +31,9 @@ from ai_robot.core.setup_session import AppSession
 from ai_robot.core.spake2plus import ExchangeError
 from ai_robot.messages import (
     BindingChanged,
+    LocaleApplied,
+    LocaleChanged,
+    LocaleRequested,
     RegistrationRequested,
     RegistrationSigned,
     SceneRequest,
@@ -37,7 +44,9 @@ from ai_robot.messages import (
     SettingsOpened,
 )
 from ai_robot.modules.cloud import CloudModule
+from ai_robot.modules.settings import SettingsModule
 from ai_robot.modules.setup import LINK_LENGTH, SCENE, SetupModule
+from ai_robot.modules.system import SystemModule
 from ai_robot.ports import Binding
 
 TIMEOUT = 5.0
@@ -73,13 +82,14 @@ class Robot:
             name="setup",
             bus=self.bus,
             ports={"setup_link": self.link, "network": self.network},
-            robot=RobotInfo(display_name=NAME),
+            robot=RobotInfo(display_name=NAME, kind="robot", model="concept-v0"),
             log=logging.getLogger("test"),
         )
         self.module = SetupModule(ctx, **{**SETTINGS, **settings})
         self.scenes = self.bus.subscribe(SceneRequest)
         self.requests = self.bus.subscribe(RegistrationRequested)
         self.signature: RegistrationSigned | None = None  # what the cloud answers, if anything
+        self.locale_requests = self.bus.subscribe(LocaleRequested)
 
     def bind(self, bound: bool) -> None:
         self.bus.publish(BindingChanged(ROBOT, bound))
@@ -113,6 +123,20 @@ class Robot:
             else:
                 self.bus.publish(RegistrationSigned(request.request, REGISTRATION))
 
+    async def system(self) -> None:
+        """Tell the robot's locale, and take what the app asks, as the system module does:
+        any language, and a time zone that is not on Mars."""
+        self.bus.publish(LocaleChanged(("vi",), "UTC"))
+        while True:
+            request = await self.locale_requests.get()
+            if request.time_zone is not None and request.time_zone.startswith("Mars/"):
+                answer = LocaleApplied(request.request, ("vi",), "UTC", "time_zone", "no such zone")
+            else:
+                answer = LocaleApplied(
+                    request.request, request.languages or ("vi",), request.time_zone or "UTC"
+                )
+            self.bus.publish(answer)
+
 
 async def next_of(subscription: Subscription[M]) -> M:
     return await asyncio.wait_for(subscription.get(), TIMEOUT)
@@ -121,7 +145,11 @@ async def next_of(subscription: Subscription[M]) -> M:
 @contextlib.asynccontextmanager
 async def running(robot: Robot) -> AsyncIterator[None]:
     await robot.module.start()
-    tasks = [asyncio.create_task(robot.module.run()), asyncio.create_task(robot.cloud())]
+    tasks = [
+        asyncio.create_task(robot.module.run()),
+        asyncio.create_task(robot.cloud()),
+        asyncio.create_task(robot.system()),
+    ]
     try:
         yield
     finally:
@@ -177,7 +205,7 @@ def test_an_unbound_robot_opens_set_up_and_shows_its_code() -> None:
             data = await robot.code_shown()
             assert len(data["code"]) == 8 and data["code"].isdigit()
             assert len(data["discriminator"]) == 4
-            assert data["link"] == f"setup:1:{data['discriminator']}:{data['code']}"
+            assert data["link"] == f"setup:2:{data['discriminator']}:{data['code']}"
             assert robot.link.offered and robot.link.advertised == NAME
 
     asyncio.run(main())
@@ -206,7 +234,15 @@ def test_a_whole_set_up() -> None:
             assert not robot.link.advertised  # while a session runs
 
             info = await app.ask(session, "info")
-            assert info["robot"]["id"] == ROBOT and info["robot"]["name"] == NAME
+            assert info["device"] == {
+                "id": ROBOT,
+                "name": NAME,
+                "kind": "robot",
+                "model": "concept-v0",
+                "software": software_version(),
+                "languages": ["vi"],
+                "time_zone": "UTC",
+            }
             assert info["bound"] is False
             assert info["network"] == {"state": "disconnected"}
 
@@ -230,6 +266,11 @@ def test_a_whole_set_up() -> None:
             assert answer["registration"] == REGISTRATION
             asked = robot.requests  # the cloud got the request (and answered)
             assert asked.pending == 0
+
+            configured = await app.ask(session, "configure", languages=["en", "vi"])
+            assert (configured["languages"], configured["time_zone"]) == (["en", "vi"], "UTC")
+            refused = await app.ask(session, "configure", time_zone="Mars/Olympus_Mons")
+            assert (refused["type"], refused["code"]) == ("error", "time_zone")
 
             finished = await app.ask(session, "finish")
             assert finished["type"] == "finished"
@@ -302,7 +343,7 @@ def test_too_many_failures_close_set_up_until_a_tap() -> None:
                 app.link.deliver(app.peer, session.hello())
                 app.link.deliver(app.peer, session.share(await app.receive()))
                 await app.receive()  # the robot's share
-                bogus = {"type": "confirm", "id": "a3", "confirm": "A" * 43}
+                bogus = {"type": "confirm", "seq": 3, "confirm": "A" * 43}
                 app.link.deliver(app.peer, json.dumps(bogus).encode())
                 error = json.loads(await app.receive())
                 assert (error["type"], error["code"]) == ("error", "code")
@@ -471,7 +512,7 @@ def test_settings_are_checked() -> None:
         name="setup",
         bus=Bus(),
         ports={"setup_link": robot.link, "network": robot.network},
-        robot=RobotInfo(display_name=NAME),
+        robot=RobotInfo(display_name=NAME, kind="robot", model="concept-v0"),
         log=logging.getLogger("test"),
     )
     for change, message in [
@@ -511,7 +552,7 @@ def test_set_up_end_to_end_with_the_cloud_module() -> None:
                 name="cloud",
                 bus=robot.bus,
                 ports={"cloud": cloud, "identity": identity, "binding": store},
-                robot=RobotInfo(display_name=NAME),
+                robot=RobotInfo(display_name=NAME, kind="robot", model="concept-v0"),
                 log=logging.getLogger("test.cloud"),
             ),
             allowed_classes=["informational"],
@@ -520,12 +561,13 @@ def test_set_up_end_to_end_with_the_cloud_module() -> None:
         await identity.open()
         await robot.module.start()
         await module.start()
+        robot.bus.publish(LocaleChanged(("vi",), "UTC"))  # as the system module tells it
         tasks = [asyncio.create_task(robot.module.run()), asyncio.create_task(module.run())]
         try:
             app = App(robot)
             session = await app.open((await robot.code_shown())["code"])
             info = await app.ask(session, "info")
-            assert info["robot"]["id"] == await identity.robot_id()
+            assert info["device"]["id"] == await identity.robot_id()
             answer = await app.ask(
                 session, "register", challenge="c" * 22, server="https://cloud.example"
             )
@@ -545,6 +587,82 @@ def test_set_up_end_to_end_with_the_cloud_module() -> None:
                     await task
             await module.stop()
             await robot.module.stop()
+
+    asyncio.run(main())
+
+
+def test_set_up_gives_the_robot_its_first_settings_through_system_and_settings() -> None:
+    """The setup, system and settings modules together: the languages the app offers are
+    kept as the owner's choice, and the time zone is the system's."""
+
+    async def main() -> None:
+        robot = Robot()
+        zone = SimTimeZone(zone="UTC")
+
+        def context(name: str, ports: dict[str, Any]) -> ModuleContext:
+            return ModuleContext(
+                name=name,
+                bus=robot.bus,
+                ports=ports,
+                robot=RobotInfo(display_name=NAME, kind="robot", model="concept-v0"),
+                log=logging.getLogger(f"test.{name}"),
+            )
+
+        store = SimSettingsStore()
+        system = SystemModule(
+            context(
+                "system",
+                {
+                    "power": SimPower(voltage=7.4, percent=50.0, charging=False),
+                    "lights": SimLights(),
+                    "time_zone": zone,
+                },
+            ),
+            battery_interval=1.0,
+            charging_scene_seconds=4.0,
+            ready_color=[0, 40, 0],
+            low_battery_percent=15.0,
+            language_names={"vi": "Vietnamese", "en": "English"},
+            languages=["vi"],
+        )
+        settings = SettingsModule(context("settings", {"settings": store}))
+        modules = [system, settings, robot.module]
+        for module in modules:
+            await module.start()
+        tasks = [asyncio.create_task(module.run()) for module in modules]
+        try:
+            robot.bind(False)
+            app = App(robot)
+            session = await app.open((await robot.code_shown())["code"])
+            info = await app.ask(session, "info")
+            assert (info["device"]["languages"], info["device"]["time_zone"]) == (["vi"], "UTC")
+            configured = await app.ask(
+                session, "configure", languages=["fr", "en-GB", "vi"], time_zone="Asia/Ho_Chi_Minh"
+            )
+            assert (configured["languages"], configured["time_zone"]) == (
+                ["en", "vi"],
+                "Asia/Ho_Chi_Minh",
+            )
+            for _ in range(100):  # the languages go through the settings module
+                info = await app.ask(session, "info")
+                if info["device"]["languages"] == ["en", "vi"]:
+                    break
+                await asyncio.sleep(0.01)
+            assert info["device"]["languages"] == ["en", "vi"]
+            assert info["device"]["time_zone"] == await zone.current() == "Asia/Ho_Chi_Minh"
+            assert store.values == {"system.languages": "en,vi"}  # kept, as a choice on the panel
+
+            refused = await app.ask(session, "configure", time_zone="Mars/Olympus_Mons")
+            assert (refused["type"], refused["code"]) == ("error", "time_zone")
+            assert await zone.current() == "Asia/Ho_Chi_Minh"
+        finally:
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+            for module in reversed(modules):
+                await module.stop()
 
     asyncio.run(main())
 

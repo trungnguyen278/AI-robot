@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from ai_robot.core.config import protocol_dir
+from ai_robot.core.config import platform_dir
 from ai_robot.core.data import Schema
 from ai_robot.core.jose import b64url, b64url_decode
 from ai_robot.core.setup_session import (
@@ -35,8 +35,8 @@ DISCRIMINATOR = "3F7A"
 
 
 def schema() -> Schema:
-    root = json.loads((protocol_dir() / "setup" / "schema.json").read_text(encoding="utf-8"))
-    return Schema("protocol/setup/schema.json", {**root, "$ref": "#/$defs/from_app"})
+    root = json.loads((platform_dir() / "setup" / "schema.json").read_text(encoding="utf-8"))
+    return Schema("platform/protocols/setup/schema.json", {**root, "$ref": "#/$defs/from_app"})
 
 
 @pytest.fixture(scope="module")
@@ -64,9 +64,9 @@ def test_the_exchange_opens_an_encrypted_session(secret: Secret) -> None:
     sealed = app.request("info")
     assert b"info" not in sealed  # encrypted
     _, request = session.receive(sealed)
-    assert request == {"type": "info", "id": "a4"}
-    answer = session.pack(session.message("finished", request["id"]))
-    assert app.read(answer) == {"type": "finished", "id": "r3", "reply_to": "a4"}
+    assert request == {"type": "info", "seq": 4}
+    answer = session.pack(session.message("finished", request["seq"]))
+    assert app.read(answer) == {"type": "finished", "seq": 3, "reply_to": 4}
 
 
 def test_the_robots_hello_gives_its_discriminator_and_the_salt(secret: Secret) -> None:
@@ -75,9 +75,9 @@ def test_the_robots_hello_gives_its_discriminator_and_the_salt(secret: Secret) -
     message = json.loads(hello)
     assert message == {
         "type": "hello",
-        "id": "r1",
-        "reply_to": "a1",
-        "protocol": "1.0",
+        "seq": 1,
+        "reply_to": 1,
+        "protocol": "2.0",
         "discriminator": DISCRIMINATOR,
         "salt": b64url(secret.salt),
     }
@@ -93,7 +93,7 @@ def test_a_wrong_code_fails_on_both_sides(secret: Secret) -> None:
     with pytest.raises(ExchangeError):  # the app sees it first, from the robot's confirm
         app.confirm(share)
     # An app that confirmed anyway is refused, and the session ends.
-    confirm = json.dumps({"type": "confirm", "id": "a3", "confirm": b64url(bytes(32))})
+    confirm = json.dumps({"type": "confirm", "seq": 3, "confirm": b64url(bytes(32))})
     with pytest.raises(Refusal) as refusal:
         session.receive(confirm.encode())
     assert (refusal.value.code, refusal.value.fatal) == ("code", True)
@@ -101,13 +101,13 @@ def test_a_wrong_code_fails_on_both_sides(secret: Secret) -> None:
 
 def test_another_major_version_is_refused(secret: Secret) -> None:
     with pytest.raises(Refusal) as refusal:
-        robot(secret).receive(AppSession(secret.code).hello(protocol="2.0"))
+        robot(secret).receive(AppSession(secret.code).hello(protocol="1.0"))
     assert (refusal.value.code, refusal.value.fatal) == ("version", True)
 
 
 def test_a_newer_minor_version_is_welcome(secret: Secret) -> None:
-    hello, _ = robot(secret).receive(AppSession(secret.code).hello(protocol="1.7"))
-    assert hello is not None and json.loads(hello)["protocol"] == "1.0"
+    hello, _ = robot(secret).receive(AppSession(secret.code).hello(protocol="2.7"))
+    assert hello is not None and json.loads(hello)["protocol"] == "2.0"
 
 
 @pytest.mark.parametrize(
@@ -115,9 +115,9 @@ def test_a_newer_minor_version_is_welcome(secret: Secret) -> None:
     [
         b"not json",
         b'["hello"]',
-        json.dumps({"type": "hello", "id": "a1"}).encode(),  # no protocol
-        json.dumps({"type": "share", "id": "a1", "share": b64url(bytes(65))}).encode(),
-        json.dumps({"type": "info", "id": "a1"}).encode(),  # a request, in the clear
+        json.dumps({"type": "hello", "seq": 1}).encode(),  # no protocol
+        json.dumps({"type": "share", "seq": 1, "share": b64url(bytes(65))}).encode(),
+        json.dumps({"type": "info", "seq": 1}).encode(),  # a request, in the clear
     ],
 )
 def test_a_first_message_that_is_not_a_hello_ends_the_session(
@@ -131,14 +131,14 @@ def test_a_first_message_that_is_not_a_hello_ends_the_session(
 def test_a_share_that_is_not_a_point_ends_the_session(secret: Secret) -> None:
     session, app = robot(secret), AppSession(secret.code)
     session.receive(app.hello())
-    share = {"type": "share", "id": "a2", "share": b64url(b"\x04" + bytes(64))}
+    share = {"type": "share", "seq": 2, "share": b64url(b"\x04" + bytes(64))}
     with pytest.raises(Refusal, match="share") as refusal:
         session.receive(json.dumps(share).encode())
     assert refusal.value.fatal
 
 
 def test_an_app_that_ends_the_session_gets_no_answer(secret: Secret) -> None:
-    error = {"type": "error", "id": "a1", "code": "code", "message": "the robot's code is wrong"}
+    error = {"type": "error", "seq": 1, "code": "code", "message": "the robot's code is wrong"}
     with pytest.raises(Ended):
         robot(secret).receive(json.dumps(error).encode())
 
@@ -162,7 +162,7 @@ def test_messages_in_the_clear_are_refused_once_encrypted(secret: Secret) -> Non
     session, app = robot(secret), AppSession(secret.code)
     exchange(session, app)
     with pytest.raises(Refusal, match="decrypt"):
-        session.receive(json.dumps({"type": "info", "id": "a9"}).encode())
+        session.receive(json.dumps({"type": "info", "seq": 9}).encode())
 
 
 def test_a_message_too_long_ends_the_session(secret: Secret) -> None:
@@ -177,7 +177,7 @@ def test_the_code_stays_out_of_logs(secret: Secret) -> None:
 def test_codes_and_discriminators() -> None:
     assert all(re.fullmatch(r"[0-9]{8}", draw_code()) for _ in range(100))
     assert all(re.fullmatch(r"[0-9A-F]{4}", draw_discriminator()) for _ in range(100))
-    assert setup_string("3F7A", "00012345") == "setup:1:3F7A:00012345"
+    assert setup_string("3F7A", "00012345") == "setup:2:3F7A:00012345"
 
 
 @pytest.mark.parametrize(

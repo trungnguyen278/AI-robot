@@ -24,7 +24,7 @@ adapter = "silero"
 [ports.identity]
 adapter = "tpm"
 
-# Set-up (protocol/setup/README.md): Bluetooth LE through BlueZ, the Wi-Fi through
+# Set-up (platform/protocols/setup/README.md): Bluetooth LE through BlueZ, the Wi-Fi through
 # NetworkManager, and its binding in a file, so that it knows it is set up while offline.
 [ports.setup_link]
 adapter = "bluez"
@@ -38,3 +38,7 @@ adapter = "file"
 # What its owner chose in its settings, kept in a file (docs/decisions/0016).
 [ports.settings]
 adapter = "file"
+
+# Its time zone: the system's, which the app sets at set-up.
+[ports.time_zone]
+adapter = "timedated"

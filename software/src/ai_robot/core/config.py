@@ -16,6 +16,7 @@ from typing import Any
 
 CONFIG_DIR_ENV = "AI_ROBOT_CONFIG_DIR"
 PROTOCOL_DIR_ENV = "AI_ROBOT_PROTOCOL_DIR"
+PLATFORM_DIR_ENV = "AI_ROBOT_PLATFORM_DIR"
 
 
 class ConfigError(Exception):
@@ -32,11 +33,22 @@ def default_config_dir() -> Path:
 
 def protocol_dir() -> Path:
     """``$AI_ROBOT_PROTOCOL_DIR`` if set, otherwise the ``protocol`` folder of this
-    checkout: the definitions the robot shares with the screen and the cloud."""
+    checkout: the protocols inside the robot, such as the screen's, and the copy of the
+    cloud link that it still speaks."""
     if value := os.environ.get(PROTOCOL_DIR_ENV):
         return Path(value)
     # src/ai_robot/core/config.py -> protocol
     return Path(__file__).resolve().parents[4] / "protocol"
+
+
+def platform_dir() -> Path:
+    """``$AI_ROBOT_PLATFORM_DIR`` if set, otherwise the ``platform/protocols`` folder of
+    this checkout: the protocols the robot shares with the project's other repositories,
+    from ai-platform, which this repository pins at ``platform/``."""
+    if value := os.environ.get(PLATFORM_DIR_ENV):
+        return Path(value)
+    # src/ai_robot/core/config.py -> platform/protocols
+    return Path(__file__).resolve().parents[4] / "platform" / "protocols"
 
 
 def available_profiles(config_dir: Path) -> list[str]:

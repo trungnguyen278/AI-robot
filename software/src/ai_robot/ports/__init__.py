@@ -74,6 +74,7 @@ from ai_robot.ports.screen import (
 )
 from ai_robot.ports.settings import SettingsStore
 from ai_robot.ports.setup import Connected, Disconnected, LinkEvent, Received, SetupLink
+from ai_robot.ports.time_zone import TimeZone
 
 # The port names used in the configuration ([ports.<name>]) and in Module.owns.
 PORT_TYPES: dict[str, type[Port]] = {
@@ -90,6 +91,7 @@ PORT_TYPES: dict[str, type[Port]] = {
     "setup_link": SetupLink,
     "network": Network,
     "daylight": Daylight,
+    "time_zone": TimeZone,
     "drive": DriveBase,
     "joints": Joints,
     "range": RangeSensor,
@@ -159,6 +161,7 @@ __all__ = [
     "Speech",
     "SpeechEnd",
     "SunTimes",
+    "TimeZone",
     "ToolCall",
     "Touch",
     "Trigger",

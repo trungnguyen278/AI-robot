@@ -24,6 +24,7 @@ from ai_robot.messages import (
     SettingChanged,
     SettingKind,
     SettingOffered,
+    SettingRequested,
     SettingSection,
     SettingsOpened,
 )
@@ -96,8 +97,9 @@ class SettingsModule(Module):
 
     - **Offers.** Modules offer their settings (``SettingOffered``); a new offer of the
       same name tells its new value. Each module applies its own.
-    - **Kept values.** A change made on the panel is checked against the setting's
-      schema, kept in the ``settings`` port, and sent to its module
+    - **Kept values.** A change made on the panel, or elsewhere such as in the app at
+      set-up (``SettingRequested``), is checked against the setting's schema, kept in
+      the ``settings`` port, and sent to its module
       (``SettingChanged``). At start, the values kept are sent again, before the
       modules run, so that they apply them before anything relies on them.
     - **The panel.** A press held on the face (``ScreenHeld``), or the cloud's
@@ -115,6 +117,7 @@ class SettingsModule(Module):
         self.holds = self._subscribe(ScreenHeld)
         self.actions = self._subscribe(PanelAction)
         self.closings = self._subscribe(PanelClosed)
+        self.requests = self._subscribe(SettingRequested)
         self.capabilities = CapabilityHost(self)
         self.capabilities.add(OPEN, self._open_by_cloud)
         self.own = SettingsHost(self)  # its own lines: the robot's name and software
@@ -148,6 +151,7 @@ class SettingsModule(Module):
             tasks.create_task(self._follow(self.holds, self._on_hold))
             tasks.create_task(self._follow(self.actions, self._on_action))
             tasks.create_task(self._follow(self.closings, self._on_closed))
+            tasks.create_task(self._follow(self.requests, self._on_request))
             tasks.create_task(self.capabilities.serve())
             tasks.create_task(self.own.serve())
 
@@ -231,19 +235,33 @@ class SettingsModule(Module):
             if setting.closes:
                 self._close()
             return
-        problem = self._schemas[setting.name].problem(action.value)
+        await self._choose(setting, action.value)
+
+    async def _on_request(self, request: SettingRequested) -> None:
+        setting = self.settings.get(request.name)
+        if setting is None or setting.kind is not SettingKind.VALUE:
+            self.log.warning("the settings have no value %r to set", request.name)
+            return
+        await self._choose(setting, request.value)
+
+    async def _choose(self, setting: Setting, value: Any) -> None:
+        """The owner chose ``value`` for ``setting``, on the panel or elsewhere: keep it,
+        and pass it on to its module."""
+        problem = self._schemas[setting.name].problem(value)
         if problem is not None:
-            self.log.warning("setting %s: refused %r: %s", setting.name, action.value, problem)
-            self._show()  # the panel shows the value as it is
+            self.log.warning("setting %s: refused %r: %s", setting.name, value, problem)
+            if self.is_open:
+                self._show()  # the panel shows the value as it is
             return
         # The panel shows the change at once, as the owner's screen already does, so that
         # no state sent before the module takes it puts the old value back on screen. The
         # module offers the setting again if it cannot take the value.
-        self.settings[setting.name] = dataclasses.replace(setting, value=action.value)
-        self._show()
-        self.kept[setting.name] = action.value
+        self.settings[setting.name] = dataclasses.replace(setting, value=value)
+        if self.is_open:
+            self._show()
+        self.kept[setting.name] = value
         try:
             await self.store.save(self.kept)
         except OSError as error:
             self.log.error("cannot keep the robot's settings: %s", error)
-        self.bus.publish(SettingChanged(setting.name, action.value))
+        self.bus.publish(SettingChanged(setting.name, value))
