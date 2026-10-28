@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 """Set-up: the owner sets the robot up from the app, over Bluetooth LE
-(protocol/setup/README.md; docs/decisions/0015-set-up.md)."""
+(platform/protocols/setup/README.md; docs/decisions/0015-set-up.md)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any, TypeVar
 
 from ai_robot import software_version
 from ai_robot.core.checks import positive
-from ai_robot.core.config import protocol_dir
+from ai_robot.core.config import platform_dir
 from ai_robot.core.data import Schema, encode
 from ai_robot.core.module import Module, ModuleContext
 from ai_robot.core.settings import SettingsHost
@@ -33,6 +33,9 @@ from ai_robot.core.setup_session import (
 )
 from ai_robot.messages import (
     BindingChanged,
+    LocaleApplied,
+    LocaleChanged,
+    LocaleRequested,
     RegistrationRequested,
     RegistrationSigned,
     SceneRequest,
@@ -56,15 +59,16 @@ _NOTHING_YET = object()  # what the screen was asked to show before anything
 
 # How this implementation works, which nobody needs to tune.
 REGISTRATION_TIMEOUT = 10.0  # seconds cloud has to sign a registration
+CONFIGURE_TIMEOUT = 10.0  # seconds system has to take the languages and the time zone
 
 
 def _load_schema() -> Schema:
-    path = protocol_dir() / "setup" / "schema.json"
+    path = platform_dir() / "setup" / "schema.json"
     try:
         schema = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise ValueError(f"cannot read the set-up protocol's schema: {error}") from None
-    return Schema("protocol/setup/schema.json", {**schema, "$ref": "#/$defs/from_app"})
+    return Schema("platform/protocols/setup/schema.json", {**schema, "$ref": "#/$defs/from_app"})
 
 
 def _network_fields(status: NetworkStatus) -> dict[str, Any]:
@@ -83,7 +87,7 @@ def _network_fields(status: NetworkStatus) -> dict[str, Any]:
 
 class SetupModule(Module):
     """Opens set-up, shows the code, and serves the app's session
-    (protocol/setup/README.md).
+    (platform/protocols/setup/README.md).
 
     - **When.** Set-up opens when the robot is unbound, as ``cloud`` says
       (``BindingChanged``): at start, or when the server stops accepting it. It also
@@ -102,6 +106,9 @@ class SetupModule(Module):
       (``RegistrationRequested``, ``RegistrationSigned``). Once the app finishes, the
       screen shows that the robot is connecting, until the server accepts it, or for
       ``bind_timeout`` seconds.
+    - **The first settings.** ``system`` takes the languages and the time zone the app
+      offers (``LocaleRequested``, ``LocaleApplied``), and tells them (``LocaleChanged``)
+      for ``info``.
     """
 
     owns = ("setup_link", "network")
@@ -153,6 +160,9 @@ class SetupModule(Module):
             self._start_from_settings,
         )
         self._signatures = self.bus.subscribe(RegistrationSigned)
+        self._locales = self.bus.subscribe(LocaleChanged)
+        self._applied = self.bus.subscribe(LocaleApplied)
+        self.locale: LocaleChanged | None = None  # the robot's languages and time zone
         self._schema: Schema | None = None
         self.robot_id: str | None = None
         self.bound: bool | None = None  # None until cloud says
@@ -168,6 +178,7 @@ class SetupModule(Module):
         self._inbox: asyncio.Queue[bytes | None] = asyncio.Queue()
         self._serving: asyncio.Task[None] | None = None
         self._pending: dict[str, asyncio.Future[RegistrationSigned]] = {}
+        self._configuring: dict[str, asyncio.Future[LocaleApplied]] = {}
         self._numbers = itertools.count(1)
         self._changed = asyncio.Event()  # wakes the timer
         self._opening = asyncio.Lock()  # one opening or closing at a time
@@ -193,6 +204,7 @@ class SetupModule(Module):
             tasks.create_task(self._watch_touches())
             tasks.create_task(self.settings.serve())
             tasks.create_task(self._watch_signatures())
+            tasks.create_task(self._watch_locale())
             tasks.create_task(self._watch_link())
             tasks.create_task(self._watch_time())
 
@@ -340,6 +352,22 @@ class SetupModule(Module):
             if future is not None and not future.done():
                 future.set_result(signed)
 
+    async def _watch_locale(self) -> None:
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(self._keep_locale())
+            tasks.create_task(self._watch_applied())
+
+    async def _keep_locale(self) -> None:
+        while True:
+            self.locale = await self._locales.get()
+
+    async def _watch_applied(self) -> None:
+        while True:
+            applied = await self._applied.get()
+            future = self._configuring.get(applied.request)
+            if future is not None and not future.done():
+                future.set_result(applied)
+
     async def _watch_time(self) -> None:
         """Closes set-up when its time is up, and ends the wait for the server."""
         while True:
@@ -381,7 +409,7 @@ class SetupModule(Module):
                 self._inbox.put_nowait(None)
 
     async def _refuse(self, peer: str) -> None:
-        busy = {"type": "error", "id": "r1", "code": "busy", "message": "set-up is busy or closed"}
+        busy = {"type": "error", "seq": 1, "code": "busy", "message": "set-up is busy or closed"}
         await self._link("answer an app", self.link.send(peer, encode(busy).encode("utf-8")))
         await self._link("drop an app", self.link.drop(peer))
 
@@ -411,7 +439,7 @@ class SetupModule(Module):
                 return False
             if data is None:  # the app left
                 return False
-            reply_to: str | None = None
+            reply_to: int | None = None
             try:
                 reply, request = session.receive(data)
                 if reply is not None:
@@ -421,7 +449,7 @@ class SetupModule(Module):
                     self._show()
                     continue
                 if request is not None:
-                    reply_to = request["id"]
+                    reply_to = request["seq"]
                     answer = await self._answer(session, request)
                     await self.link.send(peer, session.pack(answer))
                     if request["type"] == "finish":
@@ -455,15 +483,21 @@ class SetupModule(Module):
         self._changed.set()
 
     async def _answer(self, session: Session, request: dict[str, Any]) -> dict[str, Any]:
-        kind, reply_to = request["type"], request["id"]
+        kind, reply_to = request["type"], request["seq"]
         if kind == "info":
+            if self.locale is None:
+                raise Refusal("protocol", "the robot's languages and time zone are not known yet")
             return session.message(
                 "info",
                 reply_to,
-                robot={
+                device={
                     "id": self.robot_id,
                     "name": self.robot.display_name,
+                    "kind": self.robot.kind,
+                    "model": self.robot.model,
                     "software": software_version(),
+                    "languages": list(self.locale.languages),
+                    "time_zone": self.locale.time_zone,
                 },
                 bound=self.bound is True,
                 network=_network_fields(await self._network(self.network.status())),
@@ -472,6 +506,14 @@ class SetupModule(Module):
             return session.message("networks", reply_to, networks=await self._networks())
         if kind == "join":
             return session.message("joined", reply_to, network=await self._join(request))
+        if kind == "configure":
+            applied = await self._configure(request)
+            return session.message(
+                "configured",
+                reply_to,
+                languages=list(applied.languages),
+                time_zone=applied.time_zone,
+            )
         if kind == "register":
             registration = await self._register(request)
             return session.message("registration", reply_to, registration=registration)
@@ -508,6 +550,29 @@ class SetupModule(Module):
             raise Refusal(error.failure.value, str(error)) from None
         self.log.info("the robot joined a network")  # never its name or its password
         return _network_fields(status)
+
+    async def _configure(self, request: dict[str, Any]) -> LocaleApplied:
+        number = f"setup-{next(self._numbers)}"
+        future: asyncio.Future[LocaleApplied] = asyncio.get_running_loop().create_future()
+        self._configuring[number] = future
+        try:
+            languages = request.get("languages")
+            self.bus.publish(
+                LocaleRequested(
+                    number,
+                    None if languages is None else tuple(languages),
+                    request.get("time_zone"),
+                )
+            )
+            try:
+                applied = await asyncio.wait_for(future, CONFIGURE_TIMEOUT)
+            except TimeoutError:
+                raise Refusal("time_zone", "the robot did not take its settings in time") from None
+        finally:
+            del self._configuring[number]
+        if applied.error is not None:
+            raise Refusal(applied.error, applied.detail or "the robot could not take its settings")
+        return applied
 
     async def _register(self, request: dict[str, Any]) -> str:
         if self.bound:

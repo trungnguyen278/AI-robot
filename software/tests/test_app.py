@@ -115,7 +115,7 @@ def config(
 ) -> dict[str, Any]:
     tables = {name: {"events": events, **settings.get(name, {})} for name in enabled}
     return {
-        "robot": {"display_name": "Robot"},
+        "robot": {"display_name": "Robot", "kind": "robot", "model": "concept-v0"},
         "app": {"shutdown_step_timeout": timeout},
         "modules": {"enabled": enabled, **tables},
         "ports": {"lights": {"adapter": "recording", "events": events}},

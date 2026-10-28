@@ -15,6 +15,7 @@ adapters is selected:
 - ``files/``: the robot's state in files;
 - ``bluez/``, with dbus-fast: Bluetooth LE, for set-up (Linux);
 - ``networkmanager/``, with dbus-fast: the robot's Wi-Fi (Linux);
+- ``timedated/``, with dbus-fast: the robot's time zone (Linux);
 - ``sun/``: sunrise and sunset;
 - later, Picamera2 or the body link.
 """
@@ -79,6 +80,10 @@ ADAPTERS: dict[str, dict[str, str]] = {
     "daylight": {
         "fixed": "ai_robot.adapters.sun.daylight:FixedDaylight",
         "solar": "ai_robot.adapters.sun.daylight:SolarDaylight",
+    },
+    "time_zone": {
+        "sim": "ai_robot.adapters.sim.time_zone:SimTimeZone",
+        "timedated": "ai_robot.adapters.timedated.time_zone:TimedatedTimeZone",
     },
     "drive": {"sim": "ai_robot.adapters.sim.body:SimDriveBase"},
     "joints": {"sim": "ai_robot.adapters.sim.body:SimJoints"},

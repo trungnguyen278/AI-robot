@@ -29,6 +29,7 @@ from ai_robot.messages import (
     SettingChanged,
     SettingKind,
     SettingOffered,
+    SettingRequested,
     SettingSection,
     SettingsOpened,
 )
@@ -45,7 +46,7 @@ def context(name: str, bus: Bus, ports: dict[str, Any] | None = None) -> ModuleC
         name=name,
         bus=bus,
         ports=ports or {},
-        robot=RobotInfo(display_name="Robot"),
+        robot=RobotInfo(display_name="Robot", kind="robot", model="concept-v0"),
         log=logging.getLogger(f"test.{name}"),
     )
 
@@ -219,6 +220,24 @@ def test_a_change_is_kept_and_applied_by_its_module() -> None:
                 "lamp.on": False,
             }
             assert panel.item("lamp.state") is not None
+
+    asyncio.run(main())
+
+
+def test_a_choice_made_elsewhere_is_kept_and_applied_as_one_made_on_the_panel() -> None:
+    """Such as the languages the app gives at set-up: the panel may be closed."""
+
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            robot.bus.publish(SettingRequested("lamp.colour", "green"))
+            await until(lambda: robot.lamp.colour == "green")
+            assert robot.store.values == {"lamp.colour": "green"}
+            assert robot.panels.pending == 0  # nothing to show: the panel is closed
+            robot.bus.publish(SettingRequested("lamp.colour", "blue"))  # not a choice
+            robot.bus.publish(SettingRequested("lamp.state", "dim"))  # a line, not a value
+            robot.bus.publish(SettingRequested("lamp.on", False))
+            await until(lambda: robot.lamp.on is False)
+            assert robot.store.values == {"lamp.colour": "green", "lamp.on": False}
 
     asyncio.run(main())
 

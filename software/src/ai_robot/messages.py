@@ -294,7 +294,7 @@ class ConversationFromCloud(Message):
     part: CloudPart
 
 
-# ---- Set-up: the owner sets the robot up from the app (protocol/setup/README.md) ----
+# ---- Set-up: the owner sets the robot up from the app (platform/protocols/setup/README.md) ----
 # The setup module holds set-up; the cloud module, which owns the robot's key, signs its
 # registration and learns from the server whether the robot is bound.
 
@@ -311,7 +311,7 @@ class BindingChanged(Message):
 @dataclass(frozen=True, slots=True)
 class RegistrationRequested(Message):
     """The app asks for the robot's registration with ``server``, for ``challenge``
-    (protocol/setup/README.md, The registration). Published by setup, read by cloud,
+    (platform/protocols/setup/README.md, The registration). Published by setup, read by cloud,
     which answers with a ``RegistrationSigned`` of the same ``request``."""
 
     request: str  # unique among the requests in progress
@@ -329,6 +329,55 @@ class RegistrationSigned(Message):
     registration: str | None = None
     error: str | None = None
     detail: str = ""  # for people
+
+
+@dataclass(frozen=True, slots=True)
+class LocaleRequested(Message):
+    """The owner asks for these ``languages``, in their order of preference, or this
+    ``time_zone``, or both, as the app does at set-up (platform/protocols/setup, ``configure``).
+    Published by setup, read by system, which answers with a ``LocaleApplied`` of the
+    same ``request``."""
+
+    request: str  # unique among the requests in progress
+    languages: tuple[str, ...] | None = None  # BCP 47 tags
+    time_zone: str | None = None  # an IANA name
+
+    def __post_init__(self) -> None:
+        if self.languages is None and self.time_zone is None:
+            raise ValueError("a locale request asks for languages, a time zone, or both")
+        if self.languages is not None:
+            object.__setattr__(self, "languages", tuple(self.languages))
+
+
+@dataclass(frozen=True, slots=True)
+class LocaleApplied(Message):
+    """What the robot keeps after a ``LocaleRequested``: the languages asked for that it
+    supports, in their order, or its own if it supports none of them; and its time zone.
+    ``error`` is set-up's code ``time_zone`` when it could not take the zone asked for.
+    Published by system."""
+
+    request: str
+    languages: tuple[str, ...]
+    time_zone: str
+    error: str | None = None
+    detail: str = ""  # for people
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "languages", tuple(self.languages))
+
+
+@dataclass(frozen=True, slots=True)
+class LocaleChanged(Message):
+    """The robot's languages, in the owner's order, and its time zone (ai-platform
+    ADR-0002). Published by system when it starts, then on every change."""
+
+    languages: tuple[str, ...]  # BCP 47 tags; the first is the one it shows
+    time_zone: str  # an IANA name
+
+    def __post_init__(self) -> None:
+        if not self.languages:
+            raise ValueError("the robot has at least one language")
+        object.__setattr__(self, "languages", tuple(self.languages))
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,6 +406,7 @@ class SettingSection(StrEnum):
 
     NETWORK = "Wi-Fi and app"
     SOUND = "Sound"
+    LOCALE = "Language and time"
     CLOUD = "What the cloud may do"
     ABOUT = "About"
 
@@ -426,6 +476,20 @@ class SettingChanged(Message):
 
     name: str
     value: Any = None
+
+    def __post_init__(self) -> None:
+        _plain_value(self.name, self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class SettingRequested(Message):
+    """The owner chose ``value`` for setting ``name`` somewhere other than the panel,
+    such as in the app at set-up. The settings module keeps it and passes it on, as it
+    does a choice made on the panel. Published by the module that heard it, read by
+    settings."""
+
+    name: str
+    value: Any
 
     def __post_init__(self) -> None:
         _plain_value(self.name, self.value)

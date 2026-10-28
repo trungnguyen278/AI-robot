@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 """SPAKE2+ (RFC 9383) on P-256, with SHA-256, HKDF and HMAC: the exchange that turns the
-set-up code into keys (protocol/setup/README.md, SPAKE2+).
+set-up code into keys (platform/protocols/setup/README.md, SPAKE2+).
 
 The robot is the Verifier: it holds w0 and L, never the code itself. The Prover is the app;
 it is here too, for the tests and for tools that play the app.
@@ -34,7 +34,7 @@ N_POINT = "03d8bbd6c639c62937b04d997f38c3770719c629d7014d49a24b4f98baa1292b49"
 # 64 bits more than the order, to keep the bias below 2^-64: 40 bytes for P-256.
 HALF = (ORDER.bit_length() + 64 + 7) // 8
 # The PBKDF that turns the code into w0 and w1: scrypt with the parameters RFC 9383, §3.2,
-# recommends (protocol/setup/README.md).
+# recommends (platform/protocols/setup/README.md).
 SCRYPT_N = 32768
 SCRYPT_R = 8
 SCRYPT_P = 1

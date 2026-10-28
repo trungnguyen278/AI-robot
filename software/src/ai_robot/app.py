@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import re
 from collections.abc import Coroutine, Iterable, Mapping
 from typing import Any
 
@@ -18,6 +19,11 @@ from ai_robot.modules import MODULES
 from ai_robot.ports import Port
 
 log = logging.getLogger(__name__)
+
+# The forms the protocols give a device's kind and model: $defs/code and $defs/name in the
+# schemas of ai-platform's protocols/cloud and protocols/setup.
+DEVICE_KIND = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+DEVICE_MODEL = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 
 
 class ModuleError(Exception):
@@ -33,7 +39,7 @@ class App:
     def __init__(self, config: Mapping[str, Any]) -> None:
         self.config = config
         self.bus = Bus()
-        self.robot = RobotInfo(display_name="")
+        self.robot = RobotInfo(display_name="", kind="", model="")
         self.shutdown_timeout = 0.0  # seconds for each step of the shutdown, once built
         self.adapters: dict[str, Port] = {}
         self.modules: list[Module] = []
@@ -55,7 +61,12 @@ class App:
         name = robot_table.get("display_name")
         if not isinstance(name, str) or not name:
             raise ConfigError("robot.display_name must be the name shown to people")
-        robot = RobotInfo(display_name=name)
+        kind, model = robot_table.get("kind"), robot_table.get("model")
+        if not isinstance(kind, str) or not DEVICE_KIND.match(kind):
+            raise ConfigError(f"robot.kind must be a kind of device, such as robot, got {kind!r}")
+        if not isinstance(model, str) or not DEVICE_MODEL.match(model):
+            raise ConfigError(f"robot.model must be its model's name, got {model!r}")
+        robot = RobotInfo(display_name=name, kind=kind, model=model)
         timeout = app_table.get("shutdown_step_timeout")
         if not (
             isinstance(timeout, int | float)

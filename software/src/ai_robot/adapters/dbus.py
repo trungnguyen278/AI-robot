@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 """D-Bus through dbus-fast: what the adapters of system services share (``bluez/``,
-``networkmanager/``)."""
+``networkmanager/``, ``timedated/``)."""
 
 from __future__ import annotations
 

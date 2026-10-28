@@ -87,7 +87,7 @@ def context(name: str, bus: Bus, ports: Mapping[str, Any]) -> ModuleContext:
         name=name,
         bus=bus,
         ports=dict(ports),
-        robot=RobotInfo(display_name="Robot"),
+        robot=RobotInfo(display_name="Robot", kind="robot", model="concept-v0"),
         log=logging.getLogger(f"test.{name}"),
     )
 
@@ -546,7 +546,7 @@ def test_the_cloud_cannot_show_the_set_up_code() -> None:
         screen, cloud, module, link = screen_robot()
         async with running(module, link):
             await until(lambda: cloud.online)
-            fake = {"state": "code", "code": "12345678", "link": "setup:1:3F7A:12345678"}
+            fake = {"state": "code", "code": "12345678", "link": "setup:2:3F7A:12345678"}
             data, error = await cloud.call("screen.show_scene", {"scene": "setup", "data": fake})
             assert data is None and error is not None and error.startswith("invalid arguments")
             assert screen.state.scene is None

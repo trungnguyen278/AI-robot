@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
-"""The set-up protocol's session (protocol/setup/README.md): the exchange that turns the
-code on the robot's screen into keys, then the messages, encrypted.
+"""The set-up protocol's session (platform/protocols/setup/README.md): the exchange
+that turns the code on the robot's screen into keys, then the messages, encrypted.
 
 The transport carries whole messages: it splits and joins them itself (the Bluetooth
 fragments), so this module sees only messages. ``Session`` is the robot's side;
@@ -28,10 +28,10 @@ from ai_robot.core.data import Schema, encode
 from ai_robot.core.jose import b64url, b64url_decode
 from ai_robot.core.spake2plus import ExchangeError, Prover, Verifier, record, stretch
 
-# Fixed by the protocol (protocol/setup/README.md).
-PROTOCOL = "1.0"
-CONTEXT_LABEL = b"ai-robot/setup/1"  # starts the context of the exchange
-KEYS_INFO = b"ai-robot/setup/1 keys"  # HKDF's info for the session keys
+# Fixed by the protocol (platform/protocols/setup/README.md).
+PROTOCOL = "2.0"
+CONTEXT_LABEL = b"ai-platform/setup/2"  # starts the context of the exchange
+KEYS_INFO = b"ai-platform/setup/2 keys"  # HKDF's info for the session keys
 KEY_BYTES = 16  # each side's AES-128-GCM key
 NONCE_ZEROS = bytes(4)  # a nonce is these, then the sender's counter
 COUNTER_BYTES = 8
@@ -69,7 +69,7 @@ def draw_discriminator() -> str:
 
 
 def setup_string(discriminator: str, code: str) -> str:
-    """What the QR code holds: ``setup:1:<discriminator>:<code>``."""
+    """What the QR code holds: ``setup:<major version>:<discriminator>:<code>``."""
     return f"setup:{PROTOCOL.split('.')[0]}:{discriminator}:{code}"
 
 
@@ -188,19 +188,16 @@ class Session:
         session confirms it."""
         return self.stage in (Stage.CONFIRM, Stage.OPEN)
 
-    def _id(self) -> str:
+    def message(self, kind: str, reply_to: int | None = None, **fields: Any) -> dict[str, Any]:
+        """A message of the robot's, with its number: ``seq``, from 1 in each session."""
         self._numbers += 1
-        return f"r{self._numbers}"
-
-    def message(self, kind: str, reply_to: str | None = None, **fields: Any) -> dict[str, Any]:
-        """A message of the robot's, with its own ``id``."""
-        message: dict[str, Any] = {"type": kind, "id": self._id()}
+        message: dict[str, Any] = {"type": kind, "seq": self._numbers}
         if reply_to is not None:
             message["reply_to"] = reply_to
         message.update(fields)
         return message
 
-    def error(self, refusal: Refusal, reply_to: str | None = None) -> bytes:
+    def error(self, refusal: Refusal, reply_to: int | None = None) -> bytes:
         """The error message for ``refusal``, ready to send."""
         return self.pack(
             self.message("error", reply_to, code=refusal.code, message=refusal.message)
@@ -243,7 +240,7 @@ class Session:
         reply = self.pack(
             self.message(
                 "hello",
-                message["id"],
+                message["seq"],
                 protocol=PROTOCOL,
                 discriminator=self._discriminator,
                 salt=b64url(self._secret.salt),
@@ -266,7 +263,7 @@ class Session:
             raise Refusal("protocol", str(error), fatal=True) from None
         self.stage = Stage.CONFIRM
         return self.pack(
-            self.message("share", message["id"], share=b64url(share), confirm=b64url(confirmation))
+            self.message("share", message["seq"], share=b64url(share), confirm=b64url(confirmation))
         )
 
     def _confirm(self, message: dict[str, Any]) -> None:
@@ -295,7 +292,7 @@ class AppSession:
 
     def _message(self, kind: str, **fields: Any) -> dict[str, Any]:
         self._numbers += 1
-        return {"type": kind, "id": f"a{self._numbers}", **fields}
+        return {"type": kind, "seq": self._numbers, **fields}
 
     def _pack(self, message: Mapping[str, Any]) -> bytes:
         data = encode(message).encode("utf-8")

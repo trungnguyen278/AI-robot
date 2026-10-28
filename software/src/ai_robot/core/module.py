@@ -17,9 +17,12 @@ P = TypeVar("P", bound=Port)
 
 @dataclass(frozen=True)
 class RobotInfo:
-    """Facts about the robot that any module may need."""
+    """Facts about the robot that any module may need: the name shown to people, and,
+    for the cloud and the app, its kind of device and its model (ai-platform ADR-0001)."""
 
     display_name: str
+    kind: str
+    model: str
 
 
 @dataclass(frozen=True)

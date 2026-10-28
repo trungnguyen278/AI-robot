@@ -16,6 +16,10 @@
 # The product name shown to people (display, Bluetooth, app). It appears nowhere else:
 # code and identifiers never contain it (docs/decisions/0003-neutral-repo-naming.md).
 display_name = "Robot"
+# What it is, for the cloud and the app (ai-platform ADR-0001): its kind of device, and
+# its model, as the hardware's concept names it (hardware/README.md).
+kind = "robot"
+model = "concept-v0"
 
 [log]
 level = "INFO"
@@ -37,6 +41,12 @@ battery_interval = 5.0  # seconds between battery reports
 charging_scene_seconds = 4.0  # how long the charging scene stays after the robot is plugged in
 ready_color = [0, 40, 0]  # the status light while the robot runs: red, green, blue from 0 to 255
 low_battery_percent = 15.0  # at or below it, unless charging, the battery is low: shown in red
+# The languages the robot can take, with their names on its settings panel (ai-platform
+# ADR-0002). A language joins once the cloud handles every step of a conversation in it.
+language_names = { vi = "Vietnamese", en = "English" }
+# As shipped; the owner changes them in the settings (docs/decisions/0016), or the app at
+# set-up. In order: the robot shows the first, and understands each.
+languages = ["vi"]
 
 [modules.behavior]
 idle_minutes = 5.0  # with no tap or conversation for this long, the screen shows the clock
@@ -67,7 +77,7 @@ volume = 80  # percent of full loudness for the robot's voice, by steps of 5
 microphones = true  # whether the robot listens: off, it hears nothing (PRIV-1)
 
 [modules.setup]
-# Set-up from the app, over Bluetooth LE (protocol/setup/README.md; docs/decisions/0015).
+# Set-up from the app, over Bluetooth LE (platform/protocols/setup/README.md; docs/decisions/0015).
 window = 900.0  # seconds set-up stays open with no session: 15 minutes, Matter's longest
 attempts = 20  # failed attempts with the code after which set-up closes, as in Matter
 idle = 120.0  # seconds a session may stay silent before it ends
@@ -192,7 +202,7 @@ adapter = "sim"
 path = "~/.local/state/ai-robot/settings.json"
 
 # Where the robot keeps its binding: the server it was registered with at set-up, and
-# whether that server accepts it (protocol/setup/README.md). "sim" keeps it in memory, as
+# whether that server accepts it (platform/protocols/setup/README.md). "sim" keeps it in memory, as
 # a robot the simulated cloud knows; "file" keeps it in a file, on the robot's data
 # partition.
 [ports.binding]
@@ -205,7 +215,7 @@ bound = true
 # In the robot's state directory (XDG's, in the home of the user who runs it).
 path = "~/.local/state/ai-robot/binding.json"
 
-# The link the app sets the robot up through: Bluetooth LE (protocol/setup/README.md).
+# The link the app sets the robot up through: Bluetooth LE (platform/protocols/setup/README.md).
 # "bluez": the Pi's Bluetooth, through BlueZ on D-Bus.
 [ports.setup_link]
 adapter = "sim"
@@ -232,6 +242,17 @@ scan_timeout = 10.0  # seconds a scan for networks may take
 # When the sun rises and sets. "fixed" until the robot's place is known; for the real
 # times, select "solar" in local.toml with the robot's latitude and longitude (see
 # local.example.toml), so that the place stays on this machine.
+[ports.time_zone]
+adapter = "sim"
+
+# "sim": kept in memory, so that a development computer keeps its own time zone.
+[ports.time_zone.sim]
+zone = "UTC"  # where the simulated robot starts
+
+# "timedated": the system's time zone, through systemd-timedated on D-Bus.
+[ports.time_zone.timedated]
+bus = "system"  # the D-Bus systemd-timedated is on; tests give another bus's address
+
 [ports.daylight]
 adapter = "fixed"
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 /* Set-up: the code the owner scans or types into the app, to set the robot up over
-   Bluetooth LE (protocol/setup/README.md), then how set-up is going.
+   Bluetooth LE (platform/protocols/setup/README.md), then how set-up is going.
 
    Data: `state`, one of STATES:
    - `code`: the code, as a QR code and in digits, with the discriminator that tells
@@ -115,7 +115,7 @@ const WORDS = {
 export default {
   tone: 'cyan',
   slot: CORNER,
-  example: { state: 'code', code: '12345678', discriminator: '3F7A', link: 'setup:1:3F7A:12345678' },
+  example: { state: 'code', code: '12345678', discriminator: '3F7A', link: 'setup:2:3F7A:12345678' },
 
   draw(ctx, t, { alpha, data, pixels }) {
     const state = STATES.includes(data.state) ? data.state : 'closed';

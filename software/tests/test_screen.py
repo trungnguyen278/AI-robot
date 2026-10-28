@@ -60,7 +60,7 @@ def context(bus: Bus, screen: SimScreen) -> ModuleContext:
         name="screen",
         bus=bus,
         ports={"screen": screen},
-        robot=RobotInfo(display_name="Robot"),
+        robot=RobotInfo(display_name="Robot", kind="robot", model="concept-v0"),
         log=logging.getLogger("test"),
     )
 
