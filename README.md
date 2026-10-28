@@ -52,8 +52,9 @@ Each folder is an independent component with its own README; see [Contributing](
 
 | Repository | Role | Status |
 |---|---|---|
-| `ai-robot-server` | AI backend and device management | Not created yet |
-| `ai-robot-app` | Mobile companion app | Not created yet |
+| [ai-cloud](https://github.com/trungnguyen278/ai-cloud) | The cloud side of the project's AI devices: their AI, tokens, set-up and updates | Private for now |
+| [ai-platform](https://github.com/trungnguyen278/ai-platform) | What the repositories share: the protocols between them, and the decisions that span them ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)) | Private for now |
+| `ai-app` | The owner's app: set-up, settings, remote control | Not created yet |
 | [Luni_Robot](https://github.com/trungnguyen278/Luni_Robot) | Previous generation (ESP32-S3 + ESP32-C5) | Superseded — see [docs/legacy.md](docs/legacy.md) |
 
 ## License

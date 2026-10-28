@@ -1,5 +1,7 @@
 # Cloud link — robot ⇄ ai-robot-server
 
+> **Moved:** this protocol is maintained in [ai-platform](https://github.com/trungnguyen278/ai-platform) (`protocols/cloud/`) from 2026-10-28. This copy is frozen until this repository pins ai-platform at `platform/` ([ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md)).
+
 The link between the robot software and `ai-robot-server`:
 - On the robot (`software/`), it is the `cloud` module and the `livekit` adapter of its `cloud` port.
 - The server, built anew, does not exist yet.

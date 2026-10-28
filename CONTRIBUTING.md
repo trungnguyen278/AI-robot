@@ -76,7 +76,7 @@ Checklists for these steps live in `.claude/skills/<name>/SKILL.md`.
 
 - Hardware changes → update `hardware/` in the same commit (`hardware-change` checklist).
 - Protocol changes → update `protocol/` first, then both sides, in the same pull request.
-- Significant technical decisions → an ADR in `docs/decisions/` (`adr` checklist). Anything not explicitly agreed stays `Proposed`.
+- Significant technical decisions → an ADR in `docs/decisions/` (`adr` checklist); one that spans the project's repositories, in ai-platform (ai-platform ADR-0001). Anything not explicitly agreed stays `Proposed`.
 - End of a work session → an entry in `docs/devlog/` (`devlog` checklist).
 
 ## Secrets and large files

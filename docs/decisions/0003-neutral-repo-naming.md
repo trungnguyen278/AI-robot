@@ -1,6 +1,6 @@
 # 0003 — Descriptive repository names without the product name
 
-- **Status:** Accepted
+- **Status:** Superseded by [ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md) for the repositories' names; its rule against product names stays
 - **Date:** 2026-10-15
 
 ## Context
