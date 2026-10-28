@@ -4,8 +4,8 @@
 
 ```
               ┌──────────────── Raspberry Pi 5 — brain ────────────────┐
- Mic ──I2S──▶ │ voice: wake word, VAD, AEC, conversation               │
- Speaker ◀─── │ vision: AI camera (IMX500)                             │ ◀─ Wi-Fi ─▶ ai-robot-server
+ Mics ─USB──▶ │ voice: wake word, VAD, conversation                    │
+ Speaker ◀USB │ vision: AI camera (IMX500)                             │ ◀─ Wi-Fi ─▶ ai-robot-server
  Camera ─CSI▶ │ screen: the face on the 7" display (ui/)               │ ◀─ BLE ───▶ ai-robot-app
  Display ◀DSI │ motion · system · behavior                             │
               └───────────────────────────┬────────────────────────────┘
@@ -65,5 +65,5 @@ The `cloud` module links the robot to `ai-robot-server` over the [cloud protocol
 - [ ] Pi ⇄ body link (concept v0 shows UART/I2C) and the packet format.
 - [ ] Does the body controller or the Pi drive the motor driver?
 - [ ] How AI work is split between the camera, the Pi and the server. The core AI runs in the cloud; the robot ⇄ cloud link's requirements are drafted in [`protocol/cloud/requirements.md`](../protocol/cloud/requirements.md). The transport is WebRTC through LiveKit ([ADR-0009](decisions/0009-cloud-link-webrtc.md)), the robot proves its identity with a key in a TPM ([ADR-0010](decisions/0010-device-identity.md)), and the messages are proposed in [ADR-0008](decisions/0008-cloud-link-messages.md). Version 2.1 of the protocol is implemented on the robot, its key kept in a file until the TPM is fitted. Updates and where moods live come next.
-- [ ] Audio: ReSpeaker HAT or MAX98357A — they cannot share the I2S pins; see [hardware/README.md](../hardware/README.md).
+- [ ] Audio — proposed in [ADR-0011](decisions/0011-audio-voice-processor.md): a USB voice processor (XMOS XVF3800) with four microphones and echo cancellation, which the robot also speaks through.
 - [ ] How the robot draws its screen — proposed in [ADR-0006](decisions/0006-screen-renderer.md): a renderer in a full-screen browser ([ui/](../ui/README.md)), driven by the Pi software over the [screen protocol](../protocol/screen/README.md).

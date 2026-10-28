@@ -17,3 +17,4 @@ Each significant decision is a short file: context, decision, alternatives consi
 | [0008](0008-cloud-link-messages.md) | Cloud link messages: typed JSON, MCP for capabilities, binary audio frames | Proposed; the audio frames superseded by [0009](0009-cloud-link-webrtc.md) | 2026-10-16 |
 | [0009](0009-cloud-link-webrtc.md) | Cloud link transport: WebRTC through a LiveKit server | Accepted | 2026-10-22 |
 | [0010](0010-device-identity.md) | Device identity: a key in a TPM, short-lived tokens from signed assertions | Accepted | 2026-10-22 |
+| [0011](0011-audio-voice-processor.md) | Audio: a USB voice processor (XMOS XVF3800) that the robot also speaks through | Proposed | 2026-10-22 |

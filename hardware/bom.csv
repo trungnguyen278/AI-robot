@@ -10,11 +10,13 @@ id,item,qty,block,interface,supply,status,notes
 9,Raspberry Pi Active Cooler,1,compute,Pi 5 fan connector,Pi 5,planned,
 10,Waveshare 7inch DSI LCD (C),1,face,DSI + I2C (touch),5V rail,planned,"1024x600, capacitive touch"
 11,Raspberry Pi AI Camera (IMX500),1,vision,CSI,Pi 5,planned,
-12,ReSpeaker 2-Mics Pi HAT V2.0,1,audio,I2S + I2C (GPIO header),Pi 5,planned,I2S conflict with MAX98357A: open issue 1
-13,MAX98357A I2S amplifier + 4 Ohm 3W speaker,1,audio,I2S,5V rail,planned,May be dropped if the ReSpeaker speaker output is used
+12,reSpeaker XMOS XVF3800 USB 4-mic array (without XIAO),1,audio,USB (UAC 2.0) to the Pi 5,Pi 5 USB port,proposed,"ADR-0011: echo cancellation, beamforming, direction of a voice; drives the speaker. Power: open issue 10"
+13,Speaker 4 Ohm 5W with JST connector,1,audio,XVF3800 speaker connector,XVF3800 amplifier,proposed,ADR-0011; JST series to match the array's (unverified)
 14,ESP32-S3-DevKitC-1,1,body,UART to Pi 5,5V rail,planned,body-controller
 15,FEETECH STS3215 servo (12V version),8,neck + arms,TTL half-duplex servo bus,12V branch,planned,"2-DOF neck + 3-DOF per arm; 2.7A stall each at 12V"
 16,Half-duplex bus servo adapter for STS3215,1,neck + arms,ESP32-S3 UART <-> servo bus,-,proposed,Required: open issue 2
 17,VL53L1X ToF distance sensor (breakout),1,sensors,I2C (0x29),breakout-dependent,planned,
 18,NeoPixel LED strip,1,sensors,1-wire data from ESP32-S3,5V rail,planned,
 19,"Accessories (standoffs, screws, cables)",1,misc,-,-,planned,
+20,LetsTrust TPM (Infineon OPTIGA TPM SLB 9672),1,compute,SPI0 CE1 (header pins 17-26),Pi 5 3.3V (header pin 17),proposed,"ADR-0010: the robot's identity key; needs SPI0 free (ADR-0011)"
+21,2x5 stacking header (2.54 mm) for the TPM,1,compute,-,-,proposed,Clearance over the Active Cooler (LetsTrust)
