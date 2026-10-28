@@ -3,5 +3,9 @@
 #   [ports.camera]
 #   adapter = "picamera2"
 #
-# Until then this profile runs the same simulated adapters as desktop. The body stays
+# The ports without one yet run the simulated adapters, as desktop does. The body stays
 # simulated until the body controller is chosen (docs/decisions/0004).
+
+# The robot's identity, in its TPM (docs/decisions/0010). Needs the tpm extra.
+[ports.identity]
+adapter = "tpm"

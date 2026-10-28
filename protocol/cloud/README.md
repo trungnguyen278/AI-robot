@@ -19,9 +19,7 @@ Version **2.1**:
 - [`schema.json`](schema.json) defines every message, in JSON Schema 2020-12.
 - [`examples/`](examples/) holds whole sessions. The robot's tests check them, and the robot's own messages, against the schema (`software/tests/test_cloud_protocol.py`, `test_cloud_session.py`).
 
-> **Implemented by the robot so far:** everything below, with two limits:
-> - Its key lives in a file, kept by the `file` adapter of its `identity` port, until its TPM is fitted (ADR-0010).
-> - It offers audio only when a module holds conversations, and its voice module does not yet: it waits for a wake word and voice activity detection.
+> **Implemented by the robot so far:** everything below, except conversations: the robot offers audio only when a module holds them, and its voice module does not yet, as it waits for a wake word and voice activity detection. Its key is in its TPM (the `tpm` adapter of its `identity` port, ADR-0010), or in a file on a development computer.
 
 ## The room
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
-import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -15,7 +14,7 @@ from typing import Any
 import aiohttp
 import jwt
 import pytest
-from token_server import TokenServer
+from token_server import TokenServer, token_schema
 
 from ai_robot.adapters.livekit.cloud import LiveKitCloud
 from ai_robot.adapters.livekit.tokens import (
@@ -26,7 +25,6 @@ from ai_robot.adapters.livekit.tokens import (
     server_access,
 )
 from ai_robot.adapters.sim.identity import SimIdentity
-from ai_robot.core.data import Schema
 from ai_robot.core.jose import b64url, thumbprint
 
 SCHEMA = Path(__file__).resolve().parents[2] / "protocol" / "cloud" / "schema.json"
@@ -44,11 +42,6 @@ SETTINGS = {
     "backlog": 500,
     "catalogue_ttl": 60.0,
 }
-
-
-def token_schema() -> Schema:
-    root = json.loads(SCHEMA.read_text(encoding="utf-8"))
-    return Schema("token_response", {**root, "$ref": "#/$defs/token_response"})
 
 
 @contextlib.asynccontextmanager

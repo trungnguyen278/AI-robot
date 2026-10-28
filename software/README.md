@@ -6,7 +6,8 @@ Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependen
 - [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen;
 - [jsonschema](https://python-jsonschema.readthedocs.io/), to check data against the protocols' JSON Schemas;
 - [LiveKit's Python SDK](https://docs.livekit.io/reference/python/) (`livekit`, `livekit-api`), for the link to the cloud over WebRTC;
-- [cryptography](https://cryptography.io/), for the robot's key kept in software on a development computer.
+- [cryptography](https://cryptography.io/), for the robot's key kept in software on a development computer;
+- [tpm2-pytss](https://github.com/tpm2-software/tpm2-pytss), the `tpm` extra, for the robot's key in its TPM. It builds against the TCG software stack's libraries: `libtss2-dev` on Debian and Raspberry Pi OS.
 
 ## How it fits together
 
@@ -54,7 +55,7 @@ software/
 │   ├── native.py           C++ functions, with pure-Python fallbacks
 │   ├── core/               Configuration, bus, module base class, factory
 │   ├── ports/              Port interfaces
-│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (aiohttp: the screen served to a browser), livekit/ (the cloud link), keys/ (keys kept in software), sun/ (sunrise and sunset)
+│   ├── adapters/           Adapter registry; sim/ (simulated), web/ (aiohttp: the screen served to a browser), livekit/ (the cloud link), keys/ (keys kept in software), tpm/ (keys in the robot's TPM), sun/ (sunrise and sunset)
 │   └── modules/            Module registry and the modules
 ├── native/                 Optional C++ extension (pybind11 + scikit-build-core)
 └── tests/
@@ -75,7 +76,14 @@ pytest
 ruff check . && ruff format --check .
 ```
 
-On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`; until real adapters exist it behaves like `desktop`. `ai-robot --help` lists the options; `--duration SECONDS` stops the robot after a while, which is handy for quick checks. The environment variables are listed in [`.env.example`](.env.example).
+On the Raspberry Pi, use `--profile pi` or set `AI_ROBOT_PROFILE=pi`. It keeps the robot's identity in its TPM, and runs the simulated adapters for the ports without a real one yet. The TPM needs:
+- the TCG software stack's libraries and the `tpm` extra: `sudo apt install libtss2-dev`, then `pip install -e ".[dev,tpm]"`;
+- the TPM's overlay in `/boot/firmware/config.txt`: `dtoverlay=tpm-slb9670` ([TPM notes](../hardware/components/letstrust-tpm.md));
+- access to `/dev/tpmrm0` for the user who runs the robot, through the `tss` group: `sudo usermod -aG tss "$USER"`, then log in again.
+
+On a Pi without its TPM, select the `file` identity in `config/local.toml` (see `local.example.toml`).
+
+`ai-robot --help` lists the options; `--duration SECONDS` stops the robot after a while, which is handy for quick checks. The environment variables are listed in [`.env.example`](.env.example).
 
 Install with `-e` from this checkout: the configuration is then read from `software/config`, and the protocols' definitions from `protocol/`. With any other kind of install, point:
 - `--config-dir` or `AI_ROBOT_CONFIG_DIR` at a configuration directory;
@@ -91,7 +99,7 @@ While the robot runs, its screen is at <http://127.0.0.1:8770/>: open it in a br
 By default the robot talks to a simulated cloud (the `sim` adapter of the `cloud` port). It opens a session at once and asks for nothing, so the robot runs without a server.
 
 The real link goes through a LiveKit server (the `livekit` adapter, [ADR-0009](../docs/decisions/0009-cloud-link-webrtc.md)). The robot asks `ai-robot-server` for the token that lets it join its room, and proves who it is with its `identity` port: an identifier, and a key that signs for it ([ADR-0010](../docs/decisions/0010-device-identity.md)).
-- **Its key.** On the robot, the key lives in a TPM, which never lets it out; that adapter comes with the TPM's hardware. On a development computer, the `file` adapter keeps it in a file of your choosing, made on first use and readable only by you; like SSH, it refuses a key file that others can open. The `sim` adapter, the default, makes a new key at each start, which no server knows.
+- **Its key.** On the robot, the `tpm` adapter keeps it in the robot's TPM, which makes the key and never lets it out. A factory reset clears the TPM, which gives the robot a new identity, to be set up again. On a development computer, the `file` adapter keeps it in a file of your choosing, made on first use and readable only by you; like SSH, it refuses a key file that others can open. The `sim` adapter, the default, makes a new key at each start, which no server knows.
 - **A server.** `ai-robot-server` does not exist yet. To try the link without it, use a development LiveKit server on this computer:
   1. Run [LiveKit's server](https://github.com/livekit/livekit) in development mode: `livekit-server --dev`. Its key is `devkey` and its secret `secret`.
   2. Give the robot that key and secret, with which it makes its own token: `AI_ROBOT_LIVEKIT_API_KEY=devkey` and `AI_ROBOT_LIVEKIT_API_SECRET=secret`, in the environment.
@@ -99,7 +107,7 @@ The real link goes through a LiveKit server (the `livekit` adapter, [ADR-0009](.
 
   The cloud's agent then joins the same room.
 
-The link follows the [cloud protocol](../protocol/cloud/README.md). The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of the link run against a real LiveKit server when one is found: the path to `livekit-server` in `LIVEKIT_SERVER`, or the program on the `PATH`.
+The link follows the [cloud protocol](../protocol/cloud/README.md). The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of the link run against a real LiveKit server when one is found: the path to `livekit-server` in `LIVEKIT_SERVER`, or the program on the `PATH`. The tests of the `tpm` adapter run against a software TPM, with the `tpm` extra installed: the path to `swtpm` in `SWTPM`, or the program on the `PATH` (`sudo apt install swtpm`).
 
 ### C++ extension
 

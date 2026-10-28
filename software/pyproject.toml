@@ -22,6 +22,9 @@ dev = [
   "pytest>=8",
   "ruff>=0.17,<0.18",
 ]
+tpm = [
+  "tpm2-pytss>=3,<4",  # the robot's TPM (adapters/tpm), built against libtss2-dev
+]
 
 [project.scripts]
 ai-robot = "ai_robot.__main__:main"

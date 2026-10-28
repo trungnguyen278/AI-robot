@@ -15,9 +15,7 @@ import logging
 import math
 import os
 import shutil
-import socket
 import struct
-import subprocess
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
@@ -27,6 +25,7 @@ from typing import Any, cast
 
 import pytest
 from livekit import api, rtc
+from local_servers import free_port, running
 from token_server import TokenServer
 
 from ai_robot.adapters.livekit import cloud
@@ -57,12 +56,6 @@ LAMP = Capability("lamp.set", "Turn the lamp on or off", SWITCH, SafetyClass.INF
 CHANGED = EventKind("lamp.changed", "The lamp changed", SWITCH)
 
 
-def free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
-
-
 @pytest.fixture(scope="module")
 def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     """A LiveKit server on this computer, for these tests only; its address."""
@@ -74,29 +67,17 @@ def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         f"port: {port}\n"
         f"rtc:\n  udp_port: {free_port()}\n  tcp_port: {free_port()}\n  use_external_ip: false\n"
     )
-    log = tmp_path_factory.mktemp("livekit") / "server.log"
-    with log.open("wb") as output:
-        process = subprocess.Popen(
-            [program, "--bind", "127.0.0.1", "--keys", f"{KEY}: {SECRET}", "--config-body", config],
-            stdout=output,
-            stderr=subprocess.STDOUT,
-        )
-    try:
-        deadline = time.monotonic() + TIMEOUT
-        while True:
-            try:
-                socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
-                break
-            except OSError:
-                if process.poll() is not None or time.monotonic() > deadline:
-                    said = log.read_text(encoding="utf-8", errors="replace")[-2000:]
-                    message = f"the LiveKit server did not start:\n{config}{said}"
-                    raise RuntimeError(message) from None
-                time.sleep(0.1)
+    command = [
+        program,
+        "--bind",
+        "127.0.0.1",
+        "--keys",
+        f"{KEY}: {SECRET}",
+        "--config-body",
+        config,
+    ]
+    with running(command, port, tmp_path_factory.mktemp("livekit") / "server.log", TIMEOUT):
         yield f"ws://127.0.0.1:{port}"
-    finally:
-        process.terminate()
-        process.wait(timeout=TIMEOUT)
 
 
 def token(room: str, identity: str, kind: str = "standard") -> str:

@@ -124,11 +124,15 @@ backlog = 500  # ...while up to this many more wait their turn; it drops the res
 catalogue_ttl = 60.0  # seconds the cloud may cache the robot's catalogue
 
 # The robot's identity: an identifier, and the key that proves it to ai-robot-server
-# (docs/decisions/0010-device-identity.md). "sim" makes a new one at each start, which no
-# server knows; "file" keeps one in a file, for a development computer: set its path in
-# local.toml. A robot keeps its key in a TPM.
+# (docs/decisions/0010-device-identity.md). "tpm" keeps them in the robot's TPM, as the pi
+# profile does; "sim" makes a new one at each start, which no server knows; "file" keeps
+# one in a file, for a development computer: set its path in local.toml.
 [ports.identity]
 adapter = "sim"
+
+[ports.identity.tpm]
+# How the TCG software stack reaches the TPM: through the kernel's resource manager.
+tcti = "device:/dev/tpmrm0"
 
 # When the sun rises and sets. "fixed" until the robot's place is known; for the real
 # times, select "solar" in local.toml with the robot's latitude and longitude (see
