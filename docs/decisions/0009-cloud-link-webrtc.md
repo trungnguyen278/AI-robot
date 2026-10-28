@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-22
 - **Supersedes:** [ADR-0007](0007-cloud-link-transport.md), and point 3 of [ADR-0008](0008-cloud-link-messages.md)
+- **Amended by:** [ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md): a LiveKit room only to talk, one for each conversation, beside a control channel always on, a WebSocket
 
 ## Context
 
