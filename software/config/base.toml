@@ -65,16 +65,19 @@ allowed_classes = ["informational"]
 call_timeout = 10.0  # seconds a capability may take before the cloud gets an error
 
 [modules.voice]
-# Listening and talking (docs/decisions/0012 and 0013). Durations are in seconds of audio.
+# Listening and talking (docs/decisions/0013 and 0018). Durations are in seconds of audio.
 voice_threshold = 0.5  # the probability of voice at or above which a window holds voice
-end_silence = 2.0  # silence after voice at which the robot ends the speech, if the cloud has not
-nothing_heard = 6.0  # without voice this long after a turn starts, the turn is cancelled
+nothing_heard = 6.0  # without voice this long after a conversation opens, it ends
 barge_in = 0.4  # voice over an answer this long interrupts it
-offline_expression = "confused"  # the face when the wake word is heard but the cloud cannot talk
+longest = 900.0  # the longest conversation, whatever the cloud does (PRIV-1)
+offline_expression = "confused"  # the face when the robot cannot talk: its cue, without words
 offline_seconds = 2.0  # how long it shows
 # As shipped; the owner changes them in the settings (docs/decisions/0016).
 volume = 80  # percent of full loudness for the robot's voice, by steps of 5
 microphones = true  # whether the robot listens: off, it hears nothing (PRIV-1)
+idle = 10  # seconds in which nobody speaks that end a conversation, by steps of 5...
+idle_least = 5  # ...from this...
+idle_most = 30  # ...to this (docs/decisions/0018)
 
 [modules.setup]
 # Set-up from the app, over Bluetooth LE (platform/protocols/setup/README.md; docs/decisions/0015).
@@ -107,6 +110,10 @@ adapter = "sim"
 sample_rate = 16000
 channels = 1
 chunk_ms = 20
+# Whether what the microphones hear is cleared of what the robot plays: true only with a
+# voice processor that cancels the echo, such as the XVF3800 (docs/decisions/0011).
+# Without one, the robot streams nothing while it speaks (docs/decisions/0018).
+echo_cancelled = false
 
 [ports.audio_in.portaudio]
 device = "default"  # PortAudio's device: "default" is the system's, PipeWire's on the robot

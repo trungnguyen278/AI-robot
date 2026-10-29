@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
-"""The voice module: turns, the end of speech, answers and barge-in
-(docs/decisions/0012 and 0013), with microphones, a speaker and engines the tests
+"""The voice module: conversations, their turns, answers and limits, and barge-in
+(docs/decisions/0013 and 0018), with microphones, a speaker and engines the tests
 control."""
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import uuid
 import wave
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -39,6 +40,9 @@ from ai_robot.ports import (
     AudioOut,
     CloudPart,
     ConversationAudio,
+    ConversationEnd,
+    ConversationRequest,
+    ConversationStart,
     Interrupted,
     ResponseEnd,
     ResponseStart,
@@ -61,16 +65,20 @@ VOICE = b"V" + bytes(CHUNK - 1)  # what the fake detector takes for voice
 WAKE = b"W" + bytes(CHUNK - 1)  # what the fake spotter takes for the wake word
 SETTINGS = {
     "voice_threshold": 0.5,
-    "end_silence": 1.0,
     "nothing_heard": 2.0,
     "barge_in": 0.2,
+    "longest": 30.0,
     "offline_expression": "confused",
     "offline_seconds": 2.0,
     "volume": 100,
     "microphones": True,
+    "idle": 5,
+    "idle_least": 5,
+    "idle_most": 30,
 }
 TIMEOUT = 2.0
 ENGINES_TIMEOUT = 30.0  # for the real engines on a whole recording, however slow the computer
+REMINDER = "01a18086-9160-765a-a90f-9dd0604d45f2"  # a conversation the cloud opens
 
 
 def chunks(seconds: float, chunk: bytes) -> list[bytes]:
@@ -81,13 +89,18 @@ class Microphones(AudioIn):
     """Hear what the test gives them; ``heard`` waits until the module has handled it
     all and asks for more."""
 
-    def __init__(self) -> None:
+    def __init__(self, echo_cancelled: bool) -> None:
         self.chunks: asyncio.Queue[bytes] = asyncio.Queue()
         self.waiting = asyncio.Event()
+        self._echo_cancelled = echo_cancelled
 
     @property
     def format(self) -> AudioFormat:
         return FORMAT
+
+    @property
+    def echo_cancelled(self) -> bool:
+        return self._echo_cancelled
 
     async def read(self) -> bytes:
         if self.chunks.empty():
@@ -155,9 +168,9 @@ class Detector(VoiceActivity):
 class Robot:
     """The voice module, its devices, and what it says on the bus."""
 
-    def __init__(self, **changes: Any) -> None:
+    def __init__(self, echo_cancelled: bool = True, **changes: Any) -> None:
         self.bus = Bus()
-        self.microphones = Microphones()
+        self.microphones = Microphones(echo_cancelled)
         self.speaker = Speaker()
         self.spotter = Spotter()
         ports = {
@@ -185,6 +198,10 @@ class Robot:
         while self.to_cloud.pending:
             parts.append((await self.to_cloud.get()).part)
         return parts
+
+    async def spoken(self) -> list[RobotPart]:
+        """What the robot sent since the last call, but what it heard."""
+        return [part for part in await self.sent() if not isinstance(part, Speech)]
 
     async def state_changes(self) -> list[InteractionState]:
         """Where the conversation went since the last call."""
@@ -223,10 +240,25 @@ async def running(robot: Robot) -> AsyncIterator[Robot]:
         await robot.module.stop()
 
 
-async def in_a_turn(robot: Robot) -> None:
-    """Hear the wake word and some voice, and forget what was sent."""
+async def in_a_conversation(robot: Robot) -> str:
+    """Hear the wake word and some voice, have the cloud start the conversation, and
+    forget what was sent; returns the conversation."""
     await robot.online()
     await robot.microphones.heard(WAKE, VOICE)
+    (request, _) = await robot.sent()
+    assert isinstance(request, ConversationRequest)
+    await robot.cloud_says(ConversationStart(request.conversation, listen=True))
+    await robot.state_changes()
+    return request.conversation
+
+
+async def answering(robot: Robot, conversation: str) -> None:
+    """A turn, then the start of its answer."""
+    await robot.cloud_says(
+        TurnStart(conversation, "t1"),
+        SpeechEnd(conversation, "t1"),
+        ResponseStart(conversation, "a1", "t1", "vi"),
+    )
     await robot.sent()
     await robot.state_changes()
 
@@ -241,143 +273,182 @@ def test_it_offers_conversations_and_starts_idle() -> None:
     asyncio.run(main())
 
 
-def test_a_wake_word_opens_a_turn_that_streams_what_it_hears() -> None:
+# ---- opening ----
+
+
+def test_a_wake_word_asks_for_a_conversation_and_streams_from_then_on() -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
             await robot.online()
             await robot.state_changes()
-            await robot.microphones.heard(SILENCE, WAKE, VOICE, VOICE)
-            assert await robot.sent() == [
-                TurnStart("t1", Trigger.WAKE_WORD),
-                Speech("t1", VOICE),
-                Speech("t1", VOICE),
-            ]
-            assert await robot.state_changes() == [InteractionState.LISTENING]
+            await robot.microphones.heard(SILENCE, WAKE, VOICE, SILENCE)
+            request, *speech = await robot.sent()
+            assert isinstance(request, ConversationRequest)
+            assert request.trigger is Trigger.WAKE_WORD
+            assert uuid.UUID(request.conversation).version == 7
+            conversation = request.conversation
+            assert speech == [Speech(conversation, VOICE), Speech(conversation, SILENCE)]
+            assert await robot.state_changes() == [InteractionState.TRIGGERED]
             assert robot.spotter.resets == 1  # the same words are not spotted twice
+            await robot.cloud_says(ConversationStart(conversation, listen=True))
+            assert await robot.state_changes() == [InteractionState.ATTENTIVE]
 
     asyncio.run(main())
 
 
-def test_the_cloud_ends_the_speech() -> None:
+def test_without_the_cloud_the_wake_word_gets_the_robots_cue() -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(SpeechEnd("t1"))
-            await robot.microphones.heard(VOICE, SILENCE)
-            assert await robot.sent() == []  # the robot no longer streams
-            assert await robot.state_changes() == [InteractionState.PROCESSING]
+            await robot.online(conversations=False)
+            await robot.microphones.heard(WAKE, VOICE)
+            assert await robot.sent() == []
+            cue = await asyncio.wait_for(robot.expressions.get(), TIMEOUT)
+            assert (cue.expression, cue.duration) == ("confused", 2.0)
 
     asyncio.run(main())
 
 
-def test_the_robot_ends_the_speech_after_a_silence_the_cloud_left() -> None:
-    async def main() -> None:
-        async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            silence = chunks(SETTINGS["end_silence"], SILENCE)
-            await robot.microphones.heard(*silence[:-1])
-            assert SpeechEnd("t1") not in await robot.sent()
-            await robot.microphones.heard(silence[-1], VOICE)
-            assert await robot.sent() == [Speech("t1", SILENCE), SpeechEnd("t1")]
-            assert await robot.state_changes() == [InteractionState.PROCESSING]
-
-    asyncio.run(main())
-
-
-def test_a_turn_in_which_nobody_speaks_is_cancelled() -> None:
+@pytest.mark.parametrize("reason", ["limit_reached", "unavailable", "no_answer"])
+def test_a_conversation_that_cannot_start_gets_the_robots_cue(reason: str) -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
             await robot.online()
-            await robot.microphones.heard(WAKE, *chunks(SETTINGS["nothing_heard"], SILENCE))
-            assert (await robot.sent())[-1] == TurnCancel("t1", "nothing heard")
-            assert (await robot.state_changes())[-1] == InteractionState.IDLE
-
-    asyncio.run(main())
-
-
-def test_the_speech_ends_after_thirty_seconds() -> None:
-    async def main() -> None:
-        async with running(Robot()) as robot:
-            await robot.online()
-            await robot.microphones.heard(WAKE, *chunks(30.0, VOICE))
-            sent = await robot.sent()
-            assert sent[-1] == SpeechEnd("t1")
-            assert sum(isinstance(part, Speech) for part in sent) == 1500
-
-    asyncio.run(main())
-
-
-def test_an_answer_plays_then_its_follow_up_opens_a_turn() -> None:
-    async def main() -> None:
-        async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            robot.speaker.playing.clear()  # the answer is still playing
-            await robot.cloud_says(
-                SpeechEnd("t1"),
-                ResponseStart("a1", "t1"),
-                Voice(b"\x01\x00" * 160),
-                Voice(b"\x02\x00" * 160),
-                ResponseEnd("a1", follow_up=True),
+            await robot.microphones.heard(WAKE)
+            (request,) = await robot.sent()
+            assert isinstance(request, ConversationRequest)
+            await robot.state_changes()
+            await robot.cloud_says(ConversationEnd(request.conversation, reason))
+            assert await robot.state_changes() == [InteractionState.IDLE]
+            assert (await asyncio.wait_for(robot.expressions.get(), TIMEOUT)).expression == (
+                "confused"
             )
-            assert bytes(robot.speaker.played) == b"\x01\x00" * 160 + b"\x02\x00" * 160
-            assert TurnStart("t2", Trigger.FOLLOW_UP) not in await robot.sent()
-            robot.speaker.playing.set()  # played: now the robot listens again
-            await settle()
-            assert await robot.sent() == [TurnStart("t2", Trigger.FOLLOW_UP)]
+            await robot.microphones.heard(VOICE)
+            assert await robot.sent() == []  # it streams no more
+
+    asyncio.run(main())
+
+
+def test_the_cloud_opens_a_conversation_to_listen() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            await robot.online()
+            await robot.state_changes()
+            await robot.cloud_says(ConversationStart(REMINDER, listen=True))
+            assert await robot.state_changes() == [InteractionState.ATTENTIVE]
+            await robot.microphones.heard(VOICE)
+            assert await robot.sent() == [Speech(REMINDER, VOICE)]
+
+    asyncio.run(main())
+
+
+def test_a_wake_word_ends_a_conversation_that_does_not_listen_and_opens_one() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            await robot.online()
+            await robot.cloud_says(
+                ConversationStart(REMINDER, listen=False),
+                ResponseStart(REMINDER, "a1", None, "vi"),
+                Voice(REMINDER, b"\x01\x00" * 4),
+            )
+            await robot.microphones.heard(VOICE)
+            assert await robot.sent() == []  # it only talks
+            assert bytes(robot.speaker.played) == b"\x01\x00" * 4
+            await robot.microphones.heard(WAKE)
+            end, request = await robot.sent()
+            assert end == ConversationEnd(REMINDER, "user")
+            assert isinstance(request, ConversationRequest)
+            assert request.conversation != REMINDER
+
+    asyncio.run(main())
+
+
+def test_a_late_start_of_a_conversation_the_robot_ended_opens_nothing() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            await robot.online()
+            await robot.microphones.heard(WAKE, *chunks(2.0, SILENCE))
+            request, *_, end = await robot.sent()
+            assert isinstance(request, ConversationRequest)
+            assert end == ConversationEnd(request.conversation, "idle")  # nothing heard
+            await robot.cloud_says(ConversationStart(request.conversation, listen=True))
+            await robot.microphones.heard(VOICE)
+            assert await robot.sent() == []
+            assert robot.module.conversation is None
+
+    asyncio.run(main())
+
+
+# ---- turns and answers ----
+
+
+def test_the_clouds_turns_and_answers_show_on_the_face() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await robot.cloud_says(TurnStart(conversation, "t1"))
+            await robot.cloud_says(SpeechEnd(conversation, "t1"))
+            await robot.cloud_says(ResponseStart(conversation, "a1", "t1", "vi"))
+            await robot.cloud_says(Voice(conversation, b"\x02\x00" * 4))
+            robot.speaker.playing.clear()
+            await robot.cloud_says(ResponseEnd(conversation, "a1"))
             assert await robot.state_changes() == [
+                InteractionState.LISTENING,
                 InteractionState.PROCESSING,
                 InteractionState.SPEAKING,
-                InteractionState.LISTENING,
+            ]
+            robot.speaker.playing.set()  # the answer has played
+            await settle()
+            assert await robot.state_changes() == [InteractionState.ATTENTIVE]
+            assert bytes(robot.speaker.played) == b"\x02\x00" * 4
+
+    asyncio.run(main())
+
+
+def test_it_streams_for_the_whole_conversation_even_while_it_speaks() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await answering(robot, conversation)
+            await robot.microphones.heard(SILENCE, VOICE)
+            assert await robot.sent() == [
+                Speech(conversation, SILENCE),
+                Speech(conversation, VOICE),
             ]
 
     asyncio.run(main())
 
 
-def test_an_answer_without_a_follow_up_ends_idle() -> None:
+def test_without_echo_cancelling_it_streams_nothing_while_it_speaks() -> None:
     async def main() -> None:
-        async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(ResponseStart("a1", "t1"), ResponseEnd("a1", follow_up=False))
+        async with running(Robot(echo_cancelled=False)) as robot:
+            conversation = await in_a_conversation(robot)
+            await answering(robot, conversation)
+            await robot.microphones.heard(*chunks(0.4, VOICE))  # its own voice, perhaps
+            assert await robot.sent() == []  # neither streamed nor taken for a barge-in
+            assert robot.speaker.drops == 0
+            await robot.cloud_says(ResponseEnd(conversation, "a1"))
             await robot.microphones.heard(VOICE)
-            assert await robot.sent() == []  # the answer ended the turn
-            assert await robot.state_changes() == [InteractionState.SPEAKING, InteractionState.IDLE]
+            assert await robot.sent() == [Speech(conversation, VOICE)]
 
     asyncio.run(main())
 
 
-def test_barge_in_stops_the_answer_and_opens_a_turn_with_the_words() -> None:
+def test_barge_in_stops_the_answer_and_tells_the_cloud() -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(SpeechEnd("t1"), ResponseStart("a1", "t1"))
-            words = chunks(SETTINGS["barge_in"], VOICE)
-            await robot.microphones.heard(SILENCE, *words)
-            assert robot.speaker.drops == 1
-            sent = await robot.sent()
-            assert sent[:2] == [Interrupted("a1"), TurnStart("t2", Trigger.BARGE_IN)]
-            # The turn starts with what interrupted, and a little of what came before.
-            assert sent[2:] == [Speech("t2", SILENCE)] + [Speech("t2", VOICE)] * len(words)
-            # What the agent still sends of the stopped answer is not played.
-            await robot.cloud_says(Voice(b"\x05\x00" * 160))
+            conversation = await in_a_conversation(robot)
+            await answering(robot, conversation)
+            drops = robot.speaker.drops
+            await robot.microphones.heard(*chunks(0.2, VOICE))
+            assert robot.speaker.drops == drops + 1
+            assert await robot.spoken() == [Interrupted(conversation, "a1")]
+            assert await robot.state_changes() == [InteractionState.LISTENING]
+            await robot.cloud_says(Voice(conversation, b"\x03\x00" * 4))  # still on its way
             assert robot.speaker.played == bytearray()
-            assert (await robot.state_changes())[-1] == InteractionState.LISTENING
-
-    asyncio.run(main())
-
-
-def test_the_next_answer_plays_from_its_first_sound() -> None:
-    """After a barge-in, the cloud's voice plays again once the new turn's speech is
-    over: the next answer's voice may come before its response.start."""
-
-    async def main() -> None:
-        async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(SpeechEnd("t1"), ResponseStart("a1", "t1"))
-            await robot.microphones.heard(*chunks(SETTINGS["barge_in"], VOICE))
-            await robot.cloud_says(Voice(b"\x05\x00" * 160))  # the stopped answer's
-            assert robot.speaker.played == bytearray()
-            await robot.cloud_says(SpeechEnd("t2"), Voice(b"\x06\x00" * 160))
-            assert bytes(robot.speaker.played) == b"\x06\x00" * 160
+            await robot.cloud_says(
+                ResponseStart(conversation, "a2", None, "vi"), Voice(conversation, b"\x04\x00")
+            )
+            assert bytes(robot.speaker.played) == b"\x04\x00"  # the next answer plays
 
     asyncio.run(main())
 
@@ -385,12 +456,10 @@ def test_the_next_answer_plays_from_its_first_sound() -> None:
 def test_a_short_noise_over_an_answer_does_not_interrupt_it() -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(ResponseStart("a1", "t1"))
-            short = chunks(SETTINGS["barge_in"], VOICE)[:-1]
-            await robot.microphones.heard(*short, SILENCE, *short)
-            assert robot.speaker.drops == 0
-            assert await robot.sent() == []
+            conversation = await in_a_conversation(robot)
+            await answering(robot, conversation)
+            await robot.microphones.heard(*chunks(0.1, VOICE), SILENCE, *chunks(0.1, VOICE))
+            assert await robot.spoken() == []
 
     asyncio.run(main())
 
@@ -398,52 +467,184 @@ def test_a_short_noise_over_an_answer_does_not_interrupt_it() -> None:
 def test_a_stopped_answer_is_dropped_and_its_voice_not_played() -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(
-                ResponseStart("a1", "t1"), ResponseStop("a1"), Voice(b"\x05\x00" * 160)
-            )
-            assert robot.speaker.drops == 1
+            conversation = await in_a_conversation(robot)
+            await answering(robot, conversation)
+            drops = robot.speaker.drops
+            await robot.cloud_says(ResponseStop(conversation, "a1"))
+            assert robot.speaker.drops == drops + 1
+            assert await robot.state_changes() == [InteractionState.ATTENTIVE]
+            await robot.cloud_says(Voice(conversation, b"\x05\x00"))
             assert robot.speaker.played == bytearray()
-            assert (await robot.state_changes())[-1] == InteractionState.IDLE
-            await robot.cloud_says(ResponseStart("a2", None), Voice(b"\x06\x00" * 160))
-            assert bytes(robot.speaker.played) == b"\x06\x00" * 160  # the next one plays
 
     asyncio.run(main())
 
 
-def test_the_cloud_cancels_the_turn() -> None:
+def test_parts_of_another_conversation_are_ignored() -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(TurnCancel("t1", "not understood"))
-            await robot.microphones.heard(VOICE)
-            assert await robot.sent() == []
+            await in_a_conversation(robot)
+            await robot.cloud_says(
+                ResponseStart(REMINDER, "a9", None, "vi"), Voice(REMINDER, b"\x06\x00")
+            )
+            assert robot.speaker.played == bytearray()
+            assert await robot.state_changes() == []
+
+    asyncio.run(main())
+
+
+# ---- the limits ----
+
+
+def test_nothing_heard_after_the_wake_word_ends_the_conversation() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await robot.microphones.heard(*chunks(1.0, SILENCE))  # 1.0 s heard with the voice
+            assert await robot.spoken() == []
+            robot.module._voiced = False  # as if the voice had been nothing
+            await robot.microphones.heard(*chunks(1.0, SILENCE))
+            assert await robot.spoken() == [ConversationEnd(conversation, "idle")]
             assert await robot.state_changes() == [InteractionState.IDLE]
 
     asyncio.run(main())
 
 
-def test_without_the_cloud_the_wake_word_gets_a_local_cue() -> None:
+def test_a_silence_of_idle_seconds_ends_the_conversation() -> None:
     async def main() -> None:
         async with running(Robot()) as robot:
-            await robot.online(conversations=False)
-            await robot.microphones.heard(WAKE, VOICE)
-            assert await robot.sent() == []
-            cue = await robot.expressions.get()
-            assert (cue.source, cue.expression, cue.duration) == ("voice", "confused", 2.0)
-
-    asyncio.run(main())
-
-
-def test_a_reminder_does_not_end_the_users_turn() -> None:
-    async def main() -> None:
-        async with running(Robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(ResponseStart("a1", None))  # an answer no turn asked for
+            conversation = await in_a_conversation(robot)
+            await robot.microphones.heard(*chunks(4.98, SILENCE))
+            assert await robot.spoken() == []
+            await robot.microphones.heard(SILENCE)
+            assert await robot.spoken() == [ConversationEnd(conversation, "idle")]
             await robot.microphones.heard(VOICE)
-            assert await robot.sent() == [Speech("t1", VOICE)]
+            assert await robot.sent() == []  # it streams no more (PRIV-1)
 
     asyncio.run(main())
+
+
+def test_speech_the_cloud_drops_counts_as_silence() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await robot.cloud_says(TurnStart(conversation, "t1"))
+            await robot.microphones.heard(*chunks(2.0, VOICE))  # someone else, on the phone
+            await robot.cloud_says(TurnCancel(conversation, "t1", "not_for_the_device"))
+            await robot.microphones.heard(*chunks(2.98, SILENCE))
+            assert await robot.spoken() == []
+            await robot.microphones.heard(SILENCE)
+            assert await robot.spoken() == [ConversationEnd(conversation, "idle")]
+
+    asyncio.run(main())
+
+
+def test_voice_the_cloud_has_not_judged_holds_the_silence() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await robot.microphones.heard(*chunks(4.0, SILENCE), *chunks(3.0, VOICE))
+            await robot.microphones.heard(*chunks(0.98, SILENCE))
+            assert await robot.spoken() == []
+            await robot.microphones.heard(SILENCE)
+            assert await robot.spoken() == [ConversationEnd(conversation, "idle")]
+
+    asyncio.run(main())
+
+
+def test_thinking_and_speaking_hold_the_conversation_open() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await robot.cloud_says(TurnStart(conversation, "t1"), SpeechEnd(conversation, "t1"))
+            await robot.microphones.heard(*chunks(6.0, SILENCE))  # the cloud thinks
+            await robot.cloud_says(ResponseStart(conversation, "a1", "t1", "vi"))
+            robot.speaker.playing.clear()
+            await robot.cloud_says(ResponseEnd(conversation, "a1"))
+            await robot.microphones.heard(*chunks(6.0, SILENCE))  # the robot speaks
+            assert await robot.spoken() == []
+            robot.speaker.playing.set()
+            await settle()
+            await robot.microphones.heard(*chunks(4.98, SILENCE))
+            assert await robot.spoken() == []
+            await robot.microphones.heard(SILENCE)
+            assert await robot.spoken() == [ConversationEnd(conversation, "idle")]
+
+    asyncio.run(main())
+
+
+def test_the_longest_conversation_ends() -> None:
+    async def main() -> None:
+        async with running(Robot(longest=3.0)) as robot:
+            conversation = await in_a_conversation(robot)  # 0.02 s heard
+            await robot.cloud_says(TurnStart(conversation, "t1"))
+            await robot.microphones.heard(*chunks(2.96, VOICE))
+            assert await robot.spoken() == []
+            await robot.microphones.heard(VOICE)
+            assert await robot.spoken() == [ConversationEnd(conversation, "longest")]
+
+    asyncio.run(main())
+
+
+def test_the_cloud_ends_the_conversation() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await answering(robot, conversation)
+            await robot.cloud_says(Voice(conversation, b"\x07\x00"))
+            robot.speaker.playing.clear()
+            await robot.cloud_says(
+                ResponseEnd(conversation, "a1"), ConversationEnd(conversation, "done")
+            )
+            await robot.microphones.heard(VOICE)
+            assert await robot.sent() == []  # it streams no more at once (PRIV-1)
+            robot.speaker.playing.set()  # what was left of the answer played out
+            await settle()
+            assert await robot.state_changes() == [InteractionState.IDLE]
+            assert bytes(robot.speaker.played) == b"\x07\x00"
+            assert robot.expressions.pending == 0  # it ended well: no cue
+            await robot.cloud_says(Voice(conversation, b"\x08\x00"))  # crossed the end
+            assert bytes(robot.speaker.played) == b"\x07\x00"
+
+    asyncio.run(main())
+
+
+def test_a_conversation_lost_on_its_way_gets_the_robots_cue() -> None:
+    async def main() -> None:
+        async with running(Robot()) as robot:
+            conversation = await in_a_conversation(robot)
+            await robot.cloud_says(ConversationEnd(conversation, "media_lost"))
+            assert await robot.state_changes() == [InteractionState.IDLE]
+            assert (await asyncio.wait_for(robot.expressions.get(), TIMEOUT)).expression == (
+                "confused"
+            )
+
+    asyncio.run(main())
+
+
+# ---- the settings ----
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("voice_threshold", 1.5),
+        ("nothing_heard", -1.0),
+        ("barge_in", float("nan")),
+        ("longest", 0.0),
+        ("offline_expression", ""),
+        ("offline_seconds", 0.0),
+        ("volume", 83),  # not a step of 5
+        ("volume", 120),
+        ("microphones", "yes"),
+        ("idle", 7),  # not a step of 5
+        ("idle", 35),
+        ("idle_least", 0),
+        ("idle_most", 4),  # below idle_least
+    ],
+)
+def test_settings_are_checked(setting: str, value: Any) -> None:
+    with pytest.raises(ValueError, match=setting):
+        Robot(**{setting: value})
 
 
 def test_engines_that_take_other_audio_are_refused() -> None:
@@ -459,28 +660,6 @@ def test_engines_that_take_other_audio_are_refused() -> None:
     )
     with pytest.raises(ValueError, match="Spotter takes"):
         VoiceModule(ctx, **SETTINGS)
-
-
-@pytest.mark.parametrize(
-    ("setting", "value"),
-    [
-        ("voice_threshold", 1.5),
-        ("end_silence", 0.0),
-        ("nothing_heard", -1.0),
-        ("barge_in", float("nan")),
-        ("offline_expression", ""),
-        ("offline_seconds", 0.0),
-        ("volume", 83),  # not a step of 5
-        ("volume", 120),
-        ("microphones", "yes"),
-    ],
-)
-def test_settings_are_checked(setting: str, value: Any) -> None:
-    with pytest.raises(ValueError, match=setting):
-        Robot(**{setting: value})
-
-
-# ---- the owner's settings: the volume and the microphones ----
 
 
 async def microphones(robot: Robot) -> list[bool]:
@@ -501,7 +680,7 @@ def settings_robot(**changes: Any) -> Robot:
 
 def test_it_offers_its_settings() -> None:
     async def main() -> None:
-        async with running(settings_robot(volume=60)) as robot:
+        async with running(settings_robot(volume=60, idle=15)) as robot:
             offered = {}
             while robot.offered.pending:
                 setting = (await robot.offered.get()).setting
@@ -509,7 +688,25 @@ def test_it_offers_its_settings() -> None:
             assert offered["voice.volume"].value == 60
             assert offered["voice.volume"].unit == "%"
             assert offered["voice.microphones"].value is True
+            idle = offered["voice.idle"]
+            assert (idle.value, idle.unit) == (15, "s")
+            assert idle.schema is not None
+            assert (idle.schema["minimum"], idle.schema["maximum"]) == (5, 30)
             assert await microphones(robot) == [True]
+
+    asyncio.run(main())
+
+
+def test_the_owner_chooses_the_silence_that_ends_a_conversation() -> None:
+    async def main() -> None:
+        async with running(settings_robot()) as robot:
+            robot.bus.publish(SettingChanged("voice.idle", 10))
+            await settle()
+            conversation = await in_a_conversation(robot)
+            await robot.microphones.heard(*chunks(9.98, SILENCE))
+            assert await robot.spoken() == []
+            await robot.microphones.heard(SILENCE)
+            assert await robot.spoken() == [ConversationEnd(conversation, "idle")]
 
     asyncio.run(main())
 
@@ -525,7 +722,7 @@ def test_microphones_off_hear_nothing() -> None:
             while robot.levels.pending:
                 await robot.levels.get()
             await robot.microphones.heard(WAKE, VOICE)
-            assert await robot.sent() == []  # no turn
+            assert await robot.sent() == []  # no conversation
             assert robot.levels.pending == 0  # nothing measured
             resets = robot.spotter.resets
             robot.bus.publish(SettingChanged("voice.microphones", True))
@@ -533,33 +730,20 @@ def test_microphones_off_hear_nothing() -> None:
             assert await microphones(robot) == [True]
             assert robot.spotter.resets == resets + 1  # what came before is forgotten
             await robot.microphones.heard(WAKE)
-            assert await robot.sent() == [TurnStart("t1", Trigger.WAKE_WORD)]
+            (request,) = await robot.sent()
+            assert isinstance(request, ConversationRequest)
 
     asyncio.run(main())
 
 
-def test_microphones_off_end_the_turn() -> None:
+def test_microphones_off_end_the_conversation() -> None:
     async def main() -> None:
         async with running(settings_robot()) as robot:
-            await in_a_turn(robot)
+            conversation = await in_a_conversation(robot)
             robot.bus.publish(SettingChanged("voice.microphones", False))
             await settle()
-            assert await robot.sent() == [TurnCancel("t1", "microphones off")]
+            assert await robot.sent() == [ConversationEnd(conversation, "muted")]
             assert await robot.state_changes() == [InteractionState.IDLE]
-
-    asyncio.run(main())
-
-
-def test_no_follow_up_while_the_microphones_are_off() -> None:
-    async def main() -> None:
-        async with running(settings_robot()) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(SpeechEnd("t1"), ResponseStart("a1", "t1"))
-            robot.bus.publish(SettingChanged("voice.microphones", False))
-            await settle()
-            await robot.cloud_says(ResponseEnd("a1", follow_up=True))
-            await settle()
-            assert [p for p in await robot.sent() if isinstance(p, TurnStart)] == []
 
     asyncio.run(main())
 
@@ -567,12 +751,12 @@ def test_no_follow_up_while_the_microphones_are_off() -> None:
 def test_the_volume_scales_the_robots_voice() -> None:
     async def main() -> None:
         async with running(settings_robot(volume=50)) as robot:
-            await in_a_turn(robot)
-            await robot.cloud_says(SpeechEnd("t1"), ResponseStart("a1", "t1"))
-            await robot.cloud_says(Voice(b"\x10\x00" * 4))  # 16
+            conversation = await in_a_conversation(robot)
+            await answering(robot, conversation)
+            await robot.cloud_says(Voice(conversation, b"\x10\x00" * 4))  # 16
             robot.bus.publish(SettingChanged("voice.volume", 25))
             await settle()
-            await robot.cloud_says(Voice(b"\x10\x00" * 4))
+            await robot.cloud_says(Voice(conversation, b"\x10\x00" * 4))
             assert bytes(robot.speaker.played) == b"\x08\x00" * 4 + b"\x04\x00" * 4
 
     asyncio.run(main())
@@ -605,9 +789,9 @@ def test_kept_settings_apply_before_it_hears_anything() -> None:
     asyncio.run(main())
 
 
-def test_the_real_engines_open_and_end_a_turn_in_a_recording() -> None:
-    """A recording, as the microphones would hear it: the wake word opens a turn, the
-    speech that follows streams, and the silence after it ends the speech."""
+def test_the_real_engines_open_a_conversation_in_a_recording() -> None:
+    """A recording, as the microphones would hear it: the wake word opens a
+    conversation, and everything that follows streams."""
     data = Path(__file__).parent / "data"
 
     def recording(name: str) -> bytes:
@@ -624,18 +808,19 @@ def test_the_real_engines_open_and_end_a_turn_in_a_recording() -> None:
         try:
             async with running(robot):
                 await robot.online()
-                heard = recording("okay_nabu.wav") + recording("speech.wav") + bytes(2 * 32000)
+                speech = recording("speech.wav")
+                heard = recording("okay_nabu.wav") + speech + bytes(2 * 32000)
                 await robot.microphones.heard(
                     *(heard[at : at + CHUNK] for at in range(0, len(heard), CHUNK)),
                     timeout=ENGINES_TIMEOUT,
                 )
-                sent = await robot.sent()
+                request, *rest = await robot.sent()
         finally:
             await spotter.close()
-        assert sent[0] == TurnStart("t1", Trigger.WAKE_WORD)
-        assert sent[-1] == SpeechEnd("t1")
-        speech = [part for part in sent if isinstance(part, Speech)]
-        # From the wake word's end to a second of silence after the speech.
-        assert 1.5 < len(speech) * 0.02 < 2.5
+        assert isinstance(request, ConversationRequest)
+        streamed = b"".join(part.pcm for part in rest if isinstance(part, Speech))
+        assert [part for part in rest if not isinstance(part, Speech)] == []  # it goes on
+        assert heard.endswith(streamed)  # from the wake word's end
+        assert len(streamed) >= len(speech) + 2 * 32000
 
     asyncio.run(main())

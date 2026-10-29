@@ -55,11 +55,15 @@ DEFAULT_EXPRESSION = "neutral"
 INTERACTION_EXPRESSIONS: dict[InteractionState, str | None] = {
     InteractionState.IDLE: None,
     InteractionState.TRIGGERED: "listening",
+    InteractionState.ATTENTIVE: "listening",
     InteractionState.LISTENING: "listening",
     InteractionState.PROCESSING: "thinking",
     InteractionState.SPEAKING: "speaking",
-    InteractionState.CANCELLING: None,
 }
+# The states in which the robot streams what it hears, and the face follows the voice.
+LISTENING_STATES = frozenset(
+    {InteractionState.TRIGGERED, InteractionState.ATTENTIVE, InteractionState.LISTENING}
+)
 INTERACTION_SOURCE = "interaction"  # the source of the requests made for the conversation
 
 # The sources of the cloud's requests.
@@ -430,7 +434,7 @@ class ScreenModule(Module):
         await self._refresh()
 
     async def _on_interaction(self, message: InteractionChanged) -> None:
-        self.listening = message.state in (InteractionState.TRIGGERED, InteractionState.LISTENING)
+        self.listening = message.state in LISTENING_STATES
         expression = INTERACTION_EXPRESSIONS[message.state]
         face = None if expression is None else Face(expression)
         self.faces.put(INTERACTION_SOURCE, face, priority=ScreenPriority.INTERACTION)

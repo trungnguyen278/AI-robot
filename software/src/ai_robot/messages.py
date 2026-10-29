@@ -23,14 +23,14 @@ from ai_robot.ports.screen import Panel, scene_data
 
 
 class InteractionState(StrEnum):
-    """Where the robot is in a conversation (the same states as the previous generation)."""
+    """Where the robot is in a conversation (docs/decisions/0018)."""
 
-    IDLE = "idle"
-    TRIGGERED = "triggered"  # wake word heard
-    LISTENING = "listening"
-    PROCESSING = "processing"
-    SPEAKING = "speaking"
-    CANCELLING = "cancelling"
+    IDLE = "idle"  # in none, or in one that does not listen, between answers
+    TRIGGERED = "triggered"  # the robot asked for a conversation, and listens
+    ATTENTIVE = "attentive"  # in a conversation, between turns: it listens
+    LISTENING = "listening"  # the user speaks to it
+    PROCESSING = "processing"  # the user has finished: the answer is coming
+    SPEAKING = "speaking"  # an answer plays
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,18 +260,17 @@ class CloudStatus(Message):
     conversations: bool = False
 
 
-# ---- Conversations: turns and responses, as the cloud link 2.2 had them ----
-# (ai-platform's tag cloud/v2.2).
+# ---- Conversations (platform/protocols/cloud/README.md, Conversations) ----
 # The voice module holds conversations, and the cloud module carries them over the link.
-# Each direction is one topic, so that its parts arrive in order: a turn's start, its
-# speech and its end; an answer's start, text, voice and end.
+# Each direction is one topic, so that its parts arrive in order: a request, then what
+# the robot hears; a start, the turns, and the answers with their text and voice.
 
 
 @dataclass(frozen=True, slots=True)
 class ConversationOffered(Message):
-    """A module holds conversations with the cloud: it starts turns and plays the
-    answers, with ``audio``. The link then offers conversations. Published by voice,
-    read by cloud."""
+    """A module holds conversations with the cloud: it streams what the robot hears and
+    plays the answers, with ``audio``. The link then offers conversations. Published by
+    voice, read by cloud."""
 
     owner: str
     audio: ConversationAudio
@@ -279,18 +278,17 @@ class ConversationOffered(Message):
 
 @dataclass(frozen=True, slots=True)
 class ConversationToCloud(Message):
-    """The robot's next part of a conversation: a turn starts, the user's speech, its
-    end, a cancelled turn, an interrupted answer. Published by voice, read by cloud,
-    which adds the robot's context to a turn's start."""
+    """The robot's next part of a conversation: a request for one, what it hears, an
+    interrupted answer, its end. Published by voice, read by cloud, which adds the
+    robot's context to a request."""
 
     part: RobotPart
 
 
 @dataclass(frozen=True, slots=True)
 class ConversationFromCloud(Message):
-    """The cloud's next part of a conversation: the end of the user's speech, a
-    cancelled turn, and the answers, with their text and their voice. Published by
-    cloud, read by voice."""
+    """The cloud's next part of a conversation: its start and its end, the turns, and
+    the answers, with their text and their voice. Published by cloud, read by voice."""
 
     part: CloudPart
 

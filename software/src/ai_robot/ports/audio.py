@@ -40,6 +40,12 @@ class AudioIn(Port):
     def format(self) -> AudioFormat:
         """Format of the audio returned by ``read``."""
 
+    @property
+    @abstractmethod
+    def echo_cancelled(self) -> bool:
+        """Whether what they hear is cleared of what the robot plays, as a voice
+        processor's echo canceller does (docs/decisions/0011)."""
+
     @abstractmethod
     async def read(self) -> bytes:
         """Wait for the next chunk of audio and return it."""

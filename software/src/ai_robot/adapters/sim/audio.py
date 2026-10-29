@@ -12,10 +12,14 @@ from ai_robot.ports.audio import AudioFormat, AudioIn, AudioOut
 
 
 class SimAudioIn(AudioIn):
-    """Microphones that hear silence, delivered in real time."""
+    """Microphones that hear silence, delivered in real time. ``echo_cancelled`` says
+    what they claim."""
 
-    def __init__(self, *, sample_rate: int, channels: int, chunk_ms: int) -> None:
+    def __init__(
+        self, *, sample_rate: int, channels: int, chunk_ms: int, echo_cancelled: bool
+    ) -> None:
         self._format = AudioFormat(sample_rate, channels)
+        self._echo_cancelled = echo_cancelled
         frames = sample_rate * positive("chunk_ms", chunk_ms) // 1000
         self._chunk = bytes(frames * self._format.frame_bytes)
         self._pacer = Pacer(chunk_ms / 1000)
@@ -23,6 +27,10 @@ class SimAudioIn(AudioIn):
     @property
     def format(self) -> AudioFormat:
         return self._format
+
+    @property
+    def echo_cancelled(self) -> bool:
+        return self._echo_cancelled
 
     async def read(self) -> bytes:
         await self._pacer.wait()

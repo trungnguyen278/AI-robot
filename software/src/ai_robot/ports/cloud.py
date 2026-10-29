@@ -18,10 +18,6 @@ from ai_robot.ports.identity import Identity
 
 # Names of capabilities and events, as MCP allows for tool names.
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
-# Turns, as the cloud link 2.2 had them (ai-platform's tag cloud/v2.2): characters in a
-# turn's identifier, and how long the robot lets the user speak in one (ADR-0012).
-MAX_ID = 64
-MAX_SPEECH_SECONDS = 30.0
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}  # where plain http:// and ws:// may go (SEC-1)
 
 
@@ -45,7 +41,7 @@ class SafetyClass(StrEnum):
     whatever the cloud asks (platform/protocols/cloud/requirements.md, SEC-8 and SEC-9)."""
 
     INFORMATIONAL = "informational"  # the screen, sounds
-    PRIVACY = "privacy"  # the camera; a turn the cloud starts by itself
+    PRIVACY = "privacy"  # the camera; a conversation the cloud opens to listen
     PHYSICAL = "physical"  # motion
     SYSTEM = "system"  # reboot, update, settings
 
@@ -129,90 +125,117 @@ class CallCancelled:
     id: str
 
 
-# ---- Conversations: turns, responses and their audio ----
+# ---- Conversations (platform/protocols/cloud/README.md, Conversations) ----
+# The module that holds conversations (voice) and the link exchange their parts. Each
+# names its conversation, so that a part that crosses the conversation's end is known.
 
 
 @dataclass(frozen=True, slots=True)
 class ConversationAudio:
     """The audio a module that holds conversations exchanges with the link: the format
-    of the user's speech it gives, and of the voice it plays. The link converts to and
-    from what travels, Opus over WebRTC (platform/protocols/cloud/README.md, The room)."""
+    of what the robot hears, which it gives, and of the voice it plays. The link converts
+    to and from what travels, Opus over WebRTC (platform/protocols/cloud/README.md, The
+    room)."""
 
     speech: AudioFormat
     voice: AudioFormat
 
 
 class Trigger(StrEnum):
-    """What started a turn."""
+    """What opened a conversation, on the robot."""
 
     WAKE_WORD = "wake_word"
-    TAP = "tap"
+    TOUCH = "touch"
     BUTTON = "button"
-    FOLLOW_UP = "follow_up"  # the cloud asked the robot to listen again
-    BARGE_IN = "barge_in"  # the user spoke over the robot
 
 
 @dataclass(frozen=True, slots=True)
-class TurnStart:
-    """Someone speaks to the robot: a turn begins. ``turn`` identifies it, uniquely in
-    the session; ``context`` is a snapshot of the robot's situation (IO-4), which the
-    cloud module fills in."""
+class ConversationRequest:
+    """Someone spoke to the robot, which asks the cloud for a conversation.
+    ``conversation`` is the robot's identifier for it, a UUID. ``context`` is a snapshot
+    of the robot's situation (IO-4), which the cloud module fills in. What the robot
+    hears from then on follows as ``Speech``: the link keeps it until the cloud
+    listens."""
 
-    turn: str
+    conversation: str
     trigger: Trigger
     context: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not (isinstance(self.turn, str) and 0 < len(self.turn) <= MAX_ID):
-            raise ValueError(f"turn must be 1 to {MAX_ID} characters, got {self.turn!r}")
         object.__setattr__(self, "trigger", Trigger(self.trigger))
         object.__setattr__(self, "context", frozen("context", self.context))
 
 
 @dataclass(frozen=True, slots=True)
-class Speech:
-    """What the user says during a turn: PCM in the conversation's speech format."""
+class ConversationStart:
+    """A conversation starts: the one the robot asked for, or one the cloud opens and
+    the link accepted. With ``listen``, the robot streams what it hears; without, it
+    only plays the cloud's voice."""
 
-    turn: str
+    conversation: str
+    listen: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationEnd:
+    """A conversation is over, for ``reason`` (platform/protocols/cloud/README.md,
+    Ending): the robot ends it, or the link says that it ended, or could not start
+    (then with the cloud's error, such as ``limit_reached``)."""
+
+    conversation: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class Speech:
+    """What the robot hears in a conversation: PCM in the conversation's speech format."""
+
+    conversation: str
     pcm: bytes
 
 
 @dataclass(frozen=True, slots=True)
-class SpeechEnd:
-    """The user has finished speaking, as the robot or the cloud decided: the robot
-    stops streaming."""
+class TurnStart:
+    """The cloud heard the user start speaking: a turn begins."""
 
+    conversation: str
+    turn: str
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechEnd:
+    """The cloud judges that the user has finished speaking."""
+
+    conversation: str
     turn: str
 
 
 @dataclass(frozen=True, slots=True)
 class TurnCancel:
-    """The turn is abandoned: by the robot, by the cloud, or with the session."""
+    """The cloud dropped a turn, for ``reason``: noise, or speech not meant for the
+    robot."""
 
+    conversation: str
     turn: str
-    reason: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Interrupted:
-    """The user spoke over a response: the robot stopped playing it."""
-
-    response: str
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)
 class ResponseStart:
-    """An answer begins. ``turn`` is the turn it answers, or ``None`` for an answer no
-    turn asked for, such as a reminder."""
+    """An answer begins, in ``language``. ``turn`` is the turn it answers, or ``None``
+    for an answer that no turn asked for, such as a reminder."""
 
+    conversation: str
     response: str
     turn: str | None
+    language: str
 
 
 @dataclass(frozen=True, slots=True)
 class ResponseText:
     """A piece of the text of an answer's speech."""
 
+    conversation: str
     response: str
     delta: str
 
@@ -220,31 +243,49 @@ class ResponseText:
 @dataclass(frozen=True, slots=True)
 class Voice:
     """A piece of the cloud's voice, as it plays: PCM in the conversation's voice
-    format. The cloud's track is live, with silence between its answers."""
+    format."""
 
+    conversation: str
     pcm: bytes
 
 
 @dataclass(frozen=True, slots=True)
 class ResponseEnd:
-    """The answer is complete: no more of it will come. ``follow_up`` asks the robot to
-    listen again once it has played the answer."""
+    """The answer is complete: no more of it will come."""
 
+    conversation: str
     response: str
-    follow_up: bool
 
 
 @dataclass(frozen=True, slots=True)
 class ResponseStop:
     """Stop playing an answer at once, and drop what is left of it."""
 
+    conversation: str
+    response: str
+
+
+@dataclass(frozen=True, slots=True)
+class Interrupted:
+    """The user spoke over an answer: the robot stopped playing it."""
+
+    conversation: str
     response: str
 
 
 # The robot's part of a conversation, and the cloud's, each in the order it happens.
-RobotPart = TurnStart | Speech | SpeechEnd | TurnCancel | Interrupted
+RobotPart = ConversationRequest | Speech | Interrupted | ConversationEnd
 CloudPart = (
-    SpeechEnd | TurnCancel | ResponseStart | ResponseText | Voice | ResponseEnd | ResponseStop
+    ConversationStart
+    | ConversationEnd
+    | TurnStart
+    | SpeechEnd
+    | TurnCancel
+    | ResponseStart
+    | ResponseText
+    | Voice
+    | ResponseEnd
+    | ResponseStop
 )
 
 
@@ -292,8 +333,8 @@ class LinkStatus:
 class Cloud(Port):
     """The link to the cloud. The cloud drives the robot through the capabilities the
     robot offers, receives the events it subscribed to, and holds conversations with
-    it: in a turn the robot streams what the user says, and in a response the cloud
-    streams what the robot says.
+    it: the robot streams what it hears, and the cloud takes the turns and streams the
+    robot's answers.
 
     Like every port, it inherits ``open`` and ``close`` from ``Port``, and the
     application calls them:
@@ -326,6 +367,12 @@ class Cloud(Port):
         at once, if a session is open, and the next session in any case."""
 
     @abstractmethod
+    async def listening(self, allowed: bool) -> None:
+        """Say whether the robot may stream what it hears: its microphones are on. While
+        it may not, a conversation the cloud opens to listen is refused. Until it is
+        called, the robot may."""
+
+    @abstractmethod
     async def offer(
         self,
         capabilities: Sequence[Capability],
@@ -334,9 +381,8 @@ class Cloud(Port):
         conversation: ConversationAudio | None = None,
     ) -> None:
         """Set what the robot offers. ``conversation``, if any, offers conversations: a
-        module takes turns and plays the answers, with this audio. A change of
-        ``capabilities`` reaches the cloud at once; a change of ``events`` or
-        ``conversation``, at the next session."""
+        module holds them, with this audio. A change of ``capabilities`` reaches the cloud
+        at once; a change of ``events`` or ``conversation``, at the next session."""
 
     @abstractmethod
     async def request(self) -> ToolCall | CallCancelled:
@@ -363,13 +409,12 @@ class Cloud(Port):
 
     @abstractmethod
     async def converse(self, part: RobotPart) -> None:
-        """Send the robot's next part of a conversation. A turn that cannot start, with
-        no session or one without conversations, comes back at once from
-        ``conversation`` as a ``TurnCancel``; speech for a turn that is over is
-        dropped."""
+        """Send the robot's next part of a conversation. A request the link cannot carry,
+        with no session or one without conversations, comes back at once from
+        ``conversation`` as a ``ConversationEnd``; speech for a conversation that is
+        over is dropped."""
 
     @abstractmethod
     async def conversation(self) -> CloudPart:
-        """Wait for the cloud's next part of a conversation. When the session ends, the
-        turn and the response in progress end with it: a ``TurnCancel`` and a
-        ``ResponseEnd`` follow."""
+        """Wait for the cloud's next part of a conversation. A conversation that ends,
+        whatever ends it, ends with a ``ConversationEnd``."""
