@@ -24,8 +24,8 @@
 |---|---|---|
 | Raspberry Pi 5 | Audio, vision, face, AI, networking (built-in Wi-Fi/BLE), behavior; motion, through ros2_control's controllers | Real-time control loops |
 | Body controller (microcontroller not chosen yet — [ADR-0004](decisions/0004-pi-software-first.md)) | Servos, motors and encoders, distance sensor, LEDs, battery voltage; the motors' speed loop, from the wheel speeds the Pi asks for; a safe stop when the Pi goes silent | Networking |
-| `ai-cloud` (later) | The core AI: speech recognition, conversation, voice, and probably moods; storage, device management, updates | Physical safety: the robot checks every call locally |
-| `ai-app` (later) | Pairing, settings, remote control | |
+| [ai-cloud](https://github.com/trungnguyen278/ai-cloud) | The core AI: speech recognition, conversation, voice, and probably moods; storage, device management, updates | Physical safety: the robot checks every call locally |
+| [ai-app](https://github.com/trungnguyen278/ai-app) | Set-up, settings, remote control | |
 
 ## Principles
 
