@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: MIT
-"""The link to ai-cloud over a WebSocket, the control channel of the cloud link
-(platform/protocols/cloud/README.md).
+"""The link to ai-cloud: a WebSocket for the session, and a LiveKit room for each
+conversation (platform/protocols/cloud/README.md).
 
 Before each connection, the robot gets an access token (``tokens.py``). On the
 connection (``connection.py``) it holds a session (``session.py``), which outlives a
 lost connection: the robot connects again and resumes it. The cloud calls the robot's
 capabilities over MCP (``mcp.py``), and the robot sends the events the cloud subscribed
-to, and what its owner changes.
+to, and what its owner changes. Conversations are asked for and ended on the session
+(``conversations.py``), and held in a room of their own (``room.py``).
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ import aiohttp
 
 from ai_robot import software_version
 from ai_robot.adapters.websocket.connection import Connection, Ending
+from ai_robot.adapters.websocket.conversations import Conversations
+from ai_robot.adapters.websocket.room import ConversationRoom
 from ai_robot.adapters.websocket.session import MAX_MESSAGE, Session, instant
 from ai_robot.adapters.websocket.tokens import NoToken, NotSetUp, access_token
 from ai_robot.core.checks import finite, positive
@@ -40,8 +43,6 @@ from ai_robot.ports.cloud import (
     Cloud,
     CloudPart,
     ConversationAudio,
-    ConversationEnd,
-    ConversationRequest,
     DeviceInfo,
     EventKind,
     LinkStatus,
@@ -56,6 +57,7 @@ log = logging.getLogger(__name__)
 # Fixed by the protocol (platform/protocols/cloud/README.md, Connecting and The session).
 PROTOCOL = "3.0"
 LINK_PATH = "/device/v3/link"
+MEDIA = "livekit"  # where conversations' audio goes
 LONGEST_WAIT = 86400.0  # seconds: the longest wait the protocol speaks of ($defs/seconds)
 
 
@@ -76,9 +78,6 @@ class WebSocketCloud(Cloud):
     computer), until set-up names the one it was registered with (``serve``). The robot
     proves its identity (``identify``) to get its access tokens.
 
-    This link holds no conversations: its ``hello`` says so, and a request for one ends
-    at once.
-
     The other settings, in seconds unless they say, are explained in
     ``config/base.toml`` (``[ports.cloud.websocket]``).
     """
@@ -97,6 +96,8 @@ class WebSocketCloud(Cloud):
         backlog: int,
         catalogue_ttl: float,
         waiting_events: int,
+        start_timeout: float,
+        agent_timeout: float,
     ) -> None:
         self.server = check_url("server", server, ("https", "http"))
         self.connect_timeout = positive("connect_timeout", connect_timeout)
@@ -112,8 +113,11 @@ class WebSocketCloud(Cloud):
         self.catalogue_ttl = finite("catalogue_ttl", catalogue_ttl)
         if self.catalogue_ttl < 0:
             raise ValueError(f"catalogue_ttl must not be negative, got {catalogue_ttl}")
+        self.start_timeout = positive("start_timeout", start_timeout)
+        self.agent_timeout = positive("agent_timeout", agent_timeout)
         self.capabilities: dict[str, Capability] = {}
         self.event_kinds: list[EventKind] = []
+        self.audio: ConversationAudio | None = None  # offered for conversations, if any
         self.device: DeviceInfo | None = None
         self.may_listen = True  # whether the robot's microphones are on
         self.identity: Identity | None = None
@@ -122,7 +126,10 @@ class WebSocketCloud(Cloud):
         self.session: Session | None = None  # the session, open or to resume
         self.connection: Connection | None = None  # the connection that carries it
         self.schema: Schema | None = None
+        self.agent_schema: Schema | None = None  # what agents say in a room
         self._token_schema: Schema | None = None
+        self.conversations = Conversations(self)
+        self.room_factory: Any = ConversationRoom  # tests replace it
         self._http: aiohttp.ClientSession | None = None
         self._numbers = itertools.count(1)
         self._described = asyncio.Event()
@@ -139,7 +146,7 @@ class WebSocketCloud(Cloud):
         self._closing = False
 
     async def open(self) -> None:
-        self.schema, self._token_schema = await asyncio.to_thread(
+        self.schema, self.agent_schema, self._token_schema = await asyncio.to_thread(
             _load_schemas, platform_dir() / "cloud" / "schema.json"
         )
         traces = aiohttp.TraceConfig()
@@ -158,6 +165,7 @@ class WebSocketCloud(Cloud):
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+        await self.conversations.close()
         if self.session is not None:
             await self.session.close()
         if self._http is not None:
@@ -195,6 +203,7 @@ class WebSocketCloud(Cloud):
         changed = offered != self.capabilities
         self.capabilities = offered
         self.event_kinds = list(events)
+        self.audio = conversation
         self._offered.set()
         if changed and self.session is not None:
             self.session.mcp.catalogue_changed()
@@ -223,8 +232,7 @@ class WebSocketCloud(Cloud):
         return await self._statuses.get()
 
     async def converse(self, part: RobotPart) -> None:
-        if isinstance(part, ConversationRequest):
-            self._heard.put_nowait(ConversationEnd(part.conversation, "unavailable"))
+        await self.conversations.converse(part)
 
     async def conversation(self) -> CloudPart:
         return await self._heard.get()
@@ -236,6 +244,9 @@ class WebSocketCloud(Cloud):
 
     def cancelled(self, call: str) -> None:
         self._requests.put_nowait(CallCancelled(call))
+
+    def heard(self, part: CloudPart) -> None:
+        self._heard.put_nowait(part)
 
     # ---- statuses ----
 
@@ -249,6 +260,7 @@ class WebSocketCloud(Cloud):
                 True,
                 session.id,
                 session.events,
+                conversations=session.conversations,
                 bound=self.bound,
                 update_required=self.update_required,
             )
@@ -339,6 +351,7 @@ class WebSocketCloud(Cloud):
         assert self.device is not None and self.schema is not None
         resuming, said = self.session, self.device
         declared = {kind.name for kind in self.event_kinds}
+        offered = self.audio is not None
         await connection.say(self._hello(said, resuming))
         try:
             async with asyncio.timeout(self.hello_timeout):
@@ -377,6 +390,7 @@ class WebSocketCloud(Cloud):
             self.session = session
             log.info("cloud session %s open (protocol %s)", session.id, answer["protocol"])
         session.events = frozenset(answer["events"]) & declared
+        session.conversations = offered and answer["conversations"]
         session.connection = self.connection = connection
         changes = _changes(said, self.device)  # what the owner changed since the hello
         if changes:
@@ -403,8 +417,8 @@ class WebSocketCloud(Cloud):
             "time_zone": device.time_zone,
             "languages": list(device.languages),
             "allowed_classes": sorted(str(safety) for safety in device.allowed_classes),
-            "conversations": False,
-            "media": [],
+            "conversations": self.audio is not None,
+            "media": [MEDIA] if self.audio is not None else [],
             "events": [
                 {"name": kind.name, "description": kind.description, "schema": plain(kind.schema)}
                 for kind in self.event_kinds
@@ -412,6 +426,9 @@ class WebSocketCloud(Cloud):
         }
         if resuming is not None:
             hello["resume"] = {"session": resuming.id, "received": resuming.received}
+        conversation = self.conversations.named()
+        if conversation is not None:
+            hello["conversation"] = conversation
         return hello
 
     async def _after(self, ending: Ending) -> float:
@@ -462,9 +479,9 @@ def _outage(reported: bool, error: BaseException) -> bool:
     return True
 
 
-def _load_schemas(path: Path) -> tuple[Schema, Schema]:
-    """From the protocol's schema.json: the schema of the cloud's messages on the control
-    channel, and that of the token endpoint's answer."""
+def _load_schemas(path: Path) -> tuple[Schema, Schema, Schema]:
+    """From the protocol's schema.json: the schemas of the cloud's messages on the
+    control channel, of the agents' in a room, and of the token endpoint's answer."""
     try:
         schema = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -472,6 +489,7 @@ def _load_schemas(path: Path) -> tuple[Schema, Schema]:
     name = "platform/protocols/cloud/schema.json"
     return (
         Schema(name, {**schema, "$ref": "#/$defs/from_cloud"}),
+        Schema(name, {**schema, "$ref": "#/$defs/from_agent"}),
         Schema(name, {**schema, "$ref": "#/$defs/token_response"}),
     )
 

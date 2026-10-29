@@ -21,10 +21,12 @@ dependencies = [
   "pysilero-vad>=3.4,<4",  # voice, with Silero VAD (adapters/silero)
   "sounddevice>=0.5.6,<0.6",  # microphones and speaker through PortAudio (adapters/portaudio)
   "jsonschema>=4.23,<5",  # checking data against the protocols' JSON Schemas
+  "livekit>=1.1.21,<2",  # conversations' rooms, over WebRTC (adapters/websocket)
 ]
 
 [project.optional-dependencies]
 dev = [
+  "livekit-api>=1.2.2,<2",  # the tests' rooms: tokens for a LiveKit server of their own
   "pyjwt>=2.10,<3",  # the tests check the robot's hand-made JWTs with a library of their own
   "pytest>=8",
   "ruff>=0.17,<0.18",
