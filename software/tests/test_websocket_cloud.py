@@ -63,6 +63,8 @@ SETTINGS: dict[str, Any] = {
     "backlog": 500,
     "catalogue_ttl": 60.0,
     "waiting_events": 100,
+    "start_timeout": 1.0,
+    "agent_timeout": 1.0,
 }
 
 
@@ -672,13 +674,14 @@ def test_too_many_messages_are_dropped() -> None:
     run(main)
 
 
-def test_this_link_holds_no_conversations() -> None:
+def test_a_robot_that_offers_no_conversations_holds_none() -> None:
     async def main() -> None:
         async with robot_and_cloud() as (link, cloud):
             await link.describe(DEVICE)
             await link.offer([LAMP], [])
             side = await cloud.connection()
-            await side.next("hello")
+            said = await side.next("hello")
+            assert (said["conversations"], said["media"]) == (False, [])
             await side.hello(conversations=True)
             assert (await status_where(link, online=True)).conversations is False
             start = {

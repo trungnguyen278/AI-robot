@@ -78,6 +78,7 @@ class Session:
         self.id = session_id
         self.schema = schema
         self.events: frozenset[str] = frozenset()  # the events the cloud subscribed to
+        self.conversations = False  # whether both sides hold conversations
         self.sent = 0  # the number of the last message the robot sent
         self.received = 0  # the number of the last message received from the cloud
         self.kept: deque[tuple[int, str]] = deque()  # sent, and not yet received
@@ -199,32 +200,33 @@ class Session:
             seq, message = await self._inbox.get()
             await self._bucket.take()
             try:
-                self._handle(seq, message)
+                await self._handle(seq, message)
             except Exception:  # a failure must not end the session
                 log.exception("handling the cloud's message %d failed", seq)
                 self.error(seq, "internal", "the robot failed to handle the message")
 
-    def _handle(self, seq: int, message: Mapping[str, Any]) -> None:
+    async def _handle(self, seq: int, message: Mapping[str, Any]) -> None:
         problem = self.schema.problem(message)
         if problem is not None:
             log.warning("the cloud's message %d is not valid: %s", seq, problem)
             self.error(seq, "invalid_message", problem)
             return
         kind = message["type"]
+        conversations = self.link.conversations
         if kind == "mcp":
             self.mcp.handle(message["payload"], seq)
         elif kind == "conversation.start":
-            self.error(seq, "not_allowed", "the robot holds no conversations in this session")
+            await conversations.on_start(seq, message)
         elif kind == "conversation.end":
-            conversation = message["conversation"]
-            self.error(seq, "unknown_conversation", f"conversation {conversation} is not active")
+            await conversations.on_end(seq, message)
         elif kind == "error":
-            log.warning(
-                "the cloud reports %s about message %d: %s",
-                message["code"],
-                message["reply_to"],
-                message["message"],
-            )
+            if not await conversations.on_error(message):
+                log.warning(
+                    "the cloud reports %s about message %d: %s",
+                    message["code"],
+                    message["reply_to"],
+                    message["message"],
+                )
         elif kind not in self._warned:
             self._warned.add(kind)
             log.info("ignoring %s messages from the cloud", kind)

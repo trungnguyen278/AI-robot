@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Servers that tests run on this computer, such as a software TPM."""
+"""Servers that tests run on this computer: a software TPM, a LiveKit server."""
 
 from __future__ import annotations
 
@@ -15,6 +15,15 @@ from pathlib import Path
 def free_port() -> int:
     """A TCP port that nothing listens on, on this computer."""
     with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def free_udp_port() -> int:
+    """A UDP port that nothing uses, on this computer. Asked of the system for UDP: a
+    TCP port may fall in a range that Windows keeps for UDP (``netsh int ipv4 show
+    excludedportrange protocol=udp``)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.bind(("127.0.0.1", 0))
         return int(probe.getsockname()[1])
 

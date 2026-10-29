@@ -184,6 +184,8 @@ burst = 100  # ...in bursts of up to this many...
 backlog = 500  # ...while up to this many more wait their turn; it drops the rest
 catalogue_ttl = 60.0  # seconds the cloud may cache the robot's catalogue
 waiting_events = 100  # events kept while the robot is offline; the oldest go first
+start_timeout = 5.0  # seconds the cloud has to start a conversation the robot asks for
+agent_timeout = 10.0  # seconds an agent has to listen, once the robot is in the room
 
 # The robot's identity: an identifier, and the key that proves it to ai-cloud
 # (docs/decisions/0010-device-identity.md). "tpm" keeps them in the robot's TPM, as the pi

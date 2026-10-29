@@ -6,6 +6,7 @@
 
 Python 3.11 or later (asyncio), with an optional C++ extension. Runtime dependencies:
 - [aiohttp](https://docs.aiohttp.org/), for the `web` adapter of the screen, and the `websocket` adapter of the link to the cloud;
+- [LiveKit's Python SDK](https://docs.livekit.io/reference/python/) (`livekit`), for the rooms of conversations, over WebRTC;
 - [jsonschema](https://python-jsonschema.readthedocs.io/), to check data against the protocols' JSON Schemas;
 - [cryptography](https://cryptography.io/), for the robot's key kept in software on a development computer, and set-up's encryption;
 - [PyCryptodome](https://www.pycryptodome.org/), for set-up's SPAKE2+, which needs arithmetic on P-256 points that `cryptography` does not offer ([ADR-0015](../docs/decisions/0015-set-up.md));
@@ -141,12 +142,12 @@ By default the robot talks to a simulated cloud (the `sim` adapter of the `cloud
 The real link is the `websocket` adapter: the control channel of the [cloud link](https://github.com/trungnguyen278/ai-platform/blob/main/protocols/cloud/README.md) 3.0, a WebSocket to `ai-cloud` that stays open ([ai-platform ADR-0006](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0006-two-channels.md)). Before each connection, the robot asks `ai-cloud` for an access token, and proves who it is with its `identity` port: an identifier, and a key that signs for it ([ADR-0010](../docs/decisions/0010-device-identity.md)).
 - **Its key.** On the robot, the `tpm` adapter keeps it in the robot's TPM, which makes the key and never lets it out. A factory reset clears the TPM, which gives the robot a new identity, to be set up again. On a development computer, the `file` adapter keeps it in a file of your choosing, made on first use and readable only by you; like SSH, it refuses a key file that others can open. The `sim` adapter, the default, makes a new key at each start, which no server knows.
 - **Its session** outlives a lost connection. The robot numbers what it sends and keeps it until the cloud has it, pings at the pace the cloud sets, and connects again after a random wait that grows with each failure, resuming its session. If the cloud no longer speaks its version, the robot logs that it needs an update, and tries again only now and then.
-- **Conversations** are not in this link yet: its `hello` says that it holds none, so the robot streams nothing. They come with their LiveKit rooms ([ADR-0018](../docs/decisions/0018-conversations.md)).
+- **Conversations** are asked for and ended on the session, and held in a LiveKit room of their own, which the cloud names ([ADR-0009](../docs/decisions/0009-cloud-link-webrtc.md), [ADR-0018](../docs/decisions/0018-conversations.md)). Only agents may hear the robot's microphone, and they hear first what it heard from its wake word on, as LiveKit's pre-connect audio. The robot plays only agents' voices, and takes the turns and answers only from agents. It refuses a conversation the cloud opens to listen while its owner does not allow the cloud to listen, or its microphones are off.
 - **A server.** `ai-cloud` has no code yet: the link runs against the fake cloud of the tests (`tests/fake_cloud.py`).
 
 The server is the one in `server` until the robot is set up with another: set-up registers the robot with the server the owner's app names, and the robot then uses that one.
 
-The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of the `tpm` adapter run against a software TPM, with the `tpm` extra installed: the path to `swtpm` in `SWTPM`, or the program on the `PATH` (`sudo apt install swtpm`).
+The cloud sees only the capabilities whose safety class is listed in `[modules.cloud] allowed_classes`, a setting the cloud cannot change. The tests of conversations' rooms run against a real LiveKit server when one is found: the path to `livekit-server` in `LIVEKIT_SERVER`, or the program on the `PATH`. The tests of the `tpm` adapter run against a software TPM, with the `tpm` extra installed: the path to `swtpm` in `SWTPM`, or the program on the `PATH` (`sudo apt install swtpm`).
 
 ### Set-up
 
