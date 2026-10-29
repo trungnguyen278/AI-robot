@@ -1,6 +1,6 @@
 # reSpeaker XMOS XVF3800 USB 4-Mic Array
 
-> Component note, created with the `hardware-change` checklist. Last updated: 2026-10-23. Chosen in [ADR-0011](../../docs/decisions/0011-audio-voice-processor.md).
+> Component note, created with the `hardware-change` checklist. Last updated: 2026-10-29. Chosen in [ADR-0011](../../docs/decisions/0011-audio-voice-processor.md).
 
 - **Role in the robot:** its ears and its voice.
   - The XVF3800 cleans up what the four microphones hear: echo cancellation, beamforming and noise suppression.
@@ -41,10 +41,14 @@
 - After a restart the canceller takes a few seconds to converge, and suppresses speech too much meanwhile (§2.5.4).
 - At full volume the array needs more current than the Pi's USB ports give by default: [open issue 10](../README.md#open-issues).
 - The direction of a voice is read with the XMOS control commands, such as `DOA_VALUE`, through Seeed's `xvf_host` tool or its protocol over USB (XMOS user guide §3.5.2).
+- The mute button also opens set-up, when held for `open_hold` seconds ([ADR-0019](../../docs/decisions/0019-setup-button.md)).
+  - The robot reads it as X1D09, "mute button status (high when released)" in Seeed's GPIO table, with the GPI control commands `GPI_VALUE` and `GPI_VALUE_ALL` (XMOS user guide §10.4).
+  - A press still mutes the microphones.
 
 ## Open questions
 
 - Does the mute GPIO (X0D30, "mic mute control") cut the microphones in hardware, or only inside the voice processor? PRIV-1 asks for a mute that cuts them.
+- Which GPI index is the mute button (X1D09), for `GPI_VALUE` (ADR-0019)?
 - The array's current at the robot's speaking volume, and at full volume.
 - The series of the speaker's JST connector.
 

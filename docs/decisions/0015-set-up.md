@@ -4,7 +4,8 @@
 - **Date:** 2026-10-24
 - **Amended by:**
   - [ai-platform ADR-0001](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0001-repositories.md): the protocol is defined in ai-platform, in `protocols/setup/`, which this repository pins at `platform/` (decision 7);
-  - [ai-platform ADR-0005](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0005-homes.md): the registration binds the robot into a home that the app chooses, rather than to the owner's account, and the cloud issues the challenge for that home (decision 4)
+  - [ai-platform ADR-0005](https://github.com/trungnguyen278/ai-platform/blob/main/docs/decisions/0005-homes.md): the registration binds the robot into a home that the app chooses, rather than to the owner's account, and the cloud issues the challenge for that home (decision 4);
+  - [ADR-0019](0019-setup-button.md): the owner can also open set-up by holding the microphones' mute button, for when the touch screen cannot be used (decision 3)
 
 ## Context
 
